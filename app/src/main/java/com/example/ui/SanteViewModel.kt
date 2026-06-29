@@ -1,0 +1,1850 @@
+package com.example.ui
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.example.data.api.*
+import com.example.data.db.*
+import com.example.data.repository.SanteRepository
+import com.example.data.livekit.ZegoCallManager
+import com.example.data.livekit.ZegoChatManager
+import com.example.data.livekit.ZimIncomingMessage
+import com.zegocloud.uikit.prebuilt.call.ZegoUIKitPrebuiltCallService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import java.util.UUID
+import android.media.MediaRecorder
+import android.os.Build
+import java.io.File
+import java.io.FileOutputStream
+import java.net.URL
+import kotlin.concurrent.thread
+
+// ─── Auth States ─────────────────────────────────────────────
+
+sealed interface AuthState {
+    object Unauthenticated : AuthState
+    object Loading : AuthState
+    data class PatientAuthenticated(val profile: PatientProfileEntity, val serverUser: UserDto) : AuthState
+    data class DoctorAuthenticated(val doctor: DoctorEntity, val serverUser: UserDto) : AuthState
+    object AdminAuthenticated : AuthState
+    data class Error(val message: String) : AuthState
+}
+
+// ─── Intake States ─────────────────────────────────────────────
+
+sealed interface IntakeState {
+    object Idle : IntakeState
+    object Loading : IntakeState
+    data class DoctorsLoaded(val doctors: List<DoctorEntity>, val category: String) : IntakeState
+    data class NoDoctors(val category: String) : IntakeState
+    data class Error(val message: String) : IntakeState
+}
+
+// ─── Call States ────────────────────────────────────────────
+
+enum class CallStatus { RINGING, ACTIVE, DISCONNECTED }
+enum class CallType { VOICE, VIDEO }
+
+data class CallSession(
+    val consultationId: String,
+    val peerName: String,
+    val peerAvatar: String? = null,
+    val isOutgoing: Boolean,
+    val status: CallStatus,
+    val callType: CallType,
+    val durationSeconds: Int = 0,
+    val isMuted: Boolean = false,
+    val isSpeakerOn: Boolean = false,
+    val isCameraOn: Boolean = true,
+    val isMinimized: Boolean = false
+)
+
+// ─── ViewModel ───────────────────────────────────────────────
+
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+class SanteViewModel(
+    application: Application,
+    private val repository: SanteRepository
+) : AndroidViewModel(application) {
+
+    private var authToken: String? = null
+    private var currentServerUserId: String? = null
+    private var currentUserName: String? = null
+
+    // ─── State Flows ─────────────────────────────────
+    private val _authState = MutableStateFlow<AuthState>(AuthState.Unauthenticated)
+    val authState: StateFlow<AuthState> = _authState.asStateFlow()
+
+    private val _intakeState = MutableStateFlow<IntakeState>(IntakeState.Idle)
+    val intakeState: StateFlow<IntakeState> = _intakeState.asStateFlow()
+
+    private val _activeCall = MutableStateFlow<CallSession?>(null)
+    val activeCall: StateFlow<CallSession?> = _activeCall.asStateFlow()
+
+    private val _activeConsultationId = MutableStateFlow<String?>(null)
+    val activeConsultationId: StateFlow<String?> = _activeConsultationId.asStateFlow()
+
+    private val _serverMessages = MutableStateFlow<List<WsNewMessage>>(emptyList())
+    val serverMessages: StateFlow<List<WsNewMessage>> = _serverMessages.asStateFlow()
+
+    private val _wsConnected = MutableStateFlow(false)
+    val wsConnected: StateFlow<Boolean> = _wsConnected.asStateFlow()
+
+    // ─── Permission handling ─────────────────────────────
+    private val _requestCallPermissions = MutableStateFlow(false)
+    val requestCallPermissions: StateFlow<Boolean> = _requestCallPermissions.asStateFlow()
+    private var pendingCallParams: Array<Any>? = null
+    var pendingCallNeedsVideo = false
+        private set
+
+    // Voice recording permission request
+    private val _requestMicPermission = MutableStateFlow(false)
+    val requestMicPermission: StateFlow<Boolean> = _requestMicPermission.asStateFlow()
+    private var pendingVoiceSender: Pair<String, String>? = null
+    private var pendingVoiceAction: String? = null // "start" or "stop"
+
+    // Storage permission for media
+    private val _requestStoragePermission = MutableStateFlow(false)
+    val requestStoragePermission: StateFlow<Boolean> = _requestStoragePermission.asStateFlow()
+    private var pendingMediaParams: Triple<String, String, String>? = null
+
+    private val _incomingCall = MutableStateFlow<IncomingCallEvent?>(null)
+    val incomingCall: StateFlow<IncomingCallEvent?> = _incomingCall.asStateFlow()
+
+    private val _isTyping = MutableStateFlow(false)
+    val isTyping: StateFlow<Boolean> = _isTyping.asStateFlow()
+
+    private val _loginError = MutableStateFlow<String?>(null)
+    val loginError: StateFlow<String?> = _loginError.asStateFlow()
+
+    private val _registerError = MutableStateFlow<String?>(null)
+    val registerError: StateFlow<String?> = _registerError.asStateFlow()
+
+    // Upload/send errors surfaced to the UI as Toast messages
+    private val _uploadError = MutableStateFlow<String?>(null)
+    val uploadError: StateFlow<String?> = _uploadError.asStateFlow()
+
+    fun consumeUploadError() { _uploadError.value = null }
+
+    // Zego SDK readiness — true when both Call and Chat services are initialized.
+    // The UI uses this to enable/disable call buttons.
+    private val _zegoCallReady = MutableStateFlow(false)
+    val zegoCallReady: StateFlow<Boolean> = _zegoCallReady.asStateFlow()
+
+    private val _zegoChatReady = MutableStateFlow(false)
+    val zegoChatReady: StateFlow<Boolean> = _zegoChatReady.asStateFlow()
+
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
+
+    // ─── Voice Recording ──────────────────────────────
+    private val _isRecording = MutableStateFlow(false)
+    val isRecording: StateFlow<Boolean> = _isRecording.asStateFlow()
+
+    private val _recordingDuration = MutableStateFlow(0)
+    val recordingDuration: StateFlow<Int> = _recordingDuration.asStateFlow()
+
+    private var mediaRecorder: MediaRecorder? = null
+    private var currentRecordingFile: File? = null
+    private var recordingTimerJob: kotlinx.coroutines.Job? = null
+
+    // ─── LiveKit ─────────────────────────────────────
+    private val _livekitConnected = MutableStateFlow(false)
+    val livekitConnected: StateFlow<Boolean> = _livekitConnected.asStateFlow()
+
+    // LiveKit removed — ZEGOCLOUD UIKit manages the call UI.
+    private var currentRoomName: String? = null
+    private var currentCallIsVideo: Boolean = false
+
+    // ─── Local Data (Room) ─────────────────────────────
+    val allDoctors: StateFlow<List<DoctorEntity>> = repository.allDoctors
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allConsultations: StateFlow<List<ConsultationEntity>> = repository.allConsultations
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val patientProfile: StateFlow<PatientProfileEntity?> = repository.patientProfile
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val activeConsultation: StateFlow<ConsultationEntity?> = _activeConsultationId
+        .flatMapLatest { id ->
+            if (id == null) flowOf(null)
+            else repository.allConsultations.map { list -> list.find { it.id == id } }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val activeMessages: StateFlow<List<MessageEntity>> = _activeConsultationId
+        .flatMapLatest { id ->
+            if (id == null) flowOf(emptyList())
+            else repository.getMessagesForConsultation(id)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private var callTimerJob: kotlinx.coroutines.Job? = null
+    private var syncPollingJob: kotlinx.coroutines.Job? = null
+
+    // Track processed message IDs to prevent duplicates
+    private val processedMessageIds = java.util.concurrent.ConcurrentHashMap<Long, Boolean>()
+
+    // ─── Local-first media helpers ─────────────────────────────
+    //
+    // All voice / image / video files are cached locally under:
+    //   app.filesDir/medika/{consultationId}/{kind}_{timestamp}.{ext}
+    //
+    // Sender flow:  record/copy → insert DB row (sendStatus="sending",
+    // localFilePath=<local>) → upload → on success update sendStatus="sent"
+    // and fileUrl=serverUrl; on failure update sendStatus="failed".
+    //
+    // Receiver flow: when a WsNewMessage with a fileUrl arrives, we insert
+    // the row immediately (so the bubble shows up), then kick off a background
+    // download into the per-consultation folder and update localFilePath.
+    private fun medikaMediaDir(consultationId: String): File {
+        val app = getApplication<Application>()
+        val dir = File(app.filesDir, "medika/$consultationId")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
+    /** Build the local file path for a received media message based on its server URL. */
+    private fun localFileForReceivedMessage(consultationId: String, fileUrl: String?): File? {
+        if (fileUrl.isNullOrBlank()) return null
+        // fileUrl looks like "/uploads/{consId}/{filename}" or "/uploads/{filename}"
+        val name = fileUrl.substringAfterLast('/').ifBlank { return null }
+        val dir = medikaMediaDir(consultationId)
+        return File(dir, name)
+    }
+
+    /** Download a received media file from the server into the per-consultation folder. */
+    private suspend fun downloadMediaToLocal(consultationId: String, fileUrl: String): File? = withContext(Dispatchers.IO) {
+        try {
+            val target = localFileForReceivedMessage(consultationId, fileUrl) ?: return@withContext null
+            if (target.exists() && target.length() > 0) return@withContext target
+            val fullUrl = "http://167.86.124.101:3000$fileUrl"
+            println("[MEDIA-DL] Downloading $fullUrl -> ${target.absolutePath}")
+            java.net.URL(fullUrl).openStream().use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            }
+            println("[MEDIA-DL] OK ${target.length()} bytes")
+            target
+        } catch (e: Exception) {
+            println("[MEDIA-DL] Error: ${e.message}")
+            null
+        }
+    }
+
+    // ─── WebSocket Callbacks ─────────────────────────────
+    init {
+        MedikaNetwork.onMessageReceived = { msg ->
+            val msgId = msg.id
+            val isDuplicate = processedMessageIds.putIfAbsent(msgId, true) != null
+            if (!isDuplicate) {
+                viewModelScope.launch {
+                    // ── Echo dedup for outgoing messages ────────────────────────
+                    // The server assigns a brand-new id + timestamp when it echoes our
+                    // own outgoing message back to us. We already inserted a local row
+                    // with sendStatus="sending"/"sent" and possibly the local file path.
+                    // Detect that case by looking for an existing local row by:
+                    //   - fileUrl + senderId  (for voice/image/video)
+                    //   - text + senderId + consultationId  (for text)
+                    // and SKIP the insert to avoid duplicate bubbles + lost localFilePath.
+                    val myId = currentServerUserId
+                    val isOwnEcho = msg.senderId == myId
+                    if (isOwnEcho) {
+                        val existing = repository.getMessagesForConsultationOnce(msg.consultationId)
+                        val match = if (!msg.fileUrl.isNullOrBlank()) {
+                            existing.firstOrNull { it.fileUrl == msg.fileUrl && it.senderId == myId }
+                        } else if (msg.text.isNotBlank()) {
+                            // Match by text + senderId + recent timestamp window (60s)
+                            val now = System.currentTimeMillis()
+                            existing.firstOrNull {
+                                it.senderId == myId &&
+                                it.text == msg.text &&
+                                it.fileUrl.isNullOrBlank() &&
+                                kotlin.math.abs(it.timestamp - msg.timestamp) < 60_000L
+                            }
+                        } else null
+
+                        if (match != null) {
+                            // Already have a local row for this outgoing message — just
+                            // make sure status is "sent" (in case the upload confirmation
+                            // raced) and the server fileUrl is recorded.
+                            if (match.sendStatus != "sent") {
+                                repository.updateMessageStatus(match.id, "sent", msg.fileUrl ?: match.fileUrl, match.localFilePath)
+                            }
+                            println("[ECHO] Skipping duplicate insert for own msg (id=${match.id}, type=${msg.messageType})")
+                            return@launch
+                        }
+                    }
+
+                    val entity = MessageEntity(
+                        consultationId = msg.consultationId,
+                        senderId = msg.senderId,
+                        senderName = msg.senderName,
+                        text = msg.text,
+                        timestamp = msg.timestamp,
+                        messageType = msg.messageType,
+                        fileUrl = msg.fileUrl,
+                        duration = msg.duration,
+                        fileSize = msg.fileSize,
+                        // Incoming voice/image/video: mark as "sent" (peer sent it
+                        // successfully) and start with no local copy. The auto-download
+                        // below will fill in localFilePath.
+                        sendStatus = if (msg.messageType != "text") "sent" else null
+                    )
+                    repository.insertMessage(entity)
+
+                    // Auto-download received media into the per-consultation folder so
+                    // the bubble can play/display offline.
+                    val mt = msg.messageType
+                    val fu = msg.fileUrl
+                    if (!fu.isNullOrBlank() && (mt == "voice" || mt == "image" || mt == "video")) {
+                        launch(Dispatchers.IO) {
+                            val local = downloadMediaToLocal(msg.consultationId, fu)
+                            if (local != null) {
+                                // We need the row id; fetch by consultationId+timestamp+senderId.
+                                val row = repository.getMessagesForConsultationOnce(msg.consultationId)
+                                    .firstOrNull { it.timestamp == msg.timestamp && it.senderId == msg.senderId && it.fileUrl == fu }
+                                if (row != null) {
+                                    repository.updateMessageLocalFile(row.id, local.absolutePath, local.length())
+                                    println("[MEDIA-DL] Local path saved for msg ${row.id}")
+                                }
+                            }
+                        }
+                    }
+                }
+                _isTyping.value = false
+            }
+        }
+
+        MedikaNetwork.onTypingReceived = { typing ->
+            val currentAuth = _authState.value
+            val myId = when (currentAuth) {
+                is AuthState.PatientAuthenticated -> currentAuth.serverUser.id
+                is AuthState.DoctorAuthenticated -> currentAuth.serverUser.id
+                else -> null
+            }
+            if (typing.senderId != myId && typing.consultationId == _activeConsultationId.value) {
+                _isTyping.value = typing.isTyping
+            }
+        }
+
+        MedikaNetwork.onNewConsultation = { newC ->
+            viewModelScope.launch {
+                println("[SYNC] Received new consultation via WS: ${newC.id}")
+                fetchAndSaveConsultation(newC.id)
+            }
+        }
+
+        MedikaNetwork.onConsultationUpdated = { updated ->
+            viewModelScope.launch {
+                println("[SYNC] Consultation ${updated.id} updated (status=${updated.status}), re-fetching consultation")
+                // Always re-fetch the consultation metadata (status, doctor, etc.)
+                fetchAndSaveConsultation(updated.id)
+                // Re-fetch messages ONLY when the consultation just transitioned
+                // to EN_COURS (doctor accepted) — this picks up the system
+                // welcome message. We don't re-fetch on every status update
+                // because that causes UI flicker (the WebSocket already pushes
+                // new messages in real time).
+                val activeId = _activeConsultationId.value
+                if (activeId == updated.id && updated.status == "EN_COURS") {
+                    // Give the server a moment to insert the system message
+                    kotlinx.coroutines.delay(500)
+                    fetchAndSaveMessages(updated.id)
+                }
+            }
+        }
+
+        MedikaNetwork.onConnectionChanged = { connected ->
+            _wsConnected.value = connected
+            if (connected && _authState.value !is AuthState.Unauthenticated) {
+                // On reconnect, sync the consultation list only. Messages for
+                // the active consultation will arrive via the WS catch-up
+                // mechanism (server sends recent messages on connect).
+                syncConsultationListOnly()
+            }
+        }
+
+        // ─── ZIM (ZegoChat) message receiver ─────────────────────────────
+        // Replaces the WebSocket for chat. ZIM delivers messages in real time
+        // via its own signaling servers. Media files are hosted on Zego's CDN.
+        ZegoChatManager.onMessageReceived = { zimMsg ->
+            viewModelScope.launch {
+                handleZimIncomingMessage(zimMsg)
+            }
+        }
+        ZegoChatManager.onConnectionChanged = { connected ->
+            // ZIM connection state — we don't expose this separately, the WS
+            // indicator still reflects the main WebSocket state.
+            println("[ZIM] Connection: $connected")
+        }
+
+        // ─── Call events via main WebSocket ─────────────────
+        MedikaNetwork.onIncomingCall = { event ->
+            println("[CALL] Incoming call from ${event.fromName} (${event.callType})")
+            _incomingCall.value = event
+        }
+
+        MedikaNetwork.onCallAccepted = { consultationId, from ->
+            println("[CALL] Call accepted in $consultationId by $from")
+        }
+
+        MedikaNetwork.onCallRejected = { consultationId ->
+            println("[CALL] Call rejected in $consultationId")
+            val current = _activeCall.value
+            if (current != null && current.consultationId == consultationId) {
+                cleanupCall()
+            }
+        }
+
+        MedikaNetwork.onCallEnded = { consultationId ->
+            println("[CALL] Call ended by peer in $consultationId")
+            val current = _activeCall.value
+            if (current != null && current.consultationId == consultationId) {
+                cleanupCall()
+            }
+        }
+
+        viewModelScope.launch {
+            repository.initializeDoctorsIfEmpty()
+        }
+    }
+
+    // ─── Server Sync Functions ────────────────────────────
+
+    private fun serverMapToConsultationEntity(map: Map<String, Any?>): ConsultationEntity {
+        return ConsultationEntity(
+            id = map["id"] as? String ?: "",
+            patientName = map["patient_name"] as? String ?: "",
+            patientAge = (map["patient_age"] as? Number)?.toInt() ?: 0,
+            description = map["description"] as? String ?: "",
+            specialtyNeeded = map["specialty_needed"] as? String ?: "",
+            urgencyLevel = map["urgency_level"] as? String ?: "Moyenne",
+            aiSummary = map["ai_summary"] as? String ?: "",
+            aiExplanation = map["ai_explanation"] as? String ?: "",
+            doctorId = map["doctor_id"] as? String,
+            status = map["status"] as? String ?: "RECHERCHE_MEDECIN",
+            timestamp = (map["created_at"] as? Number)?.toLong()?.let {
+                if (it < 1_000_000_000_000L) it * 1000L else it
+            } ?: System.currentTimeMillis(),
+            prescription = map["prescription"] as? String,
+            patientId = map["patient_id"] as? String
+        )
+    }
+
+    /**
+     * Get the peer's user ID for the active consultation (used as the ZIM
+     * conversation ID for peer-to-peer chat).
+     */
+    private fun getPeerUserIdForConsultation(consultationId: String, senderId: String): String? {
+        // Try the active consultation first
+        val active = activeConsultation.value
+        if (active?.id == consultationId) {
+            val myId = currentServerUserId
+            return when {
+                active.patientId == myId -> active.doctorId
+                active.doctorId == myId -> active.patientId
+                else -> active.doctorId ?: active.patientId
+            }
+        }
+        return null
+    }
+
+    /**
+     * Handle an incoming ZIM message: insert it into the local Room DB so the
+     * chat UI shows it. If it's a media message, kick off a background download
+     * into the per-consultation folder.
+     */
+    private suspend fun handleZimIncomingMessage(zimMsg: ZimIncomingMessage) {
+        val myId = currentServerUserId
+        // Skip our own messages (ZIM doesn't echo back to sender for PEER chat,
+        // but be defensive).
+        if (zimMsg.senderId == myId) return
+
+        val consultationId = zimMsg.consultationId
+        if (consultationId.isBlank()) {
+            println("[ZIM-RX] Received message with no consultationId — skipping")
+            return
+        }
+
+        // Dedup by ZIM message ID + senderId
+        val dedupKey = "zim_${zimMsg.zimMessage.messageID}_${zimMsg.senderId}"
+        if (processedMessageIds.putIfAbsent(dedupKey.hashCode().toLong(), true) != null) {
+            return  // already processed
+        }
+
+        // Insert into Room DB
+        val entity = MessageEntity(
+            consultationId = consultationId,
+            senderId = zimMsg.senderId,
+            senderName = zimMsg.senderName,
+            text = zimMsg.text,
+            timestamp = zimMsg.timestamp,
+            messageType = zimMsg.messageType,
+            fileUrl = zimMsg.fileUrl,
+            duration = zimMsg.duration,
+            fileSize = zimMsg.fileSize,
+            localFilePath = null,
+            sendStatus = if (zimMsg.messageType != "text") "sent" else null
+        )
+        repository.insertMessage(entity)
+        println("[ZIM-RX] Inserted ${zimMsg.messageType} msg from ${zimMsg.senderId} for $consultationId")
+
+        // Auto-download media into the per-consultation folder
+        if (zimMsg.messageType != "text" && zimMsg.fileUrl != null) {
+            val dir = medikaMediaDir(consultationId)
+            val fileName = zimMsg.fileUrl.substringAfterLast('/').ifBlank { "zim_${zimMsg.zimMessage.messageID}" }
+            val targetPath = java.io.File(dir, fileName).absolutePath
+
+            viewModelScope.launch(Dispatchers.IO) {
+                ZegoChatManager.downloadMediaFile(zimMsg.zimMessage, targetPath) { success, localPath, error ->
+                    if (success && localPath != null) {
+                        viewModelScope.launch {
+                            // Find the row we just inserted and update its localFilePath
+                            val row = repository.getMessagesForConsultationOnce(consultationId)
+                                .firstOrNull { it.timestamp == zimMsg.timestamp && it.senderId == zimMsg.senderId }
+                            if (row != null) {
+                                repository.updateMessageLocalFile(row.id, localPath, null)
+                                println("[ZIM-DL] Local path saved for msg ${row.id}")
+                            }
+                        }
+                    } else {
+                        println("[ZIM-DL] Download failed: $error")
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun fetchAndSaveConsultation(consultationId: String) {
+        val token = authToken ?: return
+        try {
+            val serverMap = MedikaNetwork.api.getConsultation(token, consultationId)
+            if (serverMap != null) {
+                val entity = serverMapToConsultationEntity(serverMap)
+                val existing = repository.getConsultationById(entity.id)
+                if (existing != null) {
+                    repository.updateConsultation(entity)
+                } else {
+                    repository.insertConsultation(entity)
+                }
+                println("[SYNC] Saved consultation ${entity.id} (${entity.status}) to local DB")
+            }
+        } catch (e: Exception) {
+            println("[SYNC] Error fetching consultation ${consultationId}: ${e.message}")
+        }
+    }
+
+    private suspend fun fetchAndSaveMessages(consultationId: String) {
+        val token = authToken ?: return
+        try {
+            val serverMessages = MedikaNetwork.api.getMessages(token, consultationId)
+
+            // ── Smart diff sync (no delete + re-insert) ──────────────────────
+            // Previously this function did deleteMessagesForConsultation() then
+            // re-inserted all server messages. That caused the Room Flow to emit
+            // an empty list then the full list, making the UI flicker and
+            // interrupting voice playback every sync cycle.
+            //
+            // Now we do a diff:
+            //   - Existing local rows that match a server row → update in place
+            //     (preserve localFilePath + sendStatus).
+            //   - Server rows with no local match → insert new.
+            //   - Local rows with no server match AND no sendStatus → delete
+            //     (they were removed from the server).
+            //   - Local rows with no server match AND sendStatus=failed/sending
+            //     → KEEP (they're local-only pending messages).
+            val existing = repository.getMessagesForConsultationOnce(consultationId)
+
+            // Index existing local rows by server id (when known) and by fileUrl
+            val existingById = existing.associateBy { it.id }
+            val existingByFileUrl = existing
+                .filter { !it.fileUrl.isNullOrBlank() }
+                .associateBy { it.fileUrl to it.senderId }
+
+            // Track which local ids get matched to a server row
+            val matchedLocalIds = mutableSetOf<Int>()
+
+            for (msg in serverMessages) {
+                val serverId = msg.id.toInt()
+                val prev = existingById[serverId]
+                    ?: existingByFileUrl[msg.file_url to msg.sender_id]
+
+                if (prev != null) {
+                    matchedLocalIds.add(prev.id)
+                    // Only update if something actually changed (avoid unnecessary
+                    // Flow emissions that cause UI recomposition).
+                    val newTimestamp = (msg.created_at ?: System.currentTimeMillis() / 1000) * 1000L
+                    val needsUpdate = prev.text != msg.text ||
+                        prev.fileUrl != msg.file_url ||
+                        prev.timestamp != newTimestamp ||
+                        prev.duration != msg.duration ||
+                        prev.fileSize != msg.file_size ||
+                        prev.messageType != (msg.message_type ?: "text")
+
+                    if (needsUpdate) {
+                        repository.insertMessage(prev.copy(
+                            text = msg.text,
+                            fileUrl = msg.file_url,
+                            timestamp = newTimestamp,
+                            duration = msg.duration,
+                            fileSize = msg.file_size,
+                            messageType = msg.message_type ?: "text"
+                            // Preserve localFilePath + sendStatus
+                        ))
+                    }
+                } else {
+                    // New server message — insert it
+                    val entity = MessageEntity(
+                        id = serverId,
+                        consultationId = msg.consultation_id,
+                        senderId = msg.sender_id,
+                        senderName = msg.sender_name,
+                        text = msg.text,
+                        timestamp = (msg.created_at ?: System.currentTimeMillis() / 1000) * 1000L,
+                        messageType = msg.message_type ?: "text",
+                        fileUrl = msg.file_url,
+                        duration = msg.duration,
+                        fileSize = msg.file_size,
+                        localFilePath = null,
+                        sendStatus = if (msg.message_type != "text") "sent" else null
+                    )
+                    repository.insertMessage(entity)
+
+                    // Trigger auto-download for new media messages
+                    val mt = msg.message_type
+                    val fu = msg.file_url
+                    if (!fu.isNullOrBlank() && (mt == "voice" || mt == "image" || mt == "video")) {
+                        viewModelScope.launch(Dispatchers.IO) {
+                            val local = downloadMediaToLocal(msg.consultation_id, fu)
+                            if (local != null) {
+                                repository.updateMessageLocalFile(serverId, local.absolutePath, local.length())
+                            }
+                        }
+                    }
+                }
+                processedMessageIds[msg.id] = true
+            }
+
+            // Delete local rows that have no server match AND are not pending
+            // (pending = failed/sending, keep them so user can retry)
+            for (local in existing) {
+                if (local.id !in matchedLocalIds) {
+                    val isPending = local.sendStatus == "failed" || local.sendStatus == "sending"
+                    if (!isPending) {
+                        // This row was deleted from the server — remove it locally
+                        repository.deleteMessage(local.id)
+                    }
+                }
+            }
+
+            println("[SYNC] Synced ${serverMessages.size} messages for $consultationId (diff: ${existing.size}→${serverMessages.size})")
+        } catch (e: Exception) {
+            println("[SYNC] Error fetching messages for ${consultationId}: ${e.message}")
+        }
+    }
+
+    fun syncConsultationsFromServer() {
+        val token = authToken ?: return
+        _isSyncing.value = true
+        viewModelScope.launch {
+            try {
+                val serverConsultations = MedikaNetwork.api.getConsultations(token)
+                var inserted = 0
+                var updated = 0
+                for (sc in serverConsultations) {
+                    val entity = serverMapToConsultationEntity(sc)
+                    val existing = repository.getConsultationById(entity.id)
+                    if (existing != null) {
+                        repository.updateConsultation(entity)
+                        updated++
+                    } else {
+                        repository.insertConsultation(entity)
+                        inserted++
+                    }
+                }
+                println("[SYNC] Consultations synced: $inserted new, $updated updated (total: ${serverConsultations.size})")
+                // Also sync messages for active consultation
+                val activeId = _activeConsultationId.value
+                if (activeId != null) {
+                    fetchAndSaveMessages(activeId)
+                }
+            } catch (e: Exception) {
+                println("[SYNC] Error syncing consultations: ${e.message}")
+            } finally {
+                _isSyncing.value = false
+            }
+        }
+    }
+
+    fun refreshConsultations() {
+        syncConsultationsFromServer()
+    }
+
+    private fun startSyncPolling() {
+        syncPollingJob?.cancel()
+        syncPollingJob = viewModelScope.launch {
+            while (true) {
+                delay(60_000) // poll every 60s (down from 30s) — WebSocket handles real-time
+                if (authToken != null) {
+                    // Only sync the consultation LIST in the background.
+                    // Do NOT re-fetch messages for the active consultation here —
+                    // the WebSocket delivers new messages in real time, and
+                    // re-fetching causes UI flicker / voice playback interruption.
+                    // Message re-sync only happens when the user opens a
+                    // consultation (setActiveConsultation) or when the WS
+                    // reconnects.
+                    println("[SYNC] Periodic poll - syncing consultation list only")
+                    syncConsultationListOnly()
+                }
+            }
+        }
+    }
+
+    /**
+     * Sync only the consultation list (not messages). This avoids the UI flicker
+     * that happened when syncConsultationsFromServer() called fetchAndSaveMessages()
+     * for the active consultation on every 30s poll.
+     */
+    private fun syncConsultationListOnly() {
+        val token = authToken ?: return
+        viewModelScope.launch {
+            try {
+                val serverConsultations = MedikaNetwork.api.getConsultations(token)
+                for (sc in serverConsultations) {
+                    val entity = serverMapToConsultationEntity(sc)
+                    val existing = repository.getConsultationById(entity.id)
+                    if (existing != null && existing.status == entity.status && existing.doctorId == entity.doctorId) {
+                        // No change — skip to avoid unnecessary DB writes
+                        continue
+                    }
+                    if (existing != null) {
+                        repository.updateConsultation(entity)
+                    } else {
+                        repository.insertConsultation(entity)
+                    }
+                }
+            } catch (e: Exception) {
+                println("[SYNC] Error syncing consultation list: ${e.message}")
+            }
+        }
+    }
+
+    // ─── LOGIN ─────────────────────────────────
+
+    fun loginWithCredentials(username: String, password: String) {
+        if (username.isBlank() || password.isBlank()) {
+            _loginError.value = "Veuillez remplir tous les champs"
+            return
+        }
+        _authState.value = AuthState.Loading
+        _loginError.value = null
+
+        viewModelScope.launch {
+            try {
+                val response = MedikaNetwork.api.login(LoginRequest(username, password))
+                authToken = "Bearer ${response.token}"
+                currentServerUserId = response.user.id
+                currentUserName = response.user.name
+                MedikaNetwork.authToken = "Bearer ${response.token}"
+                MedikaNetwork.connectWebSocket(response.user.id)
+                // Initialize ZEGOCLOUD call service so this user can send/receive
+                // call invitations. The userID MUST match the server user ID.
+                try {
+                    ZegoCallManager.init(getApplication(), response.user.id, response.user.name)
+                    _zegoCallReady.value = ZegoCallManager.isInitialized()
+                    com.example.CrashLogger.log("[LOGIN] ZegoCall ready: ${ZegoCallManager.isInitialized()}")
+                } catch (e: Throwable) {
+                    android.util.Log.e("[ZEGO]", "CallManager.init failed: ${e.message}")
+                    com.example.CrashLogger.log("[LOGIN] ZegoCall init EXCEPTION: ${e.message}")
+                    _zegoCallReady.value = false
+                }
+                // Initialize ZEGOCLOUD ZIM for in-app chat (text + media).
+                // init() is NON-BLOCKING — creates the ZIM instance synchronously
+                // and kicks off login() asynchronously. The onLoginResult callback
+                // fires later (on a ZIM thread) when login completes.
+                try {
+                    val instanceCreated = ZegoChatManager.init(getApplication(), response.user.id, response.user.name)
+                    com.example.CrashLogger.log("[LOGIN] ZegoChat instance created: $instanceCreated")
+                    // Set the login result callback so we know when login completes.
+                    // This fires on a ZIM thread, so we hop to viewModelScope.
+                    ZegoChatManager.onLoginResult = { success, errorCode, errorMsg ->
+                        viewModelScope.launch {
+                            _zegoChatReady.value = success
+                            com.example.CrashLogger.log("[LOGIN] ZegoChat login result: success=$success code=$errorCode msg=$errorMsg")
+                            if (!success) {
+                                _uploadError.value = "Echec chat ZIM ($errorCode): $errorMsg"
+                            }
+                        }
+                    }
+                    // Mark as ready=true optimistically so the user can try sending.
+                    // If login fails, the callback above will flip it to false.
+                    _zegoChatReady.value = instanceCreated
+                } catch (e: Throwable) {
+                    android.util.Log.e("[ZIM]", "ChatManager.init failed: ${e.message}")
+                    com.example.CrashLogger.log("[LOGIN] ZegoChat init EXCEPTION: ${e.message}")
+                    _zegoChatReady.value = false
+                }
+                handleAuthResponse(response)
+            } catch (e: Exception) {
+                _authState.value = AuthState.Unauthenticated
+                _loginError.value = "Nom d'utilisateur ou mot de passe incorrect"
+            }
+        }
+    }
+
+    // ─── REGISTER ─────────────────────────────────
+
+    fun registerPatient(username: String, password: String, name: String, email: String, phone: String, age: Int, gender: String) {
+        if (username.isBlank() || password.isBlank() || name.isBlank()) {
+            _registerError.value = "Veuillez remplir le nom d'utilisateur, le mot de passe et le nom complet"
+            return
+        }
+        _authState.value = AuthState.Loading
+        _registerError.value = null
+
+        viewModelScope.launch {
+            try {
+                val response = MedikaNetwork.api.register(
+                    RegisterRequest(
+                        username = username,
+                        password = password,
+                        name = name,
+                        email = email,
+                        phone = phone,
+                        age = age,
+                        gender = gender
+                    )
+                )
+                authToken = "Bearer ${response.token}"
+                currentServerUserId = response.user.id
+                currentUserName = response.user.name
+                MedikaNetwork.authToken = "Bearer ${response.token}"
+                MedikaNetwork.connectWebSocket(response.user.id)
+                ZegoCallManager.init(getApplication(), response.user.id, response.user.name)
+                handleAuthResponse(response)
+            } catch (e: Exception) {
+                _authState.value = AuthState.Unauthenticated
+                _registerError.value = "Erreur d'inscription: ${e.localizedMessage}"
+            }
+        }
+    }
+
+    private suspend fun handleAuthResponse(response: LoginResponse) {
+        when (response.user.role) {
+            "patient" -> {
+                val profile = PatientProfileEntity(
+                    id = "current_patient",
+                    name = response.user.name,
+                    email = response.user.email ?: "",
+                    phone = response.user.phone ?: "",
+                    age = response.user.age ?: 0,
+                    gender = response.user.gender ?: "Homme"
+                )
+                repository.savePatientProfile(profile)
+                _authState.value = AuthState.PatientAuthenticated(profile, response.user)
+            }
+            "doctor" -> {
+                val doctor = DoctorEntity(
+                    id = response.user.id,
+                    name = response.user.name,
+                    specialty = response.user.specialty ?: "Medecine Generale",
+                    licenseNumber = response.user.license_number ?: "",
+                    location = response.user.location ?: "",
+                    avatarUrl = response.user.avatar_url ?: "",
+                    rating = response.user.rating ?: 4.9,
+                    isAvailable = (response.user.is_available ?: 1) == 1,
+                    hospital = response.user.hospital ?: "",
+                    biography = response.user.biography ?: ""
+                )
+                repository.insertDoctors(listOf(doctor))
+                _authState.value = AuthState.DoctorAuthenticated(doctor, response.user)
+            }
+        }
+
+        processedMessageIds.clear()
+        syncConsultationsFromServer()
+        startSyncPolling()
+    }
+
+    fun clearLoginError() { _loginError.value = null }
+    fun clearRegisterError() { _registerError.value = null }
+
+    // ─── LOGOUT ─────────────────────────────────
+
+    fun logout() {
+        MedikaNetwork.disconnectWebSocket()
+        cleanupCall()
+        ZegoCallManager.uninit()
+        ZegoChatManager.uninit()
+        ZegoChatManager.onLoginResult = null
+        _zegoCallReady.value = false
+        _zegoChatReady.value = false
+        authToken = null
+        currentServerUserId = null
+        currentUserName = null
+        _activeConsultationId.value = null
+        _authState.value = AuthState.Unauthenticated
+        resetIntake()
+        processedMessageIds.clear()
+        syncPollingJob?.cancel()
+        syncPollingJob = null
+    }
+
+    // ─── SEND MESSAGE (local-first via ZIM) ──────────────────────────────
+    // Sends text through ZEGOCLOUD ZIM (real-time chat). Falls back to the
+    // old WebSocket transport if ZIM is not initialized.
+
+    fun sendChatMessage(text: String, senderId: String, senderName: String) {
+        val consultationId = _activeConsultationId.value ?: return
+        if (text.isBlank()) return
+
+        viewModelScope.launch {
+            val ts = System.currentTimeMillis()
+            val entity = MessageEntity(
+                consultationId = consultationId,
+                senderId = senderId,
+                senderName = senderName,
+                text = text,
+                timestamp = ts,
+                messageType = "text",
+                fileUrl = null,
+                duration = null,
+                fileSize = null,
+                localFilePath = null,
+                sendStatus = "sending"
+            )
+            repository.insertMessage(entity)
+            println("[TEXT] Inserted local row (ts=$ts), sending via ZIM...")
+
+            val peerUserId = getPeerUserIdForConsultation(consultationId, senderId)
+            if (peerUserId == null) {
+                println("[TEXT] No peer user ID found — cannot send via ZIM")
+                val row = repository.getMessagesForConsultationOnce(consultationId)
+                    .firstOrNull { it.timestamp == ts && it.senderId == senderId && it.text == text }
+                row?.let { repository.updateMessageStatus(it.id, "failed", null, null) }
+                _uploadError.value = "Impossible de trouver le destinataire"
+                return@launch
+            }
+
+            // Send via ZIM. ZIM doesn't echo back to sender for PEER chat, so
+            // we mark as "sent" when the callback fires.
+            withContext(Dispatchers.IO) {
+                ZegoChatManager.sendTextMessage(text, peerUserId, consultationId, senderName) { success, _, errMsg ->
+                    viewModelScope.launch {
+                        val row = repository.getMessagesForConsultationOnce(consultationId)
+                            .firstOrNull { it.timestamp == ts && it.senderId == senderId && it.text == text }
+                        if (row != null) {
+                            if (success) {
+                                repository.updateMessageStatus(row.id, "sent", null, null)
+                                println("[TEXT] ZIM send OK for row ${row.id}")
+                            } else {
+                                repository.updateMessageStatus(row.id, "failed", null, null)
+                                _uploadError.value = "Echec envoi: ${errMsg ?: "erreur inconnue"}"
+                                println("[TEXT] ZIM send FAILED for row ${row.id}: $errMsg")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Retry sending a text message that previously failed (via ZIM). */
+    fun retrySendTextMessage(messageId: Int) {
+        viewModelScope.launch {
+            val msg = repository.getMessageById(messageId) ?: return@launch
+            if (msg.sendStatus != "failed") return@launch
+            if (msg.messageType != "text") return@launch
+            val consultationId = msg.consultationId
+            repository.updateMessageStatus(messageId, "sending", msg.fileUrl, msg.localFilePath)
+            println("[RETRY-TEXT] Retrying msg $messageId via ZIM")
+
+            val peerUserId = getPeerUserIdForConsultation(consultationId, msg.senderId)
+            if (peerUserId == null) {
+                repository.updateMessageStatus(messageId, "failed", msg.fileUrl, msg.localFilePath)
+                _uploadError.value = "Impossible de trouver le destinataire"
+                return@launch
+            }
+
+            withContext(Dispatchers.IO) {
+                ZegoChatManager.sendTextMessage(msg.text, peerUserId, consultationId, msg.senderName) { success, _, errMsg ->
+                    viewModelScope.launch {
+                        if (success) {
+                            repository.updateMessageStatus(messageId, "sent", msg.fileUrl, msg.localFilePath)
+                            println("[RETRY-TEXT] OK msg $messageId")
+                        } else {
+                            repository.updateMessageStatus(messageId, "failed", msg.fileUrl, msg.localFilePath)
+                            _uploadError.value = "Echec renvoi: ${errMsg ?: "erreur inconnue"}"
+                            println("[RETRY-TEXT] Failed again for msg $messageId: $errMsg")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun sendTypingIndication() {
+        val consultationId = _activeConsultationId.value ?: return
+        MedikaNetwork.sendTyping(consultationId, true)
+    }
+
+    // ─── FIND DOCTORS BY CATEGORY ───────────────────────────
+
+    fun findDoctorsByCategory(symptomText: String, category: String) {
+        if (symptomText.isBlank()) return
+        _intakeState.value = IntakeState.Loading
+
+        viewModelScope.launch {
+            try {
+                val token = authToken ?: throw Exception("Not authenticated")
+                val serverDoctors = MedikaNetwork.api.getDoctorsBySpecialty(token, category)
+
+                val availableDoctors = serverDoctors
+                    .filter { (it.is_available ?: 1) == 1 }
+                    .map { dto ->
+                        DoctorEntity(
+                            id = dto.id,
+                            name = dto.name,
+                            specialty = dto.specialty ?: category,
+                            licenseNumber = dto.license_number ?: "",
+                            location = dto.location ?: "",
+                            avatarUrl = dto.avatar_url ?: "",
+                            rating = dto.rating ?: 4.5,
+                            isAvailable = true,
+                            hospital = dto.hospital ?: "",
+                            biography = dto.biography ?: ""
+                        )
+                    }
+
+                if (availableDoctors.isEmpty()) {
+                    _intakeState.value = IntakeState.NoDoctors(category)
+                } else {
+                    _intakeState.value = IntakeState.DoctorsLoaded(availableDoctors, category)
+                }
+            } catch (e: Exception) {
+                _intakeState.value = IntakeState.Error("Erreur de connexion: ${e.localizedMessage}")
+            }
+        }
+    }
+
+    fun selectDoctorAndSendRequest(doctor: DoctorEntity, symptomText: String, category: String) {
+        viewModelScope.launch {
+            try {
+                val profile = repository.getPatientProfile() ?: PatientProfileEntity(
+                    name = "Patient", email = "", phone = "", age = 0, gender = "Homme"
+                )
+
+                val token = authToken ?: return@launch
+                val response = MedikaNetwork.api.createConsultation(
+                    token,
+                    CreateConsultationRequest(
+                        description = symptomText,
+                        specialtyNeeded = category,
+                        urgencyLevel = "Moyenne",
+                        aiSummary = "Consultation $category - $symptomText",
+                        aiExplanation = "",
+                        doctorId = doctor.id,
+                        patientAge = profile.age
+                    )
+                )
+
+                val consultationId = response["id"] as? String ?: return@launch
+
+                repository.insertConsultation(
+                    ConsultationEntity(
+                        id = consultationId,
+                        patientName = profile.name,
+                        patientAge = profile.age,
+                        description = symptomText,
+                        specialtyNeeded = category,
+                        urgencyLevel = "Moyenne",
+                        aiSummary = "",
+                        aiExplanation = "",
+                        doctorId = doctor.id,
+                        status = "RECHERCHE_MEDECIN",
+                        // The patient is the current user — store their server user ID
+                        // so the doctor can send them ZIM messages / call invitations.
+                        patientId = currentServerUserId
+                    )
+                )
+
+                repository.insertMessage(
+                    MessageEntity(
+                        consultationId = consultationId,
+                        senderId = "system",
+                        senderName = "Medika",
+                        text = "Demande envoyee au ${doctor.name}. En attente d'acceptation..."
+                    )
+                )
+
+                _activeConsultationId.value = consultationId
+                _intakeState.value = IntakeState.Idle
+            } catch (e: Exception) {
+                _intakeState.value = IntakeState.Error("Erreur de connexion: ${e.localizedMessage}")
+            }
+        }
+    }
+
+    fun resetIntake() {
+        _intakeState.value = IntakeState.Idle
+    }
+
+    fun setActiveConsultation(id: String?) {
+        _activeConsultationId.value = id
+        if (id != null) {
+            viewModelScope.launch {
+                fetchAndSaveMessages(id)
+            }
+        }
+    }
+
+    // ─── DOCTOR ACTIONS ─────────────────────────────
+
+    fun doctorAcceptConsultation(id: String) {
+        viewModelScope.launch {
+            try {
+                val token = authToken ?: return@launch
+                MedikaNetwork.api.acceptConsultation(token, id)
+                val local = repository.getConsultationById(id)
+                if (local != null) {
+                    repository.updateConsultation(local.copy(status = "EN_COURS"))
+                    repository.insertMessage(
+                        MessageEntity(
+                            consultationId = id, senderId = "system", senderName = "Systeme",
+                            text = "Consultation acceptee. Le salon de discussion est ouvert."
+                        )
+                    )
+                }
+                _activeConsultationId.value = id
+                delay(500)
+                fetchAndSaveMessages(id)
+            } catch (e: Exception) {
+                println("[API] Error accepting: ${e.message}")
+            }
+        }
+    }
+
+    fun doctorRejectConsultation(id: String) {
+        viewModelScope.launch {
+            try {
+                val token = authToken ?: return@launch
+                MedikaNetwork.api.rejectConsultation(token, id)
+                val local = repository.getConsultationById(id)
+                if (local != null) {
+                    repository.updateConsultation(local.copy(status = "REFUSE"))
+                }
+            } catch (e: Exception) {
+                println("[API] Error rejecting: ${e.message}")
+            }
+        }
+    }
+
+    fun writePrescription(consultationId: String, prescriptionText: String) {
+        viewModelScope.launch {
+            try {
+                val token = authToken ?: return@launch
+                MedikaNetwork.api.writePrescription(token, consultationId, PrescriptionRequest(prescriptionText))
+                val local = repository.getConsultationById(consultationId)
+                if (local != null) {
+                    repository.updateConsultation(local.copy(prescription = prescriptionText, status = "TERMINE"))
+                    repository.insertMessage(
+                        MessageEntity(
+                            consultationId = consultationId, senderId = "system", senderName = "Systeme",
+                            text = "Ordonnance redigee. Consultation clôturée."
+                        )
+                    )
+                }
+                delay(500)
+                fetchAndSaveMessages(consultationId)
+            } catch (e: Exception) {
+                println("[API] Error writing prescription: ${e.message}")
+            }
+        }
+    }
+
+    fun toggleDoctorAvailability(doctorId: String, isAvailable: Boolean) {
+        viewModelScope.launch {
+            try {
+                val token = authToken ?: return@launch
+                MedikaNetwork.api.updateAvailability(token, mapOf("isAvailable" to isAvailable))
+            } catch (_: Exception) {}
+            repository.updateDoctorAvailability(doctorId, isAvailable)
+            val currentAuth = _authState.value
+            if (currentAuth is AuthState.DoctorAuthenticated && currentAuth.doctor.id == doctorId) {
+                _authState.value = AuthState.DoctorAuthenticated(currentAuth.doctor.copy(isAvailable = isAvailable), currentAuth.serverUser)
+            }
+        }
+    }
+
+    // ─── PROFILE ────────────────────────────────────
+
+    fun updatePatientProfile(name: String, email: String, phone: String, age: Int, gender: String, allergies: String, medications: String, history: String) {
+        viewModelScope.launch {
+            try {
+                val token = authToken ?: return@launch
+                MedikaNetwork.api.updateProfile(token, mapOf("name" to name, "email" to email, "phone" to phone, "age" to age, "gender" to gender))
+            } catch (_: Exception) {}
+            val updated = PatientProfileEntity(name = name, email = email, phone = phone, age = age, gender = gender, allergies = allergies, medications = medications, history = history)
+            repository.savePatientProfile(updated)
+            val currentAuth = _authState.value
+            if (currentAuth is AuthState.PatientAuthenticated) {
+                _authState.value = AuthState.PatientAuthenticated(updated, currentAuth.serverUser)
+            }
+        }
+    }
+
+    // ══════════════════════════════════════════════════════
+    // ─── CALLING SYSTEM (LiveKit) - DO NOT MODIFY ───────────────────────
+    // ══════════════════════════════════════════════════════
+
+    fun hasCallPermissions(context: Context, isVideo: Boolean): Boolean {
+        val app = context.applicationContext
+        val audioOk = ContextCompat.checkSelfPermission(app, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        val cameraOk = !isVideo || ContextCompat.checkSelfPermission(app, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        return audioOk && cameraOk
+    }
+
+    // ─── Outgoing Call ─────────────────────────────────
+
+    fun startCall(consultationId: String, peerName: String, peerAvatar: String?, isVideo: Boolean) {
+        if (_activeCall.value != null) return
+
+        val app = getApplication<Application>()
+        if (!hasCallPermissions(app, isVideo)) {
+            println("[CALL] Permissions not granted, requesting...")
+            pendingCallParams = arrayOf(consultationId, peerName, peerAvatar ?: "", isVideo)
+            pendingCallNeedsVideo = isVideo
+            _requestCallPermissions.value = true
+            return
+        }
+
+        executeCall(consultationId, peerName, peerAvatar, isVideo)
+    }
+
+    fun onCallPermissionsResult(granted: Boolean) {
+        _requestCallPermissions.value = false
+        if (granted && pendingCallParams != null) {
+            val params = pendingCallParams!!
+            pendingCallParams = null
+            executeCall(params[0] as String, params[1] as String, (params[2] as String).ifEmpty { null }, params[3] as Boolean)
+        } else {
+            pendingCallParams = null
+            val current = _activeCall.value
+            if (current != null) {
+                viewModelScope.launch { _activeCall.value = null }
+            }
+        }
+    }
+
+    private fun executeCall(consultationId: String, peerName: String, peerAvatar: String?, isVideo: Boolean) {
+        println("[CALL] Initiating ${if (isVideo) "video" else "voice"} call to $peerName")
+
+        _activeCall.value = CallSession(
+            consultationId = consultationId, peerName = peerName, peerAvatar = peerAvatar,
+            isOutgoing = true, status = CallStatus.RINGING,
+            callType = if (isVideo) CallType.VIDEO else CallType.VOICE
+        )
+
+        currentCallIsVideo = isVideo
+
+        viewModelScope.launch {
+            val token = authToken
+            if (token == null) {
+                println("[CALL] Not authenticated, cannot call")
+                cleanupCall()
+                return@launch
+            }
+            try {
+                println("[CALL] Fetching LiveKit token...")
+                val tokenResponse = MedikaNetwork.api.getCallToken(
+                    token, CallTokenRequest(consultationId = consultationId, isVideo = isVideo)
+                )
+
+                val roomName = tokenResponse.roomName
+                currentRoomName = roomName
+
+                val callerName = currentUserName ?: "Unknown"
+                MedikaNetwork.sendCallStart(
+                    consultationId = consultationId,
+                    callType = if (isVideo) "video" else "voice",
+                    roomName = roomName,
+                    callerName = callerName
+                )
+
+                connectToLiveKitRoom(tokenResponse.token, tokenResponse.url, isVideo)
+
+                repository.insertMessage(
+                    MessageEntity(consultationId = consultationId, senderId = "system", senderName = "Systeme",
+                        text = "Appel ${if (isVideo) "video" else "vocal"} sortant..."
+                    )
+                )
+            } catch (e: Exception) {
+                println("[CALL] Error: ${e.message}")
+                e.printStackTrace()
+                cleanupCall()
+            }
+        }
+    }
+
+    // ─── Incoming Call ─────────────────────────────────
+
+    fun acceptIncomingCall() {
+        val incoming = _incomingCall.value ?: return
+        val isVideo = incoming.callType == "video"
+
+        val app = getApplication<Application>()
+        if (!hasCallPermissions(app, isVideo)) {
+            pendingIncomingCall = incoming
+            pendingCallNeedsVideo = isVideo
+            _requestCallPermissions.value = true
+            return
+        }
+
+        executeAcceptCall(incoming)
+    }
+
+    var pendingIncomingCall: IncomingCallEvent? = null
+        private set
+
+    fun onIncomingCallPermissionsResult(granted: Boolean) {
+        _requestCallPermissions.value = false
+        val incoming = pendingIncomingCall
+        pendingIncomingCall = null
+        if (granted && incoming != null) {
+            executeAcceptCall(incoming)
+        } else {
+            rejectIncomingCall()
+        }
+    }
+
+    private fun executeAcceptCall(incoming: IncomingCallEvent) {
+        val isVideo = incoming.callType == "video"
+        currentCallIsVideo = isVideo
+        currentRoomName = incoming.roomName
+
+        _activeCall.value = CallSession(
+            consultationId = incoming.consultationId, peerName = incoming.fromName, peerAvatar = null,
+            isOutgoing = false, status = CallStatus.RINGING,
+            callType = if (isVideo) CallType.VIDEO else CallType.VOICE
+        )
+        _incomingCall.value = null
+
+        println("[CALL] Accepting incoming ${incoming.callType} call from ${incoming.fromName}")
+
+        MedikaNetwork.sendCallAccept(incoming.consultationId)
+
+        viewModelScope.launch {
+            try {
+                val token = authToken ?: return@launch
+                println("[CALL] Fetching LiveKit token for incoming call...")
+                val tokenResponse = MedikaNetwork.api.getCallToken(
+                    token, CallTokenRequest(consultationId = incoming.consultationId, isVideo = isVideo)
+                )
+
+                connectToLiveKitRoom(tokenResponse.token, tokenResponse.url, isVideo)
+            } catch (e: Exception) {
+                println("[CALL] Error accepting call: ${e.message}")
+                e.printStackTrace()
+                cleanupCall()
+            }
+        }
+    }
+
+    fun rejectIncomingCall() {
+        val incoming = _incomingCall.value ?: return
+        MedikaNetwork.sendCallReject(incoming.consultationId)
+        _incomingCall.value = null
+    }
+
+    // ─── ZEGOCLOUD Call Connection ────────────────────────────
+    // The ZegoUIKitPrebuiltCallService handles the entire call UI and WebRTC
+    // connection. We don't need to connect manually — the
+    // ZegoSendCallInvitationButton in ChatScreen triggers the call and Zego
+    // shows the call UI automatically.
+
+    private suspend fun connectToLiveKitRoom(lkToken: String, lkUrl: String, isVideo: Boolean) {
+        // No-op: Zego UIKit handles the connection when the user taps
+        // ZegoSendCallInvitationButton.
+        println("[ZEGO] connectToLiveKitRoom is a no-op — Zego UIKit handles connection")
+    }
+
+    // ─── Video Attachment ─────────────────────────────────
+
+    var remoteVideoRenderer: Any? = null
+    var localVideoRenderer: Any? = null
+
+    private fun attachRemoteVideo() { /* no-op: Zego handles video */ }
+    private fun attachLocalVideo() { /* no-op: Zego handles video */ }
+
+    // ─── End Call ────────────────────────────────────
+
+    fun endCall() {
+        try {
+            ZegoUIKitPrebuiltCallService.endCall()
+        } catch (e: Exception) {
+            println("[ZEGO] endCall error: ${e.message}")
+        }
+        cleanupCall()
+    }
+
+    private fun cleanupCall() {
+        callTimerJob?.cancel()
+        currentRoomName = null
+        _livekitConnected.value = false
+
+        val current = _activeCall.value
+        viewModelScope.launch {
+            if (current != null && current.status == CallStatus.ACTIVE) {
+                val formattedTime = String.format("%02d:%02d", current.durationSeconds / 60, current.durationSeconds % 60)
+                if (current.consultationId.isNotEmpty()) {
+                    repository.insertMessage(
+                        MessageEntity(consultationId = current.consultationId, senderId = "system", senderName = "Systeme",
+                            text = "Appel termine. Duree : $formattedTime.")
+                    )
+                }
+            }
+            delay(500)
+            _activeCall.value = null
+        }
+    }
+
+    // ─── Call Controls ─────────────────────────────────
+
+    fun toggleMute() {
+        try {
+            val newState = !ZegoUIKitPrebuiltCallService.isMicrophoneOn()
+            ZegoUIKitPrebuiltCallService.openMicrophone(newState)
+            val currentState = _activeCall.value ?: return
+            _activeCall.value = currentState.copy(isMuted = !newState)
+        } catch (e: Exception) {
+            println("[ZEGO] toggleMute error: ${e.message}")
+        }
+    }
+
+    fun toggleSpeaker() {
+        val current = _activeCall.value ?: return
+        _activeCall.value = current.copy(isSpeakerOn = !current.isSpeakerOn)
+    }
+
+    fun toggleCamera() {
+        try {
+            val newState = !ZegoUIKitPrebuiltCallService.isCameraOn()
+            ZegoUIKitPrebuiltCallService.openCamera(newState)
+            val currentState = _activeCall.value ?: return
+            _activeCall.value = currentState.copy(isCameraOn = newState)
+        } catch (e: Exception) {
+            println("[ZEGO] toggleCamera error: ${e.message}")
+        }
+    }
+
+    fun setCallMinimized(minimized: Boolean) {
+        if (minimized) {
+            try { ZegoUIKitPrebuiltCallService.minimizeCall() } catch (_: Exception) {}
+        }
+        val current = _activeCall.value ?: return
+        _activeCall.value = current.copy(isMinimized = minimized)
+    }
+
+    private fun startCallTimer() {
+        callTimerJob?.cancel()
+        callTimerJob = viewModelScope.launch {
+            while (true) {
+                delay(1000)
+                val current = _activeCall.value
+                if (current != null && current.status == CallStatus.ACTIVE) {
+                    _activeCall.value = current.copy(durationSeconds = current.durationSeconds + 1)
+                } else break
+            }
+        }
+    }
+
+    // ─── Voice Recording (with permission request) ──────────────────────
+
+    fun requestMicAndStartRecording(senderId: String, senderName: String) {
+        val app = getApplication<Application>()
+        val hasPermission = ContextCompat.checkSelfPermission(app, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        if (hasPermission) {
+            startVoiceRecording()
+        } else {
+            pendingVoiceSender = Pair(senderId, senderName)
+            pendingVoiceAction = "start"
+            _requestMicPermission.value = true
+        }
+    }
+
+    fun onMicPermissionResult(granted: Boolean) {
+        _requestMicPermission.value = false
+        if (granted) {
+            if (pendingVoiceAction == "start") {
+                startVoiceRecording()
+            }
+        }
+        pendingVoiceSender = null
+        pendingVoiceAction = null
+    }
+
+    fun startVoiceRecording() {
+        if (_isRecording.value) return
+        val app = getApplication<Application>()
+        val consultationId = _activeConsultationId.value ?: "general"
+        // Save the recording directly into the per-consultation folder so we
+        // don't need to copy it afterwards. This becomes the local cached copy.
+        val audioDir = medikaMediaDir(consultationId)
+        val file = File(audioDir, "voice_${System.currentTimeMillis()}.m4a")
+        currentRecordingFile = file
+
+        try {
+            mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                MediaRecorder(app)
+            } else {
+                @Suppress("DEPRECATION")
+                MediaRecorder()
+            }.apply {
+                setAudioSource(MediaRecorder.AudioSource.MIC)
+                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                setOutputFile(file.absolutePath)
+                prepare()
+                start()
+            }
+            _isRecording.value = true
+            _recordingDuration.value = 0
+            recordingTimerJob = viewModelScope.launch {
+                while (true) {
+                    delay(1000)
+                    if (_isRecording.value) {
+                        _recordingDuration.value += 1
+                    } else break
+                }
+            }
+            println("[VOICE] Recording started -> ${file.absolutePath}")
+        } catch (e: Exception) {
+            println("[VOICE] Error starting recording: ${e.message}")
+            _isRecording.value = false
+            currentRecordingFile = null
+        }
+    }
+
+    fun stopAndSendVoiceRecording(senderId: String, senderName: String) {
+        if (!_isRecording.value) return
+        recordingTimerJob?.cancel()
+        val file = currentRecordingFile
+
+        try {
+            mediaRecorder?.apply {
+                stop()
+                release()
+            }
+        } catch (e: Exception) {
+            println("[VOICE] Error stopping recording: ${e.message}")
+        }
+        mediaRecorder = null
+        val durationSec = _recordingDuration.value
+        _isRecording.value = false
+        _recordingDuration.value = 0
+
+        val consultationId = _activeConsultationId.value
+        if (file == null || !file.exists() || consultationId == null) {
+            currentRecordingFile = null
+            return
+        }
+        if (file.length() == 0L) {
+            println("[VOICE] Empty recording, discarding")
+            file.delete()
+            currentRecordingFile = null
+            return
+        }
+
+        // ── Local-first send flow ───────────────────────────────────────
+        // 1. Insert DB row with localFilePath set + sendStatus="sending" so
+        //    the bubble appears immediately and plays from the local file.
+        // 2. Upload to server (passing consultationId for per-consult folder).
+        // 3. On success: broadcast via WS and flip sendStatus to "sent" with
+        //    the server fileUrl. On failure: sendStatus="failed" (retry button).
+        viewModelScope.launch {
+            val ts = System.currentTimeMillis()
+            val localPath = file.absolutePath
+            val rowId = run {
+                val entity = MessageEntity(
+                    consultationId = consultationId,
+                    senderId = senderId,
+                    senderName = senderName,
+                    text = "",
+                    timestamp = ts,
+                    messageType = "voice",
+                    fileUrl = null,
+                    duration = durationSec,
+                    fileSize = file.length(),
+                    localFilePath = localPath,
+                    sendStatus = "sending"
+                )
+                repository.insertMessage(entity)
+                // Re-fetch to get the auto-generated id
+                repository.getMessagesForConsultationOnce(consultationId)
+                    .firstOrNull { it.timestamp == ts && it.senderId == senderId && it.localFilePath == localPath }
+                    ?.id
+            }
+            println("[VOICE] Inserted local row id=$rowId, sending via ZIM...")
+
+            val peerUserId = getPeerUserIdForConsultation(consultationId, senderId)
+            if (peerUserId == null) {
+                if (rowId != null) repository.updateMessageStatus(rowId, "failed", null, localPath)
+                _uploadError.value = "Impossible de trouver le destinataire"
+                println("[VOICE] No peer user ID found")
+                currentRecordingFile = null
+                return@launch
+            }
+
+            // Send via ZIM — ZIM uploads the audio to its CDN automatically.
+            withContext(Dispatchers.IO) {
+                ZegoChatManager.sendAudioMessage(
+                    localPath, durationSec.toLong(), peerUserId, consultationId, senderName
+                ) { success, errMsg ->
+                    viewModelScope.launch {
+                        if (success && rowId != null) {
+                            // The file URL isn't known until ZIM uploads it; we keep
+                            // localFilePath so playback works offline.
+                            repository.updateMessageStatus(rowId, "sent", null, localPath)
+                            println("[VOICE] ZIM send OK for row $rowId")
+                        } else if (rowId != null) {
+                            repository.updateMessageStatus(rowId, "failed", null, localPath)
+                            _uploadError.value = "Echec envoi vocal: ${errMsg ?: "erreur inconnue"}"
+                            println("[VOICE] ZIM send FAILED for row $rowId: $errMsg")
+                        }
+                    }
+                }
+            }
+        }
+        currentRecordingFile = null
+    }
+
+    /** Retry sending a voice/media message that previously failed (via ZIM). */
+    fun retrySendMediaMessage(messageId: Int) {
+        viewModelScope.launch {
+            val msg = repository.getMessageById(messageId) ?: return@launch
+            if (msg.sendStatus != "failed") return@launch
+            if (msg.localFilePath.isNullOrBlank()) return@launch
+            val consultationId = msg.consultationId
+            repository.updateMessageStatus(messageId, "sending", msg.fileUrl, msg.localFilePath)
+            println("[RETRY] Retrying msg $messageId (${msg.messageType}) via ZIM")
+
+            val peerUserId = getPeerUserIdForConsultation(consultationId, msg.senderId)
+            if (peerUserId == null) {
+                repository.updateMessageStatus(messageId, "failed", msg.fileUrl, msg.localFilePath)
+                _uploadError.value = "Impossible de trouver le destinataire"
+                return@launch
+            }
+
+            withContext(Dispatchers.IO) {
+                val callback: (Boolean, String?) -> Unit = { success, errMsg ->
+                    viewModelScope.launch {
+                        if (success) {
+                            repository.updateMessageStatus(messageId, "sent", msg.fileUrl, msg.localFilePath)
+                            println("[RETRY] OK msg $messageId via ZIM")
+                        } else {
+                            repository.updateMessageStatus(messageId, "failed", msg.fileUrl, msg.localFilePath)
+                            _uploadError.value = "Echec renvoi: ${errMsg ?: "erreur inconnue"}"
+                            println("[RETRY] Failed again for msg $messageId: $errMsg")
+                        }
+                    }
+                }
+                when (msg.messageType) {
+                    "voice" -> ZegoChatManager.sendAudioMessage(
+                        msg.localFilePath, (msg.duration ?: 0).toLong(),
+                        peerUserId, consultationId, msg.senderName, callback
+                    )
+                    "image" -> ZegoChatManager.sendImageMessage(
+                        msg.localFilePath, peerUserId, consultationId, msg.senderName, callback
+                    )
+                    "video" -> ZegoChatManager.sendVideoMessage(
+                        msg.localFilePath, (msg.duration ?: 0).toLong(),
+                        peerUserId, consultationId, msg.senderName, callback
+                    )
+                    else -> callback(false, "Type inconnu: ${msg.messageType}")
+                }
+            }
+        }
+    }
+
+    // ─── Media Messages (via ZIM — ZIM handles upload to its CDN) ─────────
+
+    fun sendMediaMessage(context: Context, uri: android.net.Uri, senderId: String, senderName: String, mimeType: String) {
+        val consultationId = _activeConsultationId.value ?: return
+
+        viewModelScope.launch {
+            try {
+                // Copy URI into the per-consultation folder so the file persists
+                // across cache evictions and is available offline.
+                val localFile = withContext(Dispatchers.IO) {
+                    copyUriToConsultationDir(context, uri, consultationId, mimeType)
+                } ?: run {
+                    println("[MEDIA] Failed to copy URI to file")
+                    return@launch
+                }
+
+                val messageType = when {
+                    mimeType.startsWith("image/") -> "image"
+                    mimeType.startsWith("video/") -> "video"
+                    mimeType.startsWith("audio/") -> "voice"
+                    else -> "image"
+                }
+
+                // 1. Insert local row immediately so bubble shows up.
+                val ts = System.currentTimeMillis()
+                val localPath = localFile.absolutePath
+                val rowId = run {
+                    val entity = MessageEntity(
+                        consultationId = consultationId,
+                        senderId = senderId,
+                        senderName = senderName,
+                        text = "",
+                        timestamp = ts,
+                        messageType = messageType,
+                        fileUrl = null,
+                        duration = if (messageType == "voice") 0 else null,
+                        fileSize = localFile.length(),
+                        localFilePath = localPath,
+                        sendStatus = "sending"
+                    )
+                    repository.insertMessage(entity)
+                    repository.getMessagesForConsultationOnce(consultationId)
+                        .firstOrNull { it.timestamp == ts && it.senderId == senderId && it.localFilePath == localPath }
+                        ?.id
+                }
+                println("[MEDIA] Inserted local row id=$rowId (${messageType}, ${localFile.length() / 1024}KB), sending via ZIM...")
+
+                val peerUserId = getPeerUserIdForConsultation(consultationId, senderId)
+                if (peerUserId == null) {
+                    if (rowId != null) repository.updateMessageStatus(rowId, "failed", null, localPath)
+                    _uploadError.value = "Impossible de trouver le destinataire"
+                    println("[MEDIA] No peer user ID found")
+                    return@launch
+                }
+
+                // 2. Send via ZIM — ZIM uploads the file to its CDN automatically.
+                withContext(Dispatchers.IO) {
+                    val callback: (Boolean, String?) -> Unit = { success, errMsg ->
+                        viewModelScope.launch {
+                            if (success && rowId != null) {
+                                repository.updateMessageStatus(rowId, "sent", null, localPath)
+                                println("[MEDIA] ZIM $messageType send OK for row $rowId")
+                            } else if (rowId != null) {
+                                repository.updateMessageStatus(rowId, "failed", null, localPath)
+                                _uploadError.value = "Echec envoi media: ${errMsg ?: "erreur inconnue"}"
+                                println("[MEDIA] ZIM send FAILED for row $rowId: $errMsg")
+                            }
+                        }
+                    }
+                    when (messageType) {
+                        "voice" -> ZegoChatManager.sendAudioMessage(
+                            localPath, 0L, peerUserId, consultationId, senderName, callback
+                        )
+                        "image" -> ZegoChatManager.sendImageMessage(
+                            localPath, peerUserId, consultationId, senderName, callback
+                        )
+                        "video" -> ZegoChatManager.sendVideoMessage(
+                            localPath, 0L, peerUserId, consultationId, senderName, callback
+                        )
+                        else -> callback(false, "Type inconnu: $messageType")
+                    }
+                }
+            } catch (e: Exception) {
+                println("[MEDIA] Error: ${e.message}")
+            }
+        }
+    }
+
+    /** Copy a picked-content URI into filesDir/medika/{consultationId}/ with the right extension. */
+    private suspend fun copyUriToConsultationDir(
+        context: Context, uri: android.net.Uri, consultationId: String, mimeType: String
+    ): File? = withContext(Dispatchers.IO) {
+        try {
+            val ext = when (mimeType) {
+                "image/jpeg" -> ".jpg"
+                "image/png" -> ".png"
+                "image/gif" -> ".gif"
+                "image/webp" -> ".webp"
+                "video/mp4" -> ".mp4"
+                "video/3gp" -> ".3gp"
+                "video/webm" -> ".webm"
+                "audio/mpeg", "audio/mp3" -> ".mp3"
+                "audio/mp4", "audio/m4a" -> ".m4a"
+                "audio/wav" -> ".wav"
+                "audio/ogg" -> ".ogg"
+                "audio/webm" -> ".webm"
+                else -> ".bin"
+            }
+            val dir = medikaMediaDir(consultationId)
+            val outFile = File(dir, "media_${System.currentTimeMillis()}$ext")
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                outFile.outputStream().use { output -> input.copyTo(output) }
+            }
+            if (outFile.exists() && outFile.length() > 0) outFile else null
+        } catch (e: Exception) {
+            println("[MEDIA] Error copying URI: ${e.message}")
+            null
+        }
+    }
+
+    private fun copyUriToFile(context: Context, uri: android.net.Uri): File? {
+        return try {
+            val extension = when (context.contentResolver.getType(uri)) {
+                "image/jpeg" -> ".jpg"
+                "image/png" -> ".png"
+                "image/gif" -> ".gif"
+                "image/webp" -> ".webp"
+                "video/mp4" -> ".mp4"
+                "video/3gp" -> ".3gp"
+                "video/webm" -> ".webm"
+                else -> ".tmp"
+            }
+            val cacheFile = File(context.cacheDir, "media_${System.currentTimeMillis()}$extension")
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                cacheFile.outputStream().use { output -> input.copyTo(output) }
+            }
+            if (cacheFile.exists() && cacheFile.length() > 0) cacheFile else null
+        } catch (e: Exception) {
+            println("[MEDIA] Error copying URI: ${e.message}")
+            null
+        }
+    }
+
+    // ─── Admin ───────────────────────────────────────
+
+    fun adminCreateDoctor(name: String, specialty: String, licenseNumber: String, location: String, hospital: String, biography: String) {
+        viewModelScope.launch {
+            val newDoctor = DoctorEntity(
+                id = "doc_" + UUID.randomUUID().toString().take(8),
+                name = name, specialty = specialty, licenseNumber = licenseNumber,
+                location = location, hospital = hospital, biography = biography,
+                avatarUrl = "", rating = 5.0, isAvailable = true
+            )
+            repository.insertDoctors(listOf(newDoctor))
+        }
+    }
+}
+
+// ─── ViewModel Factory ───────────────────────────────────
+
+class SanteViewModelFactory(
+    private val application: Application,
+    private val repository: SanteRepository
+) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(SanteViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return SanteViewModel(application, repository) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
+    }
+}
