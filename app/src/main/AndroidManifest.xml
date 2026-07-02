@@ -46,5 +46,10 @@
             android:screenOrientation="portrait"
             android:exported="false" />
 
+    
+        <activity
+            android:name=".ui.screens.PaymentActivity"
+            android:screenOrientation="portrait"
+            android:exported="false" />
     </application>
 </manifest>

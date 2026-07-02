@@ -51,6 +51,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Intent
+import com.example.ui.screens.PaymentActivity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -103,9 +108,34 @@ private val doctorCategories = listOf(
 @Composable
 fun SymptomIntakeScreen(viewModel: SanteViewModel) {
     val intakeState by viewModel.intakeState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     var symptomText by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<DoctorCategory?>(null) }
+    var pendingDoctor by remember { mutableStateOf<DoctorEntity?>(null) }
+    var pendingSymptom by remember { mutableStateOf("") }
+    var pendingCategory by remember { mutableStateOf("") }
+
+    // Payment result launcher
+    val paymentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val success = result.data?.getBooleanExtra(PaymentActivity.EXTRA_PAYMENT_SUCCESS, false) ?: false
+            val txId = result.data?.getStringExtra(PaymentActivity.EXTRA_TRANSACTION_ID) ?: ""
+            if (success && pendingDoctor != null) {
+                viewModel.selectDoctorAndSendRequest(
+                    doctor = pendingDoctor!!,
+                    symptomText = pendingSymptom,
+                    category = pendingCategory
+                )
+                pendingDoctor = null
+            }
+        } else {
+            // Payment cancelled or failed
+            pendingDoctor = null
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -148,11 +178,13 @@ fun SymptomIntakeScreen(viewModel: SanteViewModel) {
                     doctors = state.doctors,
                     symptomText = symptomText,
                     onSelectDoctor = { doctor ->
-                        viewModel.selectDoctorAndSendRequest(
-                            doctor = doctor,
-                            symptomText = symptomText,
-                            category = state.category
-                        )
+                        // Launch MonCash payment before creating consultation
+                        pendingDoctor = doctor
+                        pendingSymptom = symptomText
+                        pendingCategory = state.category
+                        val orderId = "MC_${System.currentTimeMillis()}_${doctor.id}"
+                        val intent = PaymentActivity.newIntent(context, "Dr. ${doctor.name}", orderId)
+                        paymentLauncher.launch(intent)
                     },
                     onReset = {
                         viewModel.resetIntake()
