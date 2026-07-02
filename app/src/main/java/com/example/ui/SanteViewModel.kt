@@ -11,7 +11,7 @@ import com.example.data.repository.SanteRepository
 import com.example.data.livekit.ZegoCallManager
 import com.example.data.livekit.ZegoChatManager
 import com.example.data.livekit.ZimIncomingMessage
-import com.zegocloud.uikit.prebuilt.call.ZegoUIKitPrebuiltCallService
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -27,6 +27,7 @@ import android.os.Build
 import java.io.File
 import java.io.FileOutputStream
 import java.net.URL
+import android.content.Intent
 import kotlin.concurrent.thread
 
 // ─── Auth States ─────────────────────────────────────────────
@@ -466,9 +467,31 @@ class SanteViewModel(
      */
     private suspend fun handleZimIncomingMessage(zimMsg: ZimIncomingMessage) {
         val myId = currentServerUserId
-        // Skip our own messages (ZIM doesn't echo back to sender for PEER chat,
-        // but be defensive).
+        // Skip our own messages
         if (zimMsg.senderId == myId) return
+
+        // ─── Call signal detection (ZIM-based call signaling) ─────
+        // If the message text is a JSON with type=call_signal, handle it
+        // as a call invitation instead of a chat message.
+        if (zimMsg.text.startsWith("{\"type\":\"call_signal\"") ||
+            zimMsg.text.contains("\"callType\"")) {
+            try {
+                val json = org.json.JSONObject(zimMsg.text)
+                if (json.optString("type") == "call_signal") {
+                    val roomId = json.getString("roomId")
+                    val callType = json.getString("callType")
+                    val callerName = json.getString("callerName")
+                    com.example.CrashLogger.log("[CALL-SIGNAL] Received: roomId=$roomId type=$callType from=${zimMsg.senderId}")
+                    // Get application context to start CallActivity
+                    val appContext = getApplication<Application>()
+                    onIncomingCallSignal(roomId, callType, callerName, appContext)
+                    return  // Don't insert this as a chat message
+                }
+            } catch (e: Exception) {
+                // Not valid JSON or not a call signal — fall through to normal message handling
+            }
+        }
+
 
         val consultationId = zimMsg.consultationId
         if (consultationId.isBlank()) {
@@ -768,6 +791,7 @@ class SanteViewModel(
                     com.example.CrashLogger.log("[LOGIN] ZegoCall init EXCEPTION: ${e.message}")
                     _zegoCallReady.value = false
                 }
+                com.example.CrashLogger.log("[ORDER] ZegoCallManager.init() completed, about to init ZegoChatManager")
                 // Initialize ZEGOCLOUD ZIM for in-app chat (text + media).
                 // init() is NON-BLOCKING — creates the ZIM instance synchronously
                 // and kicks off login() asynchronously. The onLoginResult callback
@@ -830,7 +854,32 @@ class SanteViewModel(
                 currentUserName = response.user.name
                 MedikaNetwork.authToken = "Bearer ${response.token}"
                 MedikaNetwork.connectWebSocket(response.user.id)
-                ZegoCallManager.init(getApplication(), response.user.id, response.user.name)
+                try {
+                    ZegoCallManager.init(getApplication(), response.user.id, response.user.name)
+                    _zegoCallReady.value = ZegoCallManager.isInitialized()
+                    com.example.CrashLogger.log("[REGISTER] ZegoCall ready: ${ZegoCallManager.isInitialized()}")
+                } catch (e: Throwable) {
+                    com.example.CrashLogger.log("[REGISTER] ZegoCall init EXCEPTION: ${e.message}")
+                    _zegoCallReady.value = false
+                }
+                com.example.CrashLogger.log("[ORDER] [REGISTER] ZegoCallManager.init() completed, about to init ZegoChatManager")
+                try {
+                    val instanceCreated = ZegoChatManager.init(getApplication(), response.user.id, response.user.name)
+                    com.example.CrashLogger.log("[REGISTER] ZegoChat instance created: $instanceCreated")
+                    ZegoChatManager.onLoginResult = { success, errorCode, errorMsg ->
+                        viewModelScope.launch {
+                            _zegoChatReady.value = success
+                            com.example.CrashLogger.log("[REGISTER] ZegoChat login result: success=$success code=$errorCode msg=$errorMsg")
+                            if (!success) {
+                                _uploadError.value = "Echec chat ZIM ($errorCode): $errorMsg"
+                            }
+                        }
+                    }
+                    _zegoChatReady.value = instanceCreated
+                } catch (e: Throwable) {
+                    com.example.CrashLogger.log("[REGISTER] ZegoChat init EXCEPTION: ${e.message}")
+                    _zegoChatReady.value = false
+                }
                 handleAuthResponse(response)
             } catch (e: Exception) {
                 _authState.value = AuthState.Unauthenticated
@@ -1367,10 +1416,74 @@ class SanteViewModel(
     }
 
     // ─── ZEGOCLOUD Call Connection ────────────────────────────
-    // The ZegoUIKitPrebuiltCallService handles the entire call UI and WebRTC
+    // The ZegoUIKitPrebuiltCallInvitationService handles the entire call UI and WebRTC
     // connection. We don't need to connect manually — the
     // ZegoSendCallInvitationButton in ChatScreen triggers the call and Zego
     // shows the call UI automatically.
+
+
+    // ─── ZEGO Direct-Join Call (ZIM signaling) ────────────────
+
+    /**
+     * Initiates a call by sending a ZIM message to the peer, then opens
+     * CallActivity. The peer receives the ZIM message and auto-opens
+     * CallActivity with the same roomID.
+     */
+    fun sendCallRequest(
+        context: android.content.Context,
+        roomId: String,
+        peerId: String,
+        peerName: String,
+        isVideo: Boolean
+    ) {
+        val myId = currentServerUserId ?: return
+        val myName = currentUserName ?: "User"
+        val type = if (isVideo) "video_call" else "voice_call"
+
+        // Send ZIM message to peer so they can join the same room
+        try {
+            ZegoChatManager.sendCallSignal(
+                toUserId = peerId,
+                roomId = roomId,
+                callType = type,
+                callerId = myId,
+                callerName = myName
+            )
+            com.example.CrashLogger.log("[CALL] Sent $type signal: roomId=$roomId to=$peerId")
+        } catch (e: Throwable) {
+            com.example.CrashLogger.log("[CALL] Failed to send signal: ${e.message}")
+            return
+        }
+
+        // Open CallActivity for the caller
+        context.startActivity(
+            Intent(context, Class.forName("com.example.ui.screens.CallActivity")).apply { putExtra("ROOM_ID", roomId); putExtra("USER_ID", myId); putExtra("USER_NAME", myName); putExtra("IS_VIDEO", isVideo); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP) }
+        )
+        com.example.CrashLogger.log("[CALL] Caller opened CallActivity: roomId=$roomId")
+    }
+
+    /**
+     * Called by ZegoChatManager when a call signal ZIM message is received.
+     * Opens CallActivity so this user joins the same room.
+     */
+    fun onIncomingCallSignal(roomId: String, callType: String, callerName: String, context: android.content.Context) {
+        val myId = currentServerUserId ?: return
+        val myName = currentUserName ?: "User"
+        val isVideo = callType == "video_call"
+
+        com.example.CrashLogger.log("[CALL] Incoming $callType from $callerName, roomId=$roomId, opening CallActivity")
+
+        // Show a quick toast
+        android.widget.Toast.makeText(
+            context,
+            if (isVideo) "Appel video de $callerName" else "Appel vocal de $callerName",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
+
+        context.startActivity(
+            Intent(context, Class.forName("com.example.ui.screens.CallActivity")).apply { putExtra("ROOM_ID", roomId); putExtra("USER_ID", myId); putExtra("USER_NAME", myName); putExtra("IS_VIDEO", isVideo); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP) }
+        )
+    }
 
     private suspend fun connectToLiveKitRoom(lkToken: String, lkUrl: String, isVideo: Boolean) {
         // No-op: Zego UIKit handles the connection when the user taps
@@ -1390,7 +1503,7 @@ class SanteViewModel(
 
     fun endCall() {
         try {
-            ZegoUIKitPrebuiltCallService.endCall()
+            // Zego UIKit handles call ending via its own UI
         } catch (e: Exception) {
             println("[ZEGO] endCall error: ${e.message}")
         }
@@ -1422,8 +1535,8 @@ class SanteViewModel(
 
     fun toggleMute() {
         try {
-            val newState = !ZegoUIKitPrebuiltCallService.isMicrophoneOn()
-            ZegoUIKitPrebuiltCallService.openMicrophone(newState)
+            val newState = !true // Zego UIKit handles mic
+            // Zego UIKit handles mic
             val currentState = _activeCall.value ?: return
             _activeCall.value = currentState.copy(isMuted = !newState)
         } catch (e: Exception) {
@@ -1438,8 +1551,8 @@ class SanteViewModel(
 
     fun toggleCamera() {
         try {
-            val newState = !ZegoUIKitPrebuiltCallService.isCameraOn()
-            ZegoUIKitPrebuiltCallService.openCamera(newState)
+            val newState = !true // Zego UIKit handles camera
+            // Zego UIKit handles camera
             val currentState = _activeCall.value ?: return
             _activeCall.value = currentState.copy(isCameraOn = newState)
         } catch (e: Exception) {
@@ -1449,7 +1562,7 @@ class SanteViewModel(
 
     fun setCallMinimized(minimized: Boolean) {
         if (minimized) {
-            try { ZegoUIKitPrebuiltCallService.minimizeCall() } catch (_: Exception) {}
+        // Zego UIKit handles minimize
         }
         val current = _activeCall.value ?: return
         _activeCall.value = current.copy(isMinimized = minimized)

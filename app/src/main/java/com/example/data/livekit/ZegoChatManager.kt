@@ -8,6 +8,7 @@ import im.zego.zim.callback.ZIMEventHandler
 import im.zego.zim.callback.ZIMLoggedInCallback
 import im.zego.zim.callback.ZIMMediaDownloadedCallback
 import im.zego.zim.callback.ZIMMessageSentCallback
+
 import im.zego.zim.entity.ZIMAppConfig
 import im.zego.zim.entity.ZIMAudioMessage
 import im.zego.zim.entity.ZIMError
@@ -79,12 +80,13 @@ object ZegoChatManager {
         currentUserId = userId
 
         return try {
-            CrashLogger.log("[ZIM] Creating ZIM instance: appID=$APP_ID, userId=$userId")
+            CrashLogger.log("[ZIM] Before create — ZIM.getInstance() returns: ${try { ZIM.getInstance()?.let { "EXISTS hash=${System.identityHashCode(it)}" } ?: "null" } catch (e: Throwable) { "getInstance() threw: ${e.javaClass.simpleName}" }}")
             val appConfig = ZIMAppConfig().apply {
                 appID = APP_ID
                 appSign = APP_SIGN
             }
             zim = ZIM.create(appConfig, application)
+            CrashLogger.log("[ZIM] After create — new instance hash=${zim?.let { System.identityHashCode(it) }}, ZIM.getInstance() now=${try { ZIM.getInstance()?.let { System.identityHashCode(it) } } catch (e: Throwable) { "threw" }}")
             if (zim == null) {
                 initialized = false
                 loggedIn = false
@@ -96,6 +98,7 @@ object ZegoChatManager {
             CrashLogger.log("[ZIM] ZIM instance created OK")
 
             // Set event handler BEFORE login
+            CrashLogger.log("[ZIM] About to call setEventHandler — this OVERWRITES any handler the call SDK may have registered for invitations")
             zim!!.setEventHandler(object : ZIMEventHandler() {
                 override fun onReceivePeerMessage(zim: ZIM, messages: ArrayList<ZIMMessage>, fromUserID: String) {
                     CrashLogger.log("[ZIM] onReceivePeerMessage: ${messages.size} msgs from $fromUserID")
@@ -157,9 +160,13 @@ object ZegoChatManager {
     fun uninit() {
         try {
             zim?.logout()
+        } catch (e: Throwable) {
+            CrashLogger.log("[ZIM] logout exception: ${e.message}")
+        }
+        try {
             zim?.destroy()
         } catch (e: Throwable) {
-            CrashLogger.log("[ZIM] uninit exception: ${e.message}")
+            CrashLogger.log("[ZIM] destroy exception: ${e.message}")
         }
         zim = null
         initialized = false
@@ -452,6 +459,14 @@ object ZegoChatManager {
             )
             else -> null
         }
+    }
+
+    // -- Call Signaling via ZIM --
+    fun sendCallSignal(toUserId: String, roomId: String, callType: String, callerId: String, callerName: String) {
+        val z = zim ?: return
+        val json = "\u007b\u0022type\u0022:\u0022call_signal\u0022,\u0022roomId\u0022:\u0022" + roomId + "\u0022,\u0022callType\u0022:\u0022" + callType + "\u0022,\u0022callerId\u0022:\u0022" + callerId + "\u0022,\u0022callerName\u0022:\u0022" + callerName + "\u0022\u007d"
+        val message = ZIMTextMessage(json)
+        z.sendMessage(message, toUserId, ZIMConversationType.PEER, ZIMMessageSendConfig(), object : ZIMMessageSentCallback { override fun onMessageAttached(message: ZIMMessage) {} override fun onMessageSent(message: ZIMMessage, error: ZIMError) {} })
     }
 }
 

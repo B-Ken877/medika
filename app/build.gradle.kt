@@ -81,8 +81,9 @@ dependencies {
     // because this app has no google-services.json / Firebase setup.
     // Incoming call push when the app is killed will NOT work, but in-app
     // call invitations (both users online) work perfectly.
-    // Agora RTC SDK for voice/video calls (replaces ZEGO calling)
+    // Agora RTC SDK for voice/video calls
     implementation("io.agora.rtc:full-sdk:4.4.0")
+
 
     // ZEGOCLOUD ZIM SDK — In-app Chat (text + media messages).
     // Version pinned to match the transitive version pulled by the UIKit above.

@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -37,14 +38,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import java.util.UUID
 import com.example.data.db.MessageEntity
 import com.example.ui.AuthState
 import com.example.ui.SanteViewModel
 import com.example.ui.components.MessageBubble
 import com.example.ui.theme.*
-import com.zegocloud.uikit.prebuilt.call.invite.widget.ZegoSendCallInvitationButton
-import com.zegocloud.uikit.service.defines.ZegoUIKitUser
-import android.graphics.drawable.GradientDrawable
 
 // WhatsApp-style chat wallpaper: very subtle warm cream with a hint of green
 private val ChatWallpaper = Color(0xFFEFE5D5)  // warm parchment
@@ -109,28 +108,7 @@ fun ChatScreen(
         }
     }
 
-    // ─── Call permission launcher ───
-    val callPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val allGranted = permissions.entries.all { it.value }
-        if (viewModel.pendingIncomingCall != null) {
-            viewModel.onIncomingCallPermissionsResult(allGranted)
-        } else {
-            viewModel.onCallPermissionsResult(allGranted)
-        }
-    }
 
-    val requestCallPerms by viewModel.requestCallPermissions.collectAsStateWithLifecycle()
-    LaunchedEffect(requestCallPerms) {
-        if (requestCallPerms) {
-            val perms = mutableListOf(Manifest.permission.RECORD_AUDIO)
-            if (viewModel.pendingCallNeedsVideo) {
-                perms.add(Manifest.permission.CAMERA)
-            }
-            callPermissionLauncher.launch(perms.toTypedArray())
-        }
-    }
 
     // ─── Media picker launcher ───
     var pendingMimeType by remember { mutableStateOf("") }
@@ -160,30 +138,6 @@ fun ChatScreen(
         }
     }
 
-    // Show a Toast when Zego services aren't ready so the user knows why
-    // calls/chat might not work
-    LaunchedEffect(zegoCallReady, zegoChatReady) {
-        if (!zegoCallReady && authState !is AuthState.Unauthenticated) {
-            android.widget.Toast.makeText(
-                context,
-                "Service d'appel non initialise. Relancez l'app.",
-                android.widget.Toast.LENGTH_LONG
-            ).show()
-        }
-        if (!zegoChatReady && authState !is AuthState.Unauthenticated) {
-            android.widget.Toast.makeText(
-                context,
-                "Chat non initialise. Relancez l'app.",
-                android.widget.Toast.LENGTH_LONG
-            ).show()
-        }
-    }
-
-    // ─── Root layout: Column with TopBar + Messages + InputBar ─────────
-    // Using a Box with imePadding so the keyboard pushes the input bar up.
-    // The top bar extends up under the status bar (edge-to-edge green) via
-    // windowInsetsPadding on TopAppBar (which Material3 handles by default
-    // when we pass WindowInsets.statusBars).
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -235,33 +189,20 @@ fun ChatScreen(
                     // initialized. If not ready, show a disabled placeholder so
                     // the user knows calls aren't available yet.
                     if (peerUserId != null && zegoCallReady) {
-                        ZegoCallIconButton(
-                            peerUserId = peerUserId,
-                            peerName = peerName,
-                            isVideoCall = false,
-                            icon = Icons.Default.Call
-                        )
-                        ZegoCallIconButton(
-                            peerUserId = peerUserId,
-                            peerName = peerName,
-                            isVideoCall = true,
-                            icon = Icons.Default.Videocam
-                        )
-                    } else if (peerUserId != null && !zegoCallReady) {
-                        // Zego not initialized — show disabled icons so the user
-                        // knows the buttons exist but aren't ready yet.
-                        Icon(
-                            Icons.Default.Call,
-                            contentDescription = "Appel indisponible",
-                            tint = Color.White.copy(alpha = 0.4f),
-                            modifier = Modifier.size(24.dp).padding(12.dp)
-                        )
-                        Icon(
-                            Icons.Default.Videocam,
-                            contentDescription = "Video indisponible",
-                            tint = Color.White.copy(alpha = 0.4f),
-                            modifier = Modifier.size(24.dp).padding(12.dp)
-                        )
+                        // Voice call button — sends ZIM message then opens CallActivity
+                        IconButton(onClick = {
+                            val roomId = "call_${senderId}_${peerUserId}_${System.currentTimeMillis()}"
+                            viewModel.sendCallRequest(context, roomId, peerUserId, peerName, isVideo = false)
+                        }) {
+                            Icon(Icons.Default.Call, contentDescription = "Appel vocal", tint = Color.White)
+                        }
+                        // Video call button
+                        IconButton(onClick = {
+                            val roomId = "call_${senderId}_${peerUserId}_${System.currentTimeMillis()}"
+                            viewModel.sendCallRequest(context, roomId, peerUserId, peerName, isVideo = true)
+                        }) {
+                            Icon(Icons.Default.Videocam, contentDescription = "Appel video", tint = Color.White)
+                        }
                     }
                     if (isDoctor && activeConsultation?.status == "EN_COURS") {
                         TextButton(onClick = { showPrescriptionDialog = true }) {
@@ -679,61 +620,5 @@ private fun PrescriptionDialog(onDismiss: () -> Unit, onConfirm: (String) -> Uni
             }
         }
     )
-}
 
-/**
- * A Compose wrapper around ZegoSendCallInvitationButton.
- *
- * When tapped, it sends a call invitation to the peer via ZEGOCLOUD. The Zego
- * UIKit handles everything: ringing, call UI, WebRTC, mute/camera, hang-up.
- *
- * We overlay our own Compose Icon on top of the (transparent) Zego button so
- * the UI matches our green theme. The Zego button is sized to 48dp and
- * positioned underneath; clicking anywhere on it triggers the invitation.
- */
-@Composable
-private fun ZegoCallIconButton(
-    peerUserId: String,
-    peerName: String,
-    isVideoCall: Boolean,
-    icon: androidx.compose.ui.graphics.vector.ImageVector
-) {
-    val invitees = remember(peerUserId, peerName) {
-        java.util.ArrayList<ZegoUIKitUser>().apply {
-            add(ZegoUIKitUser(peerUserId, peerName))
-        }
-    }
-    Box(
-        modifier = Modifier.size(48.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        // The Zego button fills the Box and handles the click.
-        AndroidView<ZegoSendCallInvitationButton>(
-            factory = { ctx ->
-                ZegoSendCallInvitationButton(ctx).apply {
-                    setInvitees(invitees)
-                    setIsVideoCall(isVideoCall)
-                    // Make the Zego button transparent so only our Compose icon shows.
-                    setBackgroundResource(android.R.color.transparent)
-                    text = ""
-                    layoutParams = ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                }
-            },
-            update = { btn ->
-                btn.setInvitees(invitees)
-                btn.setIsVideoCall(isVideoCall)
-            },
-            modifier = Modifier.fillMaxSize()
-        )
-        // Our themed icon on top
-        Icon(
-            icon,
-            contentDescription = if (isVideoCall) "Video" else "Appel",
-            tint = Color.White,
-            modifier = Modifier.size(24.dp)
-        )
-    }
 }
