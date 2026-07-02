@@ -77,14 +77,29 @@ class PaymentActivity : AppCompatActivity() {
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val url = request.url.toString()
-                CrashLogger.log("[MONCASH] WebView URL: $url")
+                val scheme = request.url.scheme ?: ""
                 val host = request.url.host ?: ""
-                if (host.isNotEmpty() && !host.contains("moncash") && !host.contains("digicel") && !host.contains("sandbox")) {
-                    CrashLogger.log("[MONCASH] Redirect detected, verifying payment")
+                CrashLogger.log("[MONCASH] WebView URL: $url")
+
+                // Catch custom app scheme from mock success page
+                if (scheme == "medika") {
+                    CrashLogger.log("[MONCASH] App scheme detected, verifying payment")
+                    verifyPayment()
+                    return true
+                }
+
+                // Catch redirect away from MonCash domain (real mode)
+                if (host.isNotEmpty() && !host.contains("moncash") && !host.contains("digicel") && !host.contains("sandbox") && !host.contains("167.86.124.101")) {
+                    CrashLogger.log("[MONCASH] External redirect detected, verifying payment")
                     verifyPayment()
                     return true
                 }
                 return false
+            }
+
+            override fun onPageFinished(view: WebView, url: String?) {
+                super.onPageFinished(view, url)
+                CrashLogger.log("[MONCASH] Page finished: $url")
             }
         }
     }
