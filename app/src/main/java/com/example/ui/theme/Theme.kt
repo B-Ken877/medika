@@ -5,35 +5,41 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-private val LightColorScheme = lightColorScheme(
+private val MedikaLightColorScheme = lightColorScheme(
     primary = PrimaryGreen,
-    onPrimary = Color.White,
-    primaryContainer = LightGreen,
+    onPrimary = TextOnPrimary,
+    primaryContainer = Green50,
     onPrimaryContainer = Green800,
-    secondary = DarkGreen,
+    secondary = Green700,
     onSecondary = Color.White,
     secondaryContainer = Green100,
     onSecondaryContainer = Green900,
-    tertiary = SanteSuccess,
+    tertiary = SanteInfo,
     onTertiary = Color.White,
-    background = SanteBackground,
-    onBackground = TextPrimary,
-    surface = SanteCard,
-    onSurface = TextPrimary,
-    surfaceVariant = Green50,
-    onSurfaceVariant = TextSecondary,
-    outline = Color(0xFFD1D5DB),
-    outlineVariant = Green100,
+    tertiaryContainer = SanteInfoBg,
+    onTertiaryContainer = Neutral800,
     error = SanteDanger,
     onError = Color.White,
-    errorContainer = Color(0xFFFEE2E2),
-    onErrorContainer = Color(0xFF991B1B)
+    errorContainer = SanteDangerBg,
+    onErrorContainer = Neutral800,
+    background = SanteBackground,
+    onBackground = TextPrimary,
+    surface = SanteSurface,
+    onSurface = TextPrimary,
+    surfaceVariant = Neutral100,
+    onSurfaceVariant = TextSecondary,
+    outline = Neutral200,
+    outlineVariant = Neutral200,
+    inverseSurface = Neutral800,
+    inverseOnSurface = Neutral50,
+    inversePrimary = Green200,
+    surfaceTint = PrimaryGreen,
 )
 
 @Composable
 fun SanteTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = LightColorScheme,
+        colorScheme = MedikaLightColorScheme,
         typography = Typography,
         content = content
     )

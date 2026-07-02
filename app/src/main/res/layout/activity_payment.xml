@@ -3,47 +3,55 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#F8FAF9">
+    android:background="#F8FAFB">
+
+    <!-- Top Bar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:gravity="center_vertical"
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
-        android:background="#16A34A">
+        android:background="#0D7A35">
+
         <ImageButton
             android:id="@+id/btnBack"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_menu_close_clear_cancel"
-            android:contentDescription="Retour"
+            android:contentDescription="Fermer"
             android:tint="#FFFFFF" />
+
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Paiement MonCash"
+            android:text="Paiement"
             android:textColor="#FFFFFF"
             android:textSize="18sp"
             android:textStyle="bold"
             android:layout_marginStart="12dp" />
     </LinearLayout>
+
+    <!-- Payment Info Card -->
     <LinearLayout
         android:id="@+id/paymentInfoCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="24dp"
+        android:padding="20dp"
         android:layout_margin="16dp"
-        android:background="#FFFFFF"
+        android:background="@drawable/bg_card_payment"
         android:elevation="2dp">
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Consultation avec"
             android:textColor="#6B7280"
-            android:textSize="14sp" />
+            android:textSize="13sp" />
+
         <TextView
             android:id="@+id/doctorNameText"
             android:layout_width="wrap_content"
@@ -53,17 +61,20 @@
             android:textSize="20sp"
             android:textStyle="bold"
             android:layout_marginTop="4dp" />
+
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:background="#E5E7EB"
             android:layout_marginTop="16dp"
             android:layout_marginBottom="16dp" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical">
+
             <TextView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -71,6 +82,7 @@
                 android:text="Montant"
                 android:textColor="#6B7280"
                 android:textSize="14sp" />
+
             <TextView
                 android:id="@+id/amountText"
                 android:layout_width="wrap_content"
@@ -81,6 +93,8 @@
                 android:textStyle="bold" />
         </LinearLayout>
     </LinearLayout>
+
+    <!-- Loading State -->
     <LinearLayout
         android:id="@+id/loadingContainer"
         android:layout_width="match_parent"
@@ -89,24 +103,30 @@
         android:gravity="center"
         android:orientation="vertical"
         android:visibility="gone">
+
         <ProgressBar
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:indeterminateTint="#16A34A" />
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Connexion a MonCash..."
+            android:text="Connexion au paiement..."
             android:textColor="#6B7280"
             android:textSize="14sp"
             android:layout_marginTop="16dp" />
     </LinearLayout>
+
+    <!-- WebView for MonCash -->
     <WebView
         android:id="@+id/paymentWebView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
         android:visibility="gone" />
+
+    <!-- Verification State -->
     <LinearLayout
         android:id="@+id/verifyContainer"
         android:layout_width="match_parent"
@@ -115,18 +135,22 @@
         android:gravity="center"
         android:orientation="vertical"
         android:visibility="gone">
+
         <ProgressBar
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:indeterminateTint="#16A34A" />
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Verification du paiement..."
+            android:text="Vérification du paiement..."
             android:textColor="#6B7280"
             android:textSize="14sp"
             android:layout_marginTop="16dp" />
     </LinearLayout>
+
+    <!-- Error State -->
     <LinearLayout
         android:id="@+id/errorContainer"
         android:layout_width="match_parent"
@@ -136,6 +160,14 @@
         android:orientation="vertical"
         android:visibility="gone"
         android:padding="32dp">
+
+        <ImageView
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@android:drawable/ic_dialog_alert"
+            android:tint="#EF4444"
+            android:contentDescription="Erreur" />
+
         <TextView
             android:id="@+id/errorText"
             android:layout_width="wrap_content"
@@ -143,14 +175,17 @@
             android:text="Erreur de paiement"
             android:textColor="#EF4444"
             android:textSize="16sp"
-            android:gravity="center" />
+            android:gravity="center"
+            android:layout_marginTop="16dp" />
+
         <Button
             android:id="@+id/btnRetry"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Reessayer"
+            android:text="Réessayer"
             android:layout_marginTop="16dp"
             android:backgroundTint="#16A34A"
             android:textColor="#FFFFFF" />
     </LinearLayout>
+
 </LinearLayout>

@@ -1,71 +1,68 @@
 package com.example.ui
 
+import android.app.Activity
+import android.Manifest
 import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
-import android.Manifest
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.offset
 import androidx.compose.ui.unit.sp
+import androidx.core.view.ViewCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.screens.AdminDashboardScreen
 import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.ChatScreen
 import com.example.ui.screens.DoctorDashboardScreen
+import com.example.ui.screens.NotificationsScreen
 import com.example.ui.screens.PatientDashboardScreen
 import com.example.ui.screens.ProfileScreen
-import com.example.ui.screens.NotificationsScreen
 import com.example.ui.screens.RegistrationScreen
 import com.example.ui.screens.SymptomIntakeScreen
 import com.example.ui.theme.*
-import kotlinx.coroutines.launch
+
+private val PrimaryGreenDark = Color(0xFF0D7A35)
+private val Neutral200 = Color(0xFFE5E7EB)
+private val NavGray = Color(0xFF9E9E9E)
 
 private val screenOrder = listOf("auth", "register", "home", "intake", "chat", "profile", "notifications")
 
@@ -90,9 +87,21 @@ fun SanteApp(
     val wsConnected by viewModel.wsConnected.collectAsStateWithLifecycle()
 
     var currentScreen by remember { mutableStateOf("auth") }
-    var showBottomSheet by remember { mutableStateOf(false) }
 
-    // ─── Call Permission Handling ──────────────────────────────────────
+    // ─── System Bars Styling ────────────────────────────
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val activity = view.context as Activity
+            activity.window.statusBarColor = PrimaryGreenDark.toArgb()
+            activity.window.navigationBarColor = Color.White.toArgb()
+            val insetsController = ViewCompat.getWindowInsetsController(activity.window.decorView)
+            insetsController?.isAppearanceLightStatusBars = false
+            insetsController?.isAppearanceLightNavigationBars = true
+        }
+    }
+
+    // ─── Call Permission Handling ────────────────────────────
     val requestCallPerms by viewModel.requestCallPermissions.collectAsStateWithLifecycle()
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -113,7 +122,7 @@ fun SanteApp(
         }
     }
 
-    // ─── Handle Android back button ────────────────────────────────────
+    // ─── Handle Android back button ────────────────────────────
     val backDispatcher = LocalContext.current as? androidx.activity.ComponentActivity
     DisposableEffect(backDispatcher) {
         val callback = object : androidx.activity.OnBackPressedCallback(true) {
@@ -153,82 +162,10 @@ fun SanteApp(
         }
     }
 
-    // Bottom Sheet
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val scope = rememberCoroutineScope()
-
-    if (showBottomSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showBottomSheet = false },
-            sheetState = sheetState,
-            containerColor = Color.White,
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-            dragHandle = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 12.dp, bottom = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .width(40.dp)
-                            .height(4.dp)
-                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
-                            .background(Green200)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Menu",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .background(if (wsConnected) Green500 else SanteDanger, androidx.compose.foundation.shape.CircleShape)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = if (wsConnected) "Connecte au serveur" else "Connexion...",
-                            fontSize = 12.sp,
-                            color = if (wsConnected) Green700 else SanteWarning,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    HorizontalDivider(color = Green100, thickness = 1.dp)
-                }
-            }
-        ) {
-            NavSheetContent(
-                currentScreen = currentScreen,
-                activeConsultationId = activeConsultationId,
-                onItemClick = { route ->
-                    scope.launch { sheetState.hide() }.invokeOnCompletion {
-                        showBottomSheet = false
-                    }
-                    when (route) {
-                        "home" -> currentScreen = "home"
-                        "chat" -> if (activeConsultationId != null) currentScreen = "chat"
-                        "profile" -> currentScreen = "profile"
-                        "notifications" -> currentScreen = "notifications"
-                        "logout" -> viewModel.logout()
-                    }
-                },
-                onDismiss = {
-                    scope.launch { sheetState.hide() }.invokeOnCompletion {
-                        showBottomSheet = false
-                    }
-                }
-            )
-        }
-    }
+    // Determine if bottom nav should be visible
+    val showBottomNav = authState !is AuthState.Unauthenticated &&
+            authState !is AuthState.Loading &&
+            currentScreen !in listOf("auth", "chat", "register")
 
     Box(
         modifier = modifier
@@ -238,6 +175,9 @@ fun SanteApp(
         // Main content
         AnimatedContent(
             targetState = currentScreen,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = if (showBottomNav) 64.dp else 0.dp),
             transitionSpec = {
                 val oldIndex = screenOrder.indexOf(initialState).coerceAtLeast(0)
                 val newIndex = screenOrder.indexOf(targetState).coerceAtLeast(0)
@@ -296,6 +236,14 @@ fun SanteApp(
 
                 "chat" -> ChatScreen(
                     viewModel = viewModel,
+                    onNavigate = { route ->
+                        when (route) {
+                            "home" -> currentScreen = "home"
+                            "profile" -> currentScreen = "profile"
+                            "notifications" -> currentScreen = "notifications"
+                            "intake" -> currentScreen = "intake"
+                        }
+                    },
                     onBack = { currentScreen = "home" }
                 )
 
@@ -305,50 +253,20 @@ fun SanteApp(
                 )
 
                 "notifications" -> NotificationsScreen(
-                    viewModel = viewModel,
                     onBack = { currentScreen = "home" }
                 )
             }
         }
 
-        // FAB
-        if (authState !is AuthState.Unauthenticated && authState !is AuthState.Loading &&
-            currentScreen !in listOf("auth", "chat", "register")) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(bottom = 24.dp),
-                contentAlignment = Alignment.BottomCenter
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(68.dp)
-                        .graphicsLayer {
-                            scaleX = 1.15f
-                            scaleY = 1.15f
-                            alpha = 0.15f
-                        }
-                        .background(PrimaryGreen, androidx.compose.foundation.shape.CircleShape)
-                )
-
-                Surface(
-                    onClick = { showBottomSheet = true },
-                    modifier = Modifier
-                        .size(60.dp)
-                        .shadow(8.dp, androidx.compose.foundation.shape.CircleShape),
-                    shape = androidx.compose.foundation.shape.CircleShape,
-                    color = PrimaryGreen
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.Menu,
-                            contentDescription = "Menu",
-                            tint = Color.White,
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
-                }
-            }
+        // ─── Bottom Navigation Bar ────────────────────────────
+        if (showBottomNav) {
+            BottomNavBar(
+                modifier = Modifier.align(Alignment.BottomCenter),
+                selectedRoute = currentScreen,
+                activeConsultationId = activeConsultationId,
+                onSelect = { route -> currentScreen = route },
+                onNewConsultation = { currentScreen = "intake" }
+            )
         }
 
         // ZEGOCLOUD UIKit handles the call UI entirely (ringing, call screen,
@@ -356,101 +274,146 @@ fun SanteApp(
     }
 }
 
-// ─── Nav Sheet Content ───────────────────────────────────────────────────────
-
-private data class NavItem(
-    val route: String,
-    val label: String,
-    val subtitle: String,
-    val icon: ImageVector
-)
+// ─── Bottom Navigation Bar ──────────────────────────────────────
 
 @Composable
-private fun NavSheetContent(
-    currentScreen: String,
+private fun BottomNavBar(
+    modifier: Modifier = Modifier,
+    selectedRoute: String,
     activeConsultationId: String?,
-    onItemClick: (String) -> Unit,
-    onDismiss: () -> Unit
+    onSelect: (String) -> Unit,
+    onNewConsultation: () -> Unit
 ) {
-    val items = remember {
-        listOf(
-            NavItem("home", "Accueil", "Tableau de bord", Icons.Default.Home),
-            NavItem("chat", "Consultations", "Messages en temps reel", Icons.AutoMirrored.Filled.Chat),
-            NavItem("profile", "Profil", "Mes informations", Icons.Default.Person),
-            NavItem("logout", "Deconnexion", "Se deconnecter", Icons.Default.Close)
-        )
+    Column(
+        modifier = modifier.fillMaxWidth()
+    ) {
+        // Top border
+        HorizontalDivider(color = Neutral200, thickness = 1.dp)
+
+        // Nav bar container (no clipping so the raised + button renders above)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .background(Color.White)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Accueil
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    NavBarItem(
+                        icon = Icons.Default.Home,
+                        label = "Accueil",
+                        selected = selectedRoute == "home" || selectedRoute == "intake",
+                        onClick = { onSelect("home") }
+                    )
+                }
+
+                // Consultations
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    NavBarItem(
+                        icon = Icons.AutoMirrored.Filled.Chat,
+                        label = "Consultations",
+                        selected = selectedRoute == "chat",
+                        enabled = activeConsultationId != null,
+                        onClick = { if (activeConsultationId != null) onSelect("chat") }
+                    )
+                }
+
+                // Center spacer for the raised + button
+                Box(modifier = Modifier.weight(1f))
+
+                // Profil
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    NavBarItem(
+                        icon = Icons.Default.Person,
+                        label = "Profil",
+                        selected = selectedRoute == "profile",
+                        onClick = { onSelect("profile") }
+                    )
+                }
+            }
+
+            // Raised center + button (overlaid, raised 12dp above the bar)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = (-12).dp)
+                    .size(48.dp)
+                    .shadow(6.dp, CircleShape)
+                    .background(PrimaryGreen, CircleShape)
+                    .clickable { onNewConsultation() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Nouvelle consultation",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
     }
+}
+
+// ─── Nav Bar Item ─────────────────────────────────────────
+
+@Composable
+private fun NavBarItem(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    val contentColor = if (selected) PrimaryGreen else NavGray
 
     Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .padding(bottom = 32.dp)
+            .width(64.dp)
+            .clickable(enabled = enabled) { onClick() },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        items.forEach { item ->
-            val isActive = currentScreen == item.route || (item.route == "home" && currentScreen == "intake")
-            val isDisabled = item.route == "chat" && activeConsultationId == null
-            val isLogout = item.route == "logout"
-
-            Surface(
-                onClick = {
-                    if (!isDisabled) onItemClick(item.route)
-                },
+        // Small green dot indicator above icon when selected
+        if (selected) {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
-                color = if (isActive) Green50 else Color.Transparent
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .background(
-                                if (isActive) PrimaryGreen else Green50,
-                                androidx.compose.foundation.shape.CircleShape
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CompositionLocalProvider(LocalContentColor provides if (isActive) Color.White else PrimaryGreen) {
-                            Icon(
-                                imageVector = item.icon,
-                                contentDescription = item.label,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = item.label,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (isLogout) SanteDanger else TextPrimary
-                        )
-                        Text(
-                            text = item.subtitle,
-                            fontSize = 12.sp,
-                            color = if (isDisabled) TextSecondary.copy(alpha = 0.4f) else TextSecondary
-                        )
-                    }
-
-                    if (isActive) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .background(PrimaryGreen, androidx.compose.foundation.shape.CircleShape)
-                        )
-                    }
-                }
-            }
+                    .size(4.dp)
+                    .background(PrimaryGreen, CircleShape)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+        } else {
+            Spacer(modifier = Modifier.height(8.dp))
         }
+
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = if (enabled) contentColor else NavGray.copy(alpha = 0.4f),
+            modifier = Modifier.size(24.dp)
+        )
+
+        Spacer(modifier = Modifier.height(2.dp))
+
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (enabled) contentColor else NavGray.copy(alpha = 0.4f)
+        )
     }
 }

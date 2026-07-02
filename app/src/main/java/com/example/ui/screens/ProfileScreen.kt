@@ -1,34 +1,29 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.data.db.PatientProfileEntity
 import com.example.ui.SanteViewModel
 import com.example.ui.theme.*
 
@@ -38,118 +33,80 @@ fun ProfileScreen(
     onBack: () -> Unit
 ) {
     val profile by viewModel.patientProfile.collectAsStateWithLifecycle()
-    var isEditing by remember { mutableStateOf(false) }
-    var showSaved by remember { mutableStateOf(false) }
-
-    // Form fields
-    var name by remember { mutableStateOf("") }
-    var age by remember { mutableStateOf("") }
-    var gender by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var allergies by remember { mutableStateOf("") }
-    var medications by remember { mutableStateOf("") }
-    var history by remember { mutableStateOf("") }
-
-    // Reset form when profile changes
-    LaunchedEffect(profile) {
-        if (profile != null) {
-            name = profile!!.name
-            age = profile!!.age.toString()
-            gender = profile!!.gender
-            phone = profile!!.phone
-            email = profile!!.email
-            allergies = profile!!.allergies
-            medications = profile!!.medications
-            history = profile!!.history
-        }
-    }
+    var notificationsEnabled by remember { mutableStateOf(true) }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(SanteBackground)
     ) {
-        if (profile == null) {
-            // No profile state
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+        ) {
+            // ── Top App Bar ──────────────────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 4.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.PersonOff,
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                    tint = TextSecondary
-                )
-                Spacer(modifier = Modifier.height(16.dp))
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Retour",
+                        tint = TextPrimary
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
                 Text(
-                    text = "Aucun profil",
-                    style = MaterialTheme.typography.titleMedium,
+                    text = "Profil",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
                     color = TextPrimary
                 )
-                Spacer(modifier = Modifier.height(24.dp))
-                Button(
-                    onClick = onBack,
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Se connecter", color = Color.White)
-                }
+                Spacer(modifier = Modifier.weight(1f))
+                // Balance the back button
+                Spacer(modifier = Modifier.size(48.dp))
             }
-        } else {
-            Column(
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // ── Profile Header Card ──────────────────────────────────────
+            Surface(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 80.dp)
+                    .fillMaxWidth()
+                    .shadow(
+                        elevation = 2.dp,
+                        shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)
+                    ),
+                shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
+                color = Color.White
             ) {
-                // Top bar with back + edit
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 16.dp, bottom = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Retour",
-                            tint = TextPrimary
-                        )
-                    }
-                    IconButton(onClick = { isEditing = !isEditing }) {
-                        Icon(
-                            imageVector = if (isEditing) Icons.Default.Close else Icons.Default.Edit,
-                            contentDescription = if (isEditing) "Annuler" else "Modifier",
-                            tint = if (isEditing) SanteDanger else PrimaryGreen
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Profile Header
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
+                        .padding(vertical = 28.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Avatar
+                    // Avatar circle
                     Box(
                         modifier = Modifier
                             .size(80.dp)
                             .clip(CircleShape)
-                            .background(PrimaryGreen)
-                            .border(3.dp, DarkGreen, CircleShape),
+                            .background(Green50),
                         contentAlignment = Alignment.Center
                     ) {
-                        val firstLetter = if (name.isNotBlank()) name.first().uppercase() else "?"
+                        val initial = profile?.name
+                            ?.takeIf { it.isNotBlank() }
+                            ?.firstOrNull()
+                            ?.uppercaseChar() ?: "?"
                         Text(
-                            text = firstLetter,
-                            color = Color.White,
+                            text = initial.toString(),
+                            color = PrimaryGreen,
                             fontSize = 32.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -158,340 +115,294 @@ fun ProfileScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     // Name
-                    AnimatedContent(
-                        targetState = name,
-                        transitionSpec = { fadeIn() togetherWith fadeOut() }
-                    ) { targetName ->
-                        Text(
-                            text = targetName,
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = TextPrimary
-                        )
-                    }
+                    Text(
+                        text = profile?.name?.ifBlank { "Utilisateur" } ?: "Utilisateur",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = TextPrimary
+                    )
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    // Email
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Email,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = TextSecondary
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        AnimatedContent(
-                            targetState = email,
-                            transitionSpec = { fadeIn() togetherWith fadeOut() }
-                        ) { targetEmail ->
-                            Text(
-                                text = targetEmail,
-                                fontSize = 14.sp,
-                                color = TextSecondary
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(2.dp))
-
-                    // Phone
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Phone,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = TextSecondary
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        AnimatedContent(
-                            targetState = phone,
-                            transitionSpec = { fadeIn() togetherWith fadeOut() }
-                        ) { targetPhone ->
-                            Text(
-                                text = targetPhone,
-                                fontSize = 14.sp,
-                                color = TextSecondary
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // --- Informations Personnelles Section ---
-                Text(
-                    text = "Informations Personnelles",
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontWeight = FontWeight.SemiBold
-                    ),
-                    color = DarkGreen,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                AnimatedContent(
-                    targetState = isEditing,
-                    transitionSpec = { fadeIn() togetherWith fadeOut() }
-                ) { editing ->
-                    if (editing) {
-                        // Edit mode
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            ProfileEditField(label = "Nom complet", value = name, onValueChange = { name = it })
-                            ProfileEditField(label = "Âge", value = age, onValueChange = { age = it })
-                            ProfileEditField(label = "Sexe", value = gender, onValueChange = { gender = it })
-                            ProfileEditField(label = "Téléphone", value = phone, onValueChange = { phone = it })
-                            ProfileEditField(label = "Email", value = email, onValueChange = { email = it })
-                        }
-                    } else {
-                        // View mode
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            ProfileViewCard(label = "Nom complet", value = name)
-                            ProfileViewCard(label = "Âge", value = "$age ans")
-                            ProfileViewCard(label = "Sexe", value = gender)
-                            ProfileViewCard(label = "Téléphone", value = phone)
-                            ProfileViewCard(label = "Email", value = email)
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // --- Santé Section ---
-                Text(
-                    text = "Santé",
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontWeight = FontWeight.SemiBold
-                    ),
-                    color = DarkGreen,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                AnimatedContent(
-                    targetState = isEditing,
-                    transitionSpec = { fadeIn() togetherWith fadeOut() }
-                ) { editing ->
-                    if (editing) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            ProfileEditField(
-                                label = "Allergies",
-                                value = allergies,
-                                onValueChange = { allergies = it }
-                            )
-                            ProfileEditField(
-                                label = "Médicaments actuels",
-                                value = medications,
-                                onValueChange = { medications = it }
-                            )
-                            ProfileEditField(
-                                label = "Antécédents médicaux",
-                                value = history,
-                                onValueChange = { history = it }
-                            )
-                        }
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            // Allergies with warning icon if not empty
-                            ProfileViewCard(
-                                label = "Allergies",
-                                value = allergies,
-                                showWarning = allergies.isNotBlank() && allergies != "Aucune allergie connue"
-                            )
-                            ProfileViewCard(label = "Médicaments actuels", value = medications)
-                            ProfileViewCard(label = "Antécédents médicaux", value = history)
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Save button (only in edit mode)
-                AnimatedContent(
-                    targetState = isEditing,
-                    transitionSpec = { fadeIn() togetherWith fadeOut() }
-                ) { editing ->
-                    if (editing) {
-                        AnimatedButton(
-                            onClick = {
-                                viewModel.updatePatientProfile(
-                                    name = name,
-                                    email = email,
-                                    phone = phone,
-                                    age = age.toIntOrNull() ?: 0,
-                                    gender = gender,
-                                    allergies = allergies,
-                                    medications = medications,
-                                    history = history
-                                )
-                                isEditing = false
-                                showSaved = true
-                            },
-                            label = if (showSaved) "Sauvegardé ✓" else "Sauvegarder",
-                            showCheckmark = showSaved
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Logout button
-                TextButton(
-                    onClick = { viewModel.logout() },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ExitToApp,
-                        contentDescription = null,
-                        tint = SanteDanger,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    // Email / username
                     Text(
-                        text = "Déconnexion",
-                        color = SanteDanger,
-                        fontWeight = FontWeight.SemiBold
+                        text = profile?.email?.ifBlank { "email@exemple.com" } ?: "email@exemple.com",
+                        fontSize = 14.sp,
+                        color = TextSecondary
                     )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Edit profile button
+                    TextButton(onClick = { /* TODO: navigate to edit */ }) {
+                        Text(
+                            text = "Modifier le profil",
+                            color = PrimaryGreen,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp
+                        )
+                    }
                 }
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // ── Section 1: Mon Compte ────────────────────────────────────
+            SectionCard(title = "Mon Compte") {
+                SettingsRow(
+                    icon = Icons.Default.Person,
+                    label = "Nom",
+                    value = profile?.name?.ifBlank { "—" } ?: "—",
+                    onClick = { }
+                )
+                SettingsDivider()
+                SettingsRow(
+                    icon = Icons.Default.Email,
+                    label = "Email",
+                    value = profile?.email?.ifBlank { "—" } ?: "—",
+                    onClick = { }
+                )
+                SettingsDivider()
+                SettingsRow(
+                    icon = Icons.Default.Phone,
+                    label = "Téléphone",
+                    value = profile?.phone?.ifBlank { "—" } ?: "—",
+                    onClick = { }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // ── Section 2: Préférences ───────────────────────────────────
+            SectionCard(title = "Préférences") {
+                SettingsRow(
+                    icon = Icons.Default.Language,
+                    label = "Langue",
+                    value = "Français",
+                    onClick = { }
+                )
+                SettingsDivider()
+                SettingsToggleRow(
+                    icon = Icons.Default.Notifications,
+                    label = "Notifications",
+                    checked = notificationsEnabled,
+                    onCheckedChange = { notificationsEnabled = it }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // ── Section 3: Sécurité ──────────────────────────────────────
+            SectionCard(title = "Sécurité") {
+                SettingsRow(
+                    icon = Icons.Default.Lock,
+                    label = "Changer le mot de passe",
+                    onClick = { }
+                )
+                SettingsDivider()
+                SettingsRow(
+                    icon = Icons.Default.Security,
+                    label = "Confidentialité",
+                    onClick = { }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // ── Section 4: À Propos ──────────────────────────────────────
+            SectionCard(title = "À Propos") {
+                SettingsRow(
+                    icon = Icons.Default.Info,
+                    label = "Version de l'app",
+                    value = "1.0.0",
+                    showChevron = false,
+                    onClick = { }
+                )
+                SettingsDivider()
+                SettingsRow(
+                    icon = Icons.Default.Description,
+                    label = "Conditions d'utilisation",
+                    onClick = { }
+                )
+                SettingsDivider()
+                SettingsRow(
+                    icon = Icons.Default.Policy,
+                    label = "Politique de confidentialité",
+                    onClick = { }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ── Logout Button ────────────────────────────────────────────
+            OutlinedButton(
+                onClick = { viewModel.logout() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .height(50.dp),
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, SanteDanger),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = SanteDanger
+                )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Logout,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Se déconnecter",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 16.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
 
-// ─── Reusable Components ─────────────────────────────────────────────────────
+// ─── Section Card ────────────────────────────────────────────────────────────
 
 @Composable
-private fun DepthCard(
-    modifier: Modifier = Modifier,
+private fun SectionCard(
+    title: String,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = SanteCard,
-        shadowElevation = 1.dp,
-        tonalElevation = 1.dp
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            content = content
-        )
-    }
-}
-
-@Composable
-private fun ProfileViewCard(
-    label: String,
-    value: String,
-    showWarning: Boolean = false
-) {
-    DepthCard {
         Text(
-            text = label,
-            fontSize = 12.sp,
-            color = TextSecondary,
-            fontWeight = FontWeight.Medium
+            text = title,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = PrimaryGreenDark,
+            modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
         )
-        Spacer(modifier = Modifier.height(4.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (showWarning) {
-                Icon(
-                    imageVector = Icons.Default.Warning,
-                    contentDescription = "Attention",
-                    modifier = Modifier.size(18.dp),
-                    tint = SanteWarning
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-            }
-            Text(
-                text = value,
-                fontSize = 15.sp,
-                color = TextPrimary,
-                fontWeight = FontWeight.Medium
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(
+                    elevation = 2.dp,
+                    shape = RoundedCornerShape(16.dp)
+                ),
+            shape = RoundedCornerShape(16.dp),
+            color = Color.White
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                content = content
             )
         }
     }
 }
 
-@Composable
-private fun ProfileEditField(
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit
-) {
-    DepthCard {
-        Text(
-            text = label,
-            fontSize = 12.sp,
-            color = TextSecondary,
-            fontWeight = FontWeight.Medium
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-            textStyle = LocalTextStyle.current.copy(
-                fontSize = 15.sp,
-                color = TextPrimary
-            ),
-            shape = RoundedCornerShape(8.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = PrimaryGreen,
-                unfocusedBorderColor = Green200,
-                cursorColor = PrimaryGreen
-            )
-        )
-    }
-}
+// ─── Settings Row ────────────────────────────────────────────────────────────
 
 @Composable
-private fun AnimatedButton(
-    onClick: () -> Unit,
+private fun SettingsRow(
+    icon: ImageVector,
     label: String,
-    showCheckmark: Boolean
+    value: String? = null,
+    showChevron: Boolean = true,
+    onClick: () -> Unit
 ) {
-    val scale by animateFloatAsState(
-        targetValue = if (showCheckmark) 1f else 0.95f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
-        label = "save_button_scale"
-    )
-
-    Button(
-        onClick = onClick,
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(50.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = PrimaryGreen,
-            contentColor = Color.White
-        ),
-        shape = RoundedCornerShape(12.dp)
+            .height(56.dp)
+            .clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        if (showCheckmark) {
-            Icon(
-                imageVector = Icons.Default.CheckCircle,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp)
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(22.dp),
+            tint = PrimaryGreen
+        )
+        Spacer(modifier = Modifier.width(14.dp))
+        Text(
+            text = label,
+            fontSize = 15.sp,
+            color = TextPrimary,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f)
+        )
+        if (value != null) {
+            Text(
+                text = value,
+                fontSize = 14.sp,
+                color = TextSecondary
             )
             Spacer(modifier = Modifier.width(8.dp))
         }
+        if (showChevron) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+                tint = TextSecondary.copy(alpha = 0.5f)
+            )
+        }
+    }
+}
+
+// ─── Settings Toggle Row ─────────────────────────────────────────────────────
+
+@Composable
+private fun SettingsToggleRow(
+    icon: ImageVector,
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(22.dp),
+            tint = PrimaryGreen
+        )
+        Spacer(modifier = Modifier.width(14.dp))
         Text(
             text = label,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 16.sp
+            fontSize = 15.sp,
+            color = TextPrimary,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f)
+        )
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = PrimaryGreen,
+                uncheckedThumbColor = Color.White,
+                uncheckedTrackColor = Green200
+            )
         )
     }
+}
+
+// ─── Settings Divider ────────────────────────────────────────────────────────
+
+@Composable
+private fun SettingsDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = 36.dp),
+        thickness = 0.5.dp,
+        color = Green100.copy(alpha = 0.6f)
+    )
 }

@@ -78,6 +78,8 @@ import com.example.ui.components.ShimmerBox
 import com.example.ui.theme.Green100
 import com.example.ui.theme.Green50
 import com.example.ui.theme.Green200
+import com.example.ui.theme.Neutral100
+import com.example.ui.theme.Neutral200
 import com.example.ui.theme.Green500
 import com.example.ui.theme.Green700
 import com.example.ui.theme.PrimaryGreen
@@ -232,24 +234,23 @@ private fun IntakeFormContent(
         // Header
         Box(
             modifier = Modifier
-                .size(64.dp)
-                .background(PrimaryGreen.copy(alpha = 0.1f), CircleShape),
+                .size(56.dp)
+                .background(PrimaryGreen.copy(alpha = 0.12f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Default.Search,
                 contentDescription = null,
                 tint = PrimaryGreen,
-                modifier = Modifier.size(32.dp)
+                modifier = Modifier.size(26.dp)
             )
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         Text(
             text = "Trouvez un docteur",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.headlineMedium,
             color = TextPrimary
         )
 
@@ -266,10 +267,11 @@ private fun IntakeFormContent(
 
         // Symptom text field
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, Neutral200, RoundedCornerShape(16.dp)),
             shape = RoundedCornerShape(16.dp),
-            color = Green50,
-            shadowElevation = 1.dp
+            color = Neutral100
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
@@ -298,7 +300,7 @@ private fun IntakeFormContent(
                         unfocusedContainerColor = Color.White,
                         focusedContainerColor = Color.White
                     ),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(14.dp)
                 )
             }
         }
@@ -315,12 +317,12 @@ private fun IntakeFormContent(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Category chips in a grid
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // Category chips in a 2-column grid
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             doctorCategories.chunked(2).forEach { row ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     row.forEach { category ->
                         val isSelected = selectedCategory?.key == category.key
@@ -328,15 +330,13 @@ private fun IntakeFormContent(
                             onClick = { onSelectCategory(category) },
                             modifier = Modifier
                                 .weight(1f)
-                                .then(
-                                    if (isSelected) Modifier.border(
-                                        2.dp,
-                                        category.color,
-                                        RoundedCornerShape(14.dp)
-                                    ) else Modifier
+                                .border(
+                                    1.dp,
+                                    if (isSelected) PrimaryGreen else Neutral200,
+                                    RoundedCornerShape(12.dp)
                                 ),
-                            shape = RoundedCornerShape(14.dp),
-                            color = if (isSelected) category.color.copy(alpha = 0.08f) else Green50.copy(alpha = 0.5f)
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) PrimaryGreen.copy(alpha = 0.06f) else Color.White
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
@@ -344,10 +344,10 @@ private fun IntakeFormContent(
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(32.dp)
+                                        .size(28.dp)
                                         .background(
-                                            if (isSelected) category.color else category.color.copy(alpha = 0.15f),
-                                            RoundedCornerShape(8.dp)
+                                            if (isSelected) PrimaryGreen else category.color.copy(alpha = 0.1f),
+                                            CircleShape
                                         ),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -355,7 +355,7 @@ private fun IntakeFormContent(
                                         imageVector = category.icon,
                                         contentDescription = null,
                                         tint = if (isSelected) Color.White else category.color,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(15.dp)
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(10.dp))
@@ -363,7 +363,7 @@ private fun IntakeFormContent(
                                     text = category.label,
                                     fontSize = 13.sp,
                                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                                    color = if (isSelected) category.color else TextPrimary,
+                                    color = if (isSelected) PrimaryGreen else TextPrimary,
                                     maxLines = 1
                                 )
                             }
@@ -402,51 +402,27 @@ private fun IntakeFormContent(
 
 @Composable
 private fun LoadingContent() {
-    val infiniteTransition = rememberInfiniteTransition(label = "loading")
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1f, targetValue = 1.08f,
-        animationSpec = infiniteRepeatable(tween(800), RepeatMode.Reverse),
-        label = "pulse"
-    )
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 80.dp),
+            .padding(vertical = 60.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(
-            modifier = Modifier
-                .size(90.dp)
-                .scale(pulseScale)
-                .background(PrimaryGreen.copy(alpha = 0.12f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Search,
-                contentDescription = null,
-                tint = PrimaryGreen,
-                modifier = Modifier.size(40.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(28.dp))
-
         Text(
             text = "Recherche de docteurs...",
-            fontSize = 16.sp,
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Medium,
             color = TextSecondary
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-        // Shimmer placeholders
-        repeat(2) {
+        // Clean shimmer placeholders
+        repeat(3) {
             ShimmerBox(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(100.dp)
+                    .height(96.dp)
                     .padding(vertical = 6.dp)
             )
         }
@@ -473,8 +449,7 @@ private fun DoctorsListContent(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                color = Green50,
-                shadowElevation = 1.dp
+                color = Neutral100
             ) {
                 Row(
                     modifier = Modifier.padding(16.dp),
