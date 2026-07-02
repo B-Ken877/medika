@@ -54,7 +54,7 @@ class PaymentActivity : AppCompatActivity() {
 
         findViewById<TextView>(R.id.doctorNameText).text = doctorName
         findViewById<TextView>(R.id.amountText).text = "${CONSULTATION_PRICE} HTG"
-        findViewById<Button>(R.id.btnBack).setOnClickListener { setResult(RESULT_CANCELED); finish() }
+        findViewById<android.widget.ImageButton>(R.id.btnBack).setOnClickListener { setResult(RESULT_CANCELED); finish() }
         findViewById<Button>(R.id.btnRetry).setOnClickListener { createPayment() }
 
         webView = findViewById(R.id.paymentWebView)
