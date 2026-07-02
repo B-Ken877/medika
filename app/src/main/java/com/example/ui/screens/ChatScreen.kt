@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -133,28 +135,55 @@ fun ChatScreen(
                 isOnline = wsConnected,
                 isTyping = isTyping,
                 onBack = onBack,
-                onVideoCall = { if (peerUserId != null) onNavigate("call_video") },
-                onVoiceCall = { if (peerUserId != null) onNavigate("call_voice") },
+                onVideoCall = {
+                    if (peerUserId != null) {
+                        viewModel.startCall(activeConsultation?.id ?: "", peerName, null, true)
+                    }
+                },
+                onVoiceCall = {
+                    if (peerUserId != null) {
+                        viewModel.startCall(activeConsultation?.id ?: "", peerName, null, false)
+                    }
+                },
             )
         },
         bottomBar = {
-            ChatInputBar(
-                messageText = messageText,
-                onMessageTextChanged = { messageText = it },
-                onSend = {
-                    if (messageText.isNotBlank()) {
-                        viewModel.sendChatMessage(
-                            text = messageText.trim(),
-                            senderId = currentUserId,
-                            senderName = currentUserName,
-                        )
-                        messageText = ""
-                    }
-                },
-                onAttach = { /* future: media picker */ },
-                onVoiceCall = { if (peerUserId != null) onNavigate("call_voice") },
-                onVideoCall = { if (peerUserId != null) onNavigate("call_video") },
-            )
+            Box(modifier = Modifier.imePadding()) {
+                ChatInputBar(
+                    messageText = messageText,
+                    onMessageTextChanged = { messageText = it },
+                    onSend = {
+                        if (messageText.isNotBlank()) {
+                            viewModel.sendChatMessage(
+                                text = messageText.trim(),
+                                senderId = currentUserId,
+                                senderName = currentUserName,
+                            )
+                            messageText = ""
+                        }
+                    },
+                    onVoiceCall = {
+                        if (peerUserId != null) {
+                            viewModel.startCall(
+                                consultationId = activeConsultation?.id ?: "",
+                                peerName = peerName,
+                                peerAvatar = null,
+                                isVideo = false
+                            )
+                        }
+                    },
+                    onVideoCall = {
+                        if (peerUserId != null) {
+                            viewModel.startCall(
+                                consultationId = activeConsultation?.id ?: "",
+                                peerName = peerName,
+                                peerAvatar = null,
+                                isVideo = true
+                            )
+                        }
+                    },
+                )
+            }
         },
     ) { innerPadding ->
         Box(
@@ -504,7 +533,6 @@ private fun ChatInputBar(
     messageText: String,
     onMessageTextChanged: (String) -> Unit,
     onSend: () -> Unit,
-    onAttach: () -> Unit,
     onVoiceCall: () -> Unit,
     onVideoCall: () -> Unit,
 ) {
@@ -521,17 +549,17 @@ private fun ChatInputBar(
                 .padding(horizontal = 6.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Attachment button
-            IconButton(onClick = onAttach, modifier = Modifier.size(42.dp)) {
-                Icon(
-                    imageVector = Icons.Default.AttachFile,
-                    contentDescription = "Joindre un fichier",
-                    tint = Neutral400,
-                    modifier = Modifier.size(22.dp),
-                )
+            // Mic button (shows when text is empty, else hidden)
+            if (messageText.isBlank()) {
+                IconButton(onClick = onVoiceCall, modifier = Modifier.size(42.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Mic,
+                        contentDescription = "Appel vocal",
+                        tint = PrimaryGreen,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
             }
-
-            Spacer(modifier = Modifier.width(2.dp))
 
             // Text field
             OutlinedTextField(
@@ -560,31 +588,9 @@ private fun ChatInputBar(
                 maxLines = 5,
             )
 
-            Spacer(modifier = Modifier.width(2.dp))
-
-            // Voice call
-            IconButton(onClick = onVoiceCall, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    imageVector = Icons.Default.Call,
-                    contentDescription = "Appel vocal",
-                    tint = Neutral400,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-
-            // Video call
-            IconButton(onClick = onVideoCall, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    imageVector = Icons.Default.Videocam,
-                    contentDescription = "Appel vidéo",
-                    tint = Neutral400,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-
-            // Send button — green circle, white arrow, only when text present
+            // Send button (when text present) or video call (when empty)
             if (messageText.isNotBlank()) {
-                Spacer(modifier = Modifier.width(2.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 Surface(
                     onClick = onSend,
                     shape = CircleShape,
@@ -599,6 +605,15 @@ private fun ChatInputBar(
                             modifier = Modifier.size(20.dp),
                         )
                     }
+                }
+            } else {
+                IconButton(onClick = onVideoCall, modifier = Modifier.size(42.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Videocam,
+                        contentDescription = "Appel vidéo",
+                        tint = Neutral400,
+                        modifier = Modifier.size(22.dp),
+                    )
                 }
             }
         }

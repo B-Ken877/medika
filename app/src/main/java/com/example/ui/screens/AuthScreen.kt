@@ -207,7 +207,7 @@ fun AuthScreen(
 
             // ── Logo ─────────────────────────────────────────────────
             Image(
-                painter = painterResource(R.drawable.medika_logo),
+                painter = painterResource(R.drawable.medika_logo_header),
                 contentDescription = "Medika",
                 modifier = Modifier.size(100.dp),
                 contentScale = ContentScale.Fit

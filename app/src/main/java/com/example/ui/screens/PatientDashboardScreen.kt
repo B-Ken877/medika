@@ -315,9 +315,9 @@ private fun GradientHeaderBar(
             // ── Left: Logo + Greeting ──
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    painter = painterResource(R.drawable.medika_logo_sm),
+                    painter = painterResource(R.drawable.medika_logo_header),
                     contentDescription = "Medika",
-                    modifier = Modifier.size(32.dp),
+                    modifier = Modifier.size(64.dp),
                     tint = Color.Unspecified,
                 )
                 Spacer(modifier = Modifier.width(14.dp))

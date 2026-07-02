@@ -20,6 +20,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -119,6 +121,22 @@ fun SanteApp(
             val perms = mutableListOf(Manifest.permission.RECORD_AUDIO)
             if (viewModel.pendingCallNeedsVideo) perms.add(Manifest.permission.CAMERA)
             permissionLauncher.launch(perms.toTypedArray())
+        }
+    }
+
+
+    // Request permissions on first login
+    val hasRequestedStartupPerms = remember { mutableStateOf(false) }
+    LaunchedEffect(authState) {
+        if (authState !is AuthState.Unauthenticated && !hasRequestedStartupPerms.value) {
+            hasRequestedStartupPerms.value = true
+            permissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.RECORD_AUDIO,
+                    Manifest.permission.CAMERA,
+                    Manifest.permission.READ_MEDIA_IMAGES,
+                )
+            )
         }
     }
 
@@ -311,7 +329,7 @@ private fun BottomNavBar(
                     NavBarItem(
                         icon = Icons.Default.Home,
                         label = "Accueil",
-                        selected = selectedRoute == "home" || selectedRoute == "intake",
+                        selected = selectedRoute == "home",
                         onClick = { onSelect("home") }
                     )
                 }
@@ -323,7 +341,7 @@ private fun BottomNavBar(
                 ) {
                     NavBarItem(
                         icon = Icons.AutoMirrored.Filled.Chat,
-                        label = "Consultations",
+                        label = "Messages",
                         selected = selectedRoute == "chat",
                         enabled = activeConsultationId != null,
                         onClick = { if (activeConsultationId != null) onSelect("chat") }
@@ -332,6 +350,19 @@ private fun BottomNavBar(
 
                 // Center spacer for the raised + button
                 Box(modifier = Modifier.weight(1f))
+
+                // Notifications
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    NavBarItem(
+                        icon = Icons.Default.Settings,
+                        label = "Alertes",
+                        selected = selectedRoute == "notifications",
+                        onClick = { onSelect("notifications") }
+                    )
+                }
 
                 // Profil
                 Box(
