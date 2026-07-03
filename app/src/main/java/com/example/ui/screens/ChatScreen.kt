@@ -1,5 +1,11 @@
 package com.example.ui.screens
 
+import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -28,10 +34,12 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -53,6 +61,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -68,17 +77,14 @@ import com.example.ui.theme.Neutral400
 import com.example.ui.theme.Neutral800
 import com.example.ui.theme.PrimaryGreen
 import com.example.ui.theme.PrimaryGreenLight
+import com.example.ui.theme.SanteDanger
+import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.TextTertiary
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-
-// ═══════════════════════════════════════════════════════════════════════
-// ChatScreen — Professional medical chat interface
-// WhatsApp / iMessage quality · PrimaryGreen medical branding
-// ═══════════════════════════════════════════════════════════════════════
 
 private val ChatBackground = Color(0xFFF0F2F5)
 
@@ -94,34 +100,69 @@ fun ChatScreen(
     val activeConsultation by viewModel.activeConsultation.collectAsStateWithLifecycle()
     val isTyping by viewModel.isTyping.collectAsStateWithLifecycle()
     val wsConnected by viewModel.wsConnected.collectAsStateWithLifecycle()
+    val isRecording by viewModel.isRecording.collectAsStateWithLifecycle()
+    val recordingDuration by viewModel.recordingDuration.collectAsStateWithLifecycle()
+    val uploadError by viewModel.uploadError.collectAsStateWithLifecycle()
 
     var messageText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    val context = LocalContext.current
 
-    // ── Current user identity ──
+    // Show upload errors as toasts
+    LaunchedEffect(uploadError) {
+        if (uploadError != null) {
+            Toast.makeText(context, uploadError, Toast.LENGTH_LONG).show()
+            viewModel.consumeUploadError()
+        }
+    }
+
+    // Current user identity
     val (currentUserId, currentUserName) = when (val auth = authState) {
         is AuthState.PatientAuthenticated -> auth.serverUser.id to auth.profile.name
         is AuthState.DoctorAuthenticated -> auth.serverUser.id to auth.doctor.name
         else -> "" to ""
     }
 
-    // ── Peer display name ──
+    // Peer display name
     val peerName = when (authState) {
         is AuthState.PatientAuthenticated ->
-            activeConsultation?.let { "Dr. ${it.patientName}" } ?: "Médecin"
+            activeConsultation?.patientName?.let { if (it.isNotBlank()) it else null }
+                ?.let { "Dr. $it" } ?: "M\u00e9decin"
         is AuthState.DoctorAuthenticated ->
             activeConsultation?.patientName ?: "Patient"
         else -> "Consultation"
     }
 
-    // ── Peer user ID for call routing ──
+    // Peer user ID for call routing
     val peerUserId = when (authState) {
         is AuthState.PatientAuthenticated -> activeConsultation?.doctorId
         is AuthState.DoctorAuthenticated -> activeConsultation?.patientId
         else -> null
     }
 
-    // ── Auto-scroll to bottom on new messages ──
+
+    // Media picker launcher
+    val mediaLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.sendMediaMessage(context, uri, currentUserId, currentUserName, "image/*")
+        }
+    }
+
+    // Storage permission for media
+    val storagePermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            mediaLauncher.launch("image/*")
+        } else {
+            Toast.makeText(context, "Permission de stockage requise", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+
+    // Auto-scroll to bottom on new messages
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(index = messages.size)
@@ -138,11 +179,15 @@ fun ChatScreen(
                 onVideoCall = {
                     if (peerUserId != null) {
                         viewModel.startCall(activeConsultation?.id ?: "", peerName, null, true)
+                    } else {
+                        Toast.makeText(context, "Destinataire inconnu", Toast.LENGTH_SHORT).show()
                     }
                 },
                 onVoiceCall = {
                     if (peerUserId != null) {
                         viewModel.startCall(activeConsultation?.id ?: "", peerName, null, false)
+                    } else {
+                        Toast.makeText(context, "Destinataire inconnu", Toast.LENGTH_SHORT).show()
                     }
                 },
             )
@@ -162,24 +207,18 @@ fun ChatScreen(
                             messageText = ""
                         }
                     },
-                    onVoiceCall = {
-                        if (peerUserId != null) {
-                            viewModel.startCall(
-                                consultationId = activeConsultation?.id ?: "",
-                                peerName = peerName,
-                                peerAvatar = null,
-                                isVideo = false
-                            )
-                        }
-                    },
-                    onVideoCall = {
-                        if (peerUserId != null) {
-                            viewModel.startCall(
-                                consultationId = activeConsultation?.id ?: "",
-                                peerName = peerName,
-                                peerAvatar = null,
-                                isVideo = true
-                            )
+                    isRecording = isRecording,
+                    recordingDuration = recordingDuration,
+                    onStartRecording = { viewModel.requestMicAndStartRecording(currentUserId, currentUserName) },
+                    onStopRecording = { viewModel.stopAndSendVoiceRecording(currentUserId, currentUserName) },
+                    onAttachMedia = {
+                        // Request storage permission then launch picker
+                        val hasPerm = context.checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) ==
+                            android.content.pm.PackageManager.PERMISSION_GRANTED
+                        if (hasPerm) {
+                            mediaLauncher.launch("image/*")
+                        } else {
+                            storagePermLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES)
                         }
                     },
                 )
@@ -192,7 +231,7 @@ fun ChatScreen(
                 .background(ChatBackground)
                 .padding(innerPadding),
         ) {
-            if (messages.isEmpty()) {
+            if (messages.isEmpty() && !isRecording) {
                 EmptyChatPlaceholder()
             } else {
                 MessageList(
@@ -202,12 +241,12 @@ fun ChatScreen(
                 )
             }
 
-            // Typing indicator — bottom-left overlay
+            // Typing indicator above the input bar
             if (isTyping) {
                 TypingIndicator(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(start = 12.dp, bottom = 8.dp),
+                        .padding(start = 12.dp, bottom = 72.dp),
                 )
             }
         }
@@ -215,7 +254,7 @@ fun ChatScreen(
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Top App Bar — Green with status, back arrow, call buttons
+// Top App Bar
 // ═══════════════════════════════════════════════════════════════════════
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -259,7 +298,7 @@ private fun ChatTopBar(
                     )
                     Text(
                         text = when {
-                            isTyping -> "écrit..."
+                            isTyping -> "\u00e9crit..."
                             isOnline -> "En ligne"
                             else -> "Hors ligne"
                         },
@@ -294,7 +333,7 @@ private fun ChatTopBar(
             IconButton(onClick = onVideoCall) {
                 Icon(
                     imageVector = Icons.Default.Videocam,
-                    contentDescription = "Appel vidéo",
+                    contentDescription = "Appel vid\u00e9o",
                     tint = Color.White,
                 )
             }
@@ -303,7 +342,7 @@ private fun ChatTopBar(
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Message List — Date separators + sender-name grouping + MessageBubble
+// Message List
 // ═══════════════════════════════════════════════════════════════════════
 
 @Composable
@@ -353,8 +392,6 @@ private fun MessageList(
     }
 }
 
-// ── Display model for flat list ──
-
 private sealed class DisplayItem {
     abstract val key: String
     data class DateSeparator(val label: String, override val key: String) : DisplayItem()
@@ -383,14 +420,12 @@ private fun buildDisplayItems(
 
     for (msg in messages) {
         val isOwn = msg.senderId == currentUserId
-
-        // Date boundary check
         msgCal.timeInMillis = msg.timestamp
         val dayYear = msgCal.get(Calendar.DAY_OF_YEAR) to msgCal.get(Calendar.YEAR)
 
         if (dayYear != lastDayYear) {
             val label = when (dayYear) {
-                todayPair -> "Aujourd'hui"
+                todayPair -> "Aujourd\u2019hui"
                 yesterdayPair -> "Hier"
                 else -> SimpleDateFormat("dd MMMM yyyy", Locale.FRENCH).format(Date(msg.timestamp))
             }
@@ -416,7 +451,7 @@ private fun buildDisplayItems(
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Date Separator — Centered rounded pill
+// Date Separator
 // ═══════════════════════════════════════════════════════════════════════
 
 @Composable
@@ -443,7 +478,7 @@ private fun DateSeparator(label: String) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Typing Indicator — Three bouncing dots in gray
+// Typing Indicator
 // ═══════════════════════════════════════════════════════════════════════
 
 @Composable
@@ -501,7 +536,7 @@ private fun EmptyChatPlaceholder() {
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        imageVector = Icons.Default.Call,
+                        imageVector = Icons.AutoMirrored.Filled.Chat,
                         contentDescription = null,
                         tint = PrimaryGreen.copy(alpha = 0.5f),
                         modifier = Modifier.size(28.dp),
@@ -515,7 +550,7 @@ private fun EmptyChatPlaceholder() {
                 color = TextSecondary,
             )
             Text(
-                text = "Envoyez un message pour débuter votre consultation",
+                text = "Envoyez un message pour d\u00e9buter votre consultation",
                 fontSize = 13.sp,
                 color = TextTertiary,
                 modifier = Modifier.padding(horizontal = 48.dp),
@@ -525,7 +560,7 @@ private fun EmptyChatPlaceholder() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Chat Input Bar — Sticky bottom, professional layout
+// Chat Input Bar — NO duplicate call buttons. Has voice recording + media attachment.
 // ═══════════════════════════════════════════════════════════════════════
 
 @Composable
@@ -533,8 +568,11 @@ private fun ChatInputBar(
     messageText: String,
     onMessageTextChanged: (String) -> Unit,
     onSend: () -> Unit,
-    onVoiceCall: () -> Unit,
-    onVideoCall: () -> Unit,
+    isRecording: Boolean,
+    recordingDuration: Int,
+    onStartRecording: () -> Unit,
+    onStopRecording: () -> Unit,
+    onAttachMedia: () -> Unit,
 ) {
     Surface(
         color = Color.White,
@@ -543,77 +581,119 @@ private fun ChatInputBar(
             .fillMaxWidth()
             .border(1.dp, Neutral200),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 6.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Mic button (shows when text is empty, else hidden)
-            if (messageText.isBlank()) {
-                IconButton(onClick = onVoiceCall, modifier = Modifier.size(42.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.Mic,
-                        contentDescription = "Appel vocal",
-                        tint = PrimaryGreen,
-                        modifier = Modifier.size(24.dp),
-                    )
-                }
-            }
-
-            // Text field
-            OutlinedTextField(
-                value = messageText,
-                onValueChange = onMessageTextChanged,
-                placeholder = {
-                    Text(
-                        "Écrire un message...",
-                        fontSize = 15.sp,
-                        color = Neutral400,
-                    )
-                },
+        if (isRecording) {
+            // Recording mode UI
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 44.dp, max = 120.dp),
-                shape = RoundedCornerShape(22.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color.Transparent,
-                    unfocusedBorderColor = Color.Transparent,
-                    cursorColor = PrimaryGreen,
-                    unfocusedContainerColor = Neutral100,
-                    focusedContainerColor = Neutral100,
-                ),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
-                keyboardActions = KeyboardActions(onSend = { onSend() }),
-                maxLines = 5,
-            )
-
-            // Send button (when text present) or video call (when empty)
-            if (messageText.isNotBlank()) {
-                Spacer(modifier = Modifier.width(4.dp))
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Red pulsing indicator
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(SanteDanger),
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = String.format("%02d:%02d", recordingDuration / 60, recordingDuration % 60),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = TextPrimary,
+                    modifier = Modifier.weight(1f)
+                )
+                // Stop recording button
                 Surface(
-                    onClick = onSend,
+                    onClick = onStopRecording,
                     shape = CircleShape,
-                    color = PrimaryGreen,
+                    color = SanteDanger,
                     modifier = Modifier.size(42.dp),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Envoyer",
+                            imageVector = Icons.Default.Stop,
+                            contentDescription = "Arr\u00eater",
                             tint = Color.White,
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier.size(22.dp),
                         )
                     }
                 }
-            } else {
-                IconButton(onClick = onVideoCall, modifier = Modifier.size(42.dp)) {
+            }
+        } else {
+            // Normal input mode
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 6.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Attachment button
+                IconButton(onClick = onAttachMedia, modifier = Modifier.size(42.dp)) {
                     Icon(
-                        imageVector = Icons.Default.Videocam,
-                        contentDescription = "Appel vidéo",
+                        imageVector = Icons.Default.AttachFile,
+                        contentDescription = "Joindre un m\u00e9dia",
                         tint = Neutral400,
-                        modifier = Modifier.size(22.dp),
+                        modifier = Modifier.size(24.dp),
                     )
+                }
+
+                // Text field
+                OutlinedTextField(
+                    value = messageText,
+                    onValueChange = onMessageTextChanged,
+                    placeholder = {
+                        Text(
+                            "\u00c9crire un message...",
+                            fontSize = 15.sp,
+                            color = Neutral400,
+                        )
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 44.dp, max = 120.dp),
+                    shape = RoundedCornerShape(22.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent,
+                        cursorColor = PrimaryGreen,
+                        unfocusedContainerColor = Neutral100,
+                        focusedContainerColor = Neutral100,
+                    ),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { onSend() }),
+                    maxLines = 5,
+                )
+
+                // Send button (when text present) or Mic/voice recording (when empty)
+                if (messageText.isNotBlank()) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Surface(
+                        onClick = onSend,
+                        shape = CircleShape,
+                        color = PrimaryGreen,
+                        modifier = Modifier.size(42.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "Envoyer",
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                } else {
+                    // Mic button for voice recording
+                    IconButton(onClick = onStartRecording, modifier = Modifier.size(42.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.Mic,
+                            contentDescription = "Enregistrer un message vocal",
+                            tint = PrimaryGreen,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
                 }
             }
         }

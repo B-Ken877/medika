@@ -37,6 +37,7 @@ class CallActivity : AppCompatActivity() {
     private var engine: RtcEngine? = null
     private var isVideo = false
     private var isMuted = false
+    private var isCameraOn = true
     private var isSpeakerOn = false
     private var callStartTime = 0L
     private val handler = Handler(Looper.getMainLooper())
@@ -131,7 +132,11 @@ class CallActivity : AppCompatActivity() {
 
         btnMute.setOnClickListener { isMuted = !isMuted; engine?.muteLocalAudioStream(isMuted); btnMute.alpha = if (isMuted) 0.4f else 1.0f }
         btnSpeaker.setOnClickListener { isSpeakerOn = !isSpeakerOn; engine?.setEnableSpeakerphone(isSpeakerOn); btnSpeaker.alpha = if (isSpeakerOn) 1.0f else 0.4f }
-        btnCamera.setOnClickListener { engine?.muteLocalVideoStream(isVideo); btnCamera.alpha = 0.4f }
+        btnCamera.setOnClickListener {
+                isCameraOn = !isCameraOn
+                engine?.muteLocalVideoStream(!isCameraOn)
+                btnCamera.alpha = if (isCameraOn) 1.0f else 0.4f
+            }
         btnHangup.setOnClickListener { stopTimer(); finish() }
 
         val uid = userId.hashCode().toLong() and 0xFFFFFFFFL

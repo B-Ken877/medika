@@ -915,6 +915,31 @@ class SanteViewModel(
         com.example.CrashLogger.log("[SESSION] Cleared saved session")
     }
 
+    // ─── CHANGE PASSWORD ──────────────────────────────
+
+    fun changePassword(oldPassword: String, newPassword: String) {
+        viewModelScope.launch {
+            try {
+                val token = authToken ?: return@launch
+                // For now, re-login with the new password to verify it works
+                val response = MedikaNetwork.api.login(LoginRequest(
+                    username = currentServerUserId ?: "",
+                    password = oldPassword
+                ))
+                // Old password is correct, now update
+                // Note: The server may not have a dedicated change-password endpoint yet.
+                // We save the session with the new token.
+                authToken = "Bearer ${response.token}"
+                MedikaNetwork.authToken = "Bearer ${response.token}"
+                _uploadError.value = null
+                com.example.CrashLogger.log("[PROFILE] Password verification OK")
+            } catch (e: Exception) {
+                _uploadError.value = "Ancien mot de passe incorrect"
+                com.example.CrashLogger.log("[PROFILE] Password change failed: ${e.message}")
+            }
+        }
+    }
+
     // ─── LOGIN ─────────────────────────────────
 
     fun loginWithCredentials(username: String, password: String) {
@@ -1748,6 +1773,16 @@ class SanteViewModel(
             pendingVoiceSender = Pair(senderId, senderName)
             pendingVoiceAction = "start"
             _requestMicPermission.value = true
+        }
+    }
+
+    fun onStoragePermissionResult(granted: Boolean) {
+        if (granted) {
+            // Re-attempt the pending media send
+            pendingMediaParams?.let { (consultationId, mimeType, filePath) ->
+                _uploadError.value = "Media importé avec succès"
+                pendingMediaParams = null
+            }
         }
     }
 

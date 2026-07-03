@@ -133,13 +133,6 @@ fun AuthScreen(
         label = "orb-alpha"
     )
 
-    // ── Auth navigation side-effect ──────────────────────────────────
-    LaunchedEffect(authState) {
-        if (authState is AuthState.PatientAuthenticated || authState is AuthState.DoctorAuthenticated) {
-            // Navigation handled by parent composable observing authState
-        }
-    }
-
     // ── Main container ───────────────────────────────────────────────
     Box(
         modifier = Modifier
@@ -286,7 +279,7 @@ fun AuthScreen(
                     // ── Username field ────────────────────────────────
                     OutlinedTextField(
                         value = username,
-                        onValueChange = { username = it },
+                        onValueChange = { username = it; viewModel.clearLoginError() },
                         placeholder = {
                             Text(
                                 "Nom d\u2019utilisateur ou email",

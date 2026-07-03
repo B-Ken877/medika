@@ -145,7 +145,7 @@ fun DoctorDashboardScreen(
                     isOnline = newStatus
                     doctor?.let { viewModel.toggleDoctorAvailability(it.id, newStatus) }
                 },
-                onNotificationClick = { /* TODO: open notifications */ }
+                onNotificationClick = { onNavigate("notifications") }
             )
         }
 

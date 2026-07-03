@@ -2,7 +2,6 @@ package com.example.ui
 
 import android.app.Activity
 import android.Manifest
-import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -14,13 +13,11 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.automirrored.filled.Chat
@@ -104,11 +101,16 @@ fun SanteApp(
         }
     }
 
-    // ─── Call Permission Handling ────────────────────────────
+    // ─── Permission Handling ────────────────────────────
+    val isPermissionRequestInProgress = remember { mutableStateOf(false) }
     val requestCallPerms by viewModel.requestCallPermissions.collectAsStateWithLifecycle()
+    val requestMicPerm by viewModel.requestMicPermission.collectAsStateWithLifecycle()
+    val requestStoragePerm by viewModel.requestStoragePermission.collectAsStateWithLifecycle()
+
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { perms ->
+        isPermissionRequestInProgress.value = false
         val granted = perms.values.all { it }
         if (viewModel.pendingIncomingCall != null) {
             viewModel.onIncomingCallPermissionsResult(granted)
@@ -118,19 +120,46 @@ fun SanteApp(
     }
 
     LaunchedEffect(requestCallPerms) {
-        if (requestCallPerms) {
+        if (requestCallPerms && !isPermissionRequestInProgress.value) {
+            isPermissionRequestInProgress.value = true
             val perms = mutableListOf(Manifest.permission.RECORD_AUDIO)
             if (viewModel.pendingCallNeedsVideo) perms.add(Manifest.permission.CAMERA)
             permissionLauncher.launch(perms.toTypedArray())
         }
     }
 
+    // Mic permission for voice recording
+    val micPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        viewModel.onMicPermissionResult(granted)
+    }
+
+    LaunchedEffect(requestMicPerm) {
+        if (requestMicPerm) {
+            micPermLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    // Storage permission for media
+    val storagePermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        viewModel.onStoragePermissionResult(granted)
+    }
+
+    LaunchedEffect(requestStoragePerm) {
+        if (requestStoragePerm) {
+            storagePermLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES)
+        }
+    }
 
     // Request permissions on first login
     val hasRequestedStartupPerms = remember { mutableStateOf(false) }
     LaunchedEffect(authState) {
-        if (authState !is AuthState.Unauthenticated && !hasRequestedStartupPerms.value) {
+        if (authState !is AuthState.Unauthenticated && !hasRequestedStartupPerms.value && !isPermissionRequestInProgress.value) {
             hasRequestedStartupPerms.value = true
+            isPermissionRequestInProgress.value = true
             permissionLauncher.launch(
                 arrayOf(
                     Manifest.permission.RECORD_AUDIO,
@@ -149,8 +178,8 @@ fun SanteApp(
                 val target = screenBackMap[currentScreen]
                 if (target != null) {
                     currentScreen = target
-                } else if (currentScreen == "home") {
-                    // On home screen, let system handle (exit app)
+                } else {
+                    // On home, auth, loading screens — let system handle (exit app)
                     isEnabled = false
                     backDispatcher?.onBackPressedDispatcher?.onBackPressed()
                     isEnabled = true
@@ -287,6 +316,12 @@ fun SanteApp(
                 )
 
                 "notifications" -> NotificationsScreen(
+                    viewModel = viewModel,
+                    onNavigate = { route ->
+                        when (route) {
+                            "chat" -> currentScreen = "chat"
+                        }
+                    },
                     onBack = { currentScreen = "home" }
                 )
             }

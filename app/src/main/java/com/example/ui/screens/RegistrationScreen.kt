@@ -348,7 +348,7 @@ fun RegistrationScreen(
                                 GenderChip(
                                     label = "Homme",
                                     isSelected = selectedGender == "Homme",
-                                    onSelect = { selectedGender = "Homme" }
+                                    onSelect = { selectedGender = "Homme"; localError = null; viewModel.clearRegisterError() }
                                 )
 
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -357,7 +357,7 @@ fun RegistrationScreen(
                                 GenderChip(
                                     label = "Femme",
                                     isSelected = selectedGender == "Femme",
-                                    onSelect = { selectedGender = "Femme" }
+                                    onSelect = { selectedGender = "Femme"; localError = null; viewModel.clearRegisterError() }
                                 )
                             }
                         }
@@ -404,9 +404,10 @@ fun RegistrationScreen(
                     OutlinedTextField(
                         value = confirmPassword,
                         onValueChange = {
-                            confirmPassword = it
-                            localError = null
-                        },
+                        confirmPassword = it
+                        localError = null
+                        viewModel.clearRegisterError()
+                    },
                         placeholder = { FieldPlaceholder("Confirmer le mot de passe") },
                         singleLine = true,
                         modifier = Modifier
@@ -502,7 +503,8 @@ fun RegistrationScreen(
                             && email.isNotBlank()
                             && password.isNotBlank()
                             && confirmPassword.isNotBlank()
-                            && selectedGender.isNotBlank(),
+                            && selectedGender.isNotBlank()
+      && ageText.isNotBlank(),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = PrimaryGreen,

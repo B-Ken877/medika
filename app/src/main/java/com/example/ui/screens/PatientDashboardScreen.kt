@@ -212,7 +212,7 @@ fun PatientDashboardScreen(
                             color = TextPrimary,
                         ),
                     )
-                    TextButton(onClick = { /* navigate to full list */ }) {
+                    TextButton(onClick = { onNavigate("notifications") }) {
                         Text(
                             text = "Voir tout",
                             color = PrimaryGreen,
