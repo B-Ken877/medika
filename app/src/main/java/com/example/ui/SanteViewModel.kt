@@ -30,6 +30,7 @@ import java.net.URL
 import android.content.Intent
 import kotlin.concurrent.thread
 import android.content.SharedPreferences
+import java.security.MessageDigest
 
 // ─── Auth States ─────────────────────────────────────────────
 
@@ -82,6 +83,17 @@ class SanteViewModel(
     private var authToken: String? = null
     private var currentServerUserId: String? = null
     private var currentUserName: String? = null
+
+
+    // ─── PIN State ─────────────────────────────────
+    private val _needsPinSetup = MutableStateFlow(false)
+    val needsPinSetup: StateFlow<Boolean> = _needsPinSetup.asStateFlow()
+
+    private val _needsPinVerify = MutableStateFlow(false)
+    val needsPinVerify: StateFlow<Boolean> = _needsPinVerify.asStateFlow()
+
+    private val _pinVerifyError = MutableStateFlow<String?>(null)
+    val pinVerifyError: StateFlow<String?> = _pinVerifyError.asStateFlow()
 
     // ─── Session Persistence (SharedPreferences) ──────────
     private val prefs: SharedPreferences by lazy {
@@ -251,6 +263,16 @@ class SanteViewModel(
 
     // ─── WebSocket Callbacks ─────────────────────────────
     init {
+    // Start in loading state to allow session restore
+    _authState.value = AuthState.Loading
+    viewModelScope.launch {
+        if (restoreSession()) {
+            if (isPinSet()) {
+                _needsPinVerify.value = true
+            }
+        }
+    }
+
         MedikaNetwork.onMessageReceived = { msg ->
             val msgId = msg.id
             val isDuplicate = processedMessageIds.putIfAbsent(msgId, true) != null
@@ -915,6 +937,59 @@ class SanteViewModel(
         com.example.CrashLogger.log("[SESSION] Cleared saved session")
     }
 
+
+    // ─── PIN Methods ─────────────────────────────────
+
+    /** Check if a PIN has been set in SharedPreferences. */
+    fun isPinSet(): Boolean {
+        return prefs.getString("pin_hash", null) != null
+    }
+
+    /** Hash a 4-digit PIN using SHA-256 with a static salt. */
+    private fun hashPin(pin: String): String {
+        val salted = "medika_pin_" + pin + "_secure_salt_2024"
+        val digest = MessageDigest.getInstance("SHA-256").digest(salted.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    /** Save a new PIN (hashed). Called from PinSetupScreen. */
+    fun setPin(pin: String) {
+        val hash = hashPin(pin)
+        prefs.edit().putString("pin_hash", hash).apply()
+        _needsPinSetup.value = false
+        com.example.CrashLogger.log("[PIN] PIN configured successfully")
+    }
+
+    /** Verify a PIN against the stored hash. Returns true if correct. */
+    fun verifyPin(pin: String): Boolean {
+        val storedHash = prefs.getString("pin_hash", null)
+        if (storedHash == null) {
+            _needsPinVerify.value = false
+            return true
+        }
+        val inputHash = hashPin(pin)
+        if (inputHash == storedHash) {
+            _needsPinVerify.value = false
+            com.example.CrashLogger.log("[PIN] PIN verified successfully")
+            return true
+        } else {
+            _pinVerifyError.value = "incorrect"
+            com.example.CrashLogger.log("[PIN] PIN verification failed")
+            return false
+        }
+    }
+
+    /** Consume the PIN error (called by UI after displaying it). */
+    fun consumePinError() {
+        _pinVerifyError.value = null
+    }
+
+    /** Called when user skips PIN setup. */
+    fun skipPinSetup() {
+        _needsPinSetup.value = false
+        com.example.CrashLogger.log("[PIN] User skipped PIN setup")
+    }
+
     // ─── CHANGE PASSWORD ──────────────────────────────
 
     fun changePassword(oldPassword: String, newPassword: String) {
@@ -998,6 +1073,10 @@ class SanteViewModel(
                 }
                 handleAuthResponse(response)
                 saveSession(response.token, response.user)
+                // Check if user needs to set up PIN
+                if (!isPinSet()) {
+                    _needsPinSetup.value = true
+                }
             } catch (e: Exception) {
                 _authState.value = AuthState.Unauthenticated
                 _loginError.value = "Nom d'utilisateur ou mot de passe incorrect"
@@ -1061,6 +1140,10 @@ class SanteViewModel(
                 }
                 handleAuthResponse(response)
                 saveSession(response.token, response.user)
+                // Check if user needs to set up PIN
+                if (!isPinSet()) {
+                    _needsPinSetup.value = true
+                }
             } catch (e: Exception) {
                 _authState.value = AuthState.Unauthenticated
                 _registerError.value = "Erreur d'inscription: ${e.localizedMessage}"
@@ -1124,6 +1207,9 @@ class SanteViewModel(
         currentUserName = null
         _activeConsultationId.value = null
         _authState.value = AuthState.Unauthenticated
+        _needsPinSetup.value = false
+        _needsPinVerify.value = false
+        _pinVerifyError.value = null
         resetIntake()
         processedMessageIds.clear()
         syncPollingJob?.cancel()

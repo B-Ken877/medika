@@ -55,6 +55,8 @@ import com.example.ui.screens.ChatScreen
 import com.example.ui.screens.DoctorDashboardScreen
 import com.example.ui.screens.NotificationsScreen
 import com.example.ui.screens.PatientDashboardScreen
+import com.example.ui.screens.PinSetupScreen
+import com.example.ui.screens.PinVerifyScreen
 import com.example.ui.screens.ProfileScreen
 import com.example.ui.screens.RegistrationScreen
 import com.example.ui.screens.SymptomIntakeScreen
@@ -64,11 +66,13 @@ private val PrimaryGreenDark = Color(0xFF0D7A35)
 private val Neutral200 = Color(0xFFE5E7EB)
 private val NavGray = Color(0xFF9E9E9E)
 
-private val screenOrder = listOf("loading", "auth", "register", "home", "intake", "chat", "profile", "notifications")
+private val screenOrder = listOf("loading", "auth", "register", "pin_setup", "pin_verify", "home", "intake", "chat", "profile", "notifications")
 
 // Navigation history for back button support
 private val screenBackMap = mapOf(
     "register" to "auth",
+    "pin_setup" to "auth",
+    "pin_verify" to "auth",
     "intake" to "home",
     "chat" to "home",
     "profile" to "home",
@@ -86,7 +90,13 @@ fun SanteApp(
     val activeConsultationId by viewModel.activeConsultationId.collectAsStateWithLifecycle()
     val wsConnected by viewModel.wsConnected.collectAsStateWithLifecycle()
 
-    var currentScreen by remember { mutableStateOf(if (authState is AuthState.Loading) "loading" else "auth") }
+    // ─── PIN State Observation ────────────────────────────
+    val needsPinSetup by viewModel.needsPinSetup.collectAsStateWithLifecycle()
+    val needsPinVerify by viewModel.needsPinVerify.collectAsStateWithLifecycle()
+    val pinVerifyError by viewModel.pinVerifyError.collectAsStateWithLifecycle()
+
+
+    var currentScreen by remember { mutableStateOf("loading") }
 
     // ─── System Bars Styling ────────────────────────────
     val view = LocalView.current
@@ -208,16 +218,38 @@ fun SanteApp(
             is AuthState.PatientAuthenticated,
             is AuthState.DoctorAuthenticated,
             is AuthState.AdminAuthenticated -> {
-                if (currentScreen == "auth" || currentScreen == "register" || currentScreen == "loading") currentScreen = "home"
+                if (currentScreen == "auth" || currentScreen == "register" || currentScreen == "loading") {
+                    if (needsPinSetup) {
+                        currentScreen = "pin_setup"
+                    } else if (needsPinVerify) {
+                        currentScreen = "pin_verify"
+                    } else {
+                        currentScreen = "home"
+                    }
+                }
             }
             else -> {}
+        }
+    }
+
+    // React to PIN setup dismissal -> go to home
+    LaunchedEffect(needsPinSetup) {
+        if (!needsPinSetup && currentScreen == "pin_setup" && authState !is AuthState.Unauthenticated) {
+            currentScreen = "home"
+        }
+    }
+
+    // React to PIN verification -> go to home
+    LaunchedEffect(needsPinVerify) {
+        if (!needsPinVerify && currentScreen == "pin_verify") {
+            currentScreen = "home"
         }
     }
 
     // Determine if bottom nav should be visible
     val showBottomNav = authState !is AuthState.Unauthenticated &&
             authState !is AuthState.Loading &&
-            currentScreen !in listOf("auth", "chat", "register")
+            currentScreen !in listOf("auth", "chat", "register", "pin_setup", "pin_verify", "loading")
 
     Box(
         modifier = modifier
@@ -264,6 +296,27 @@ fun SanteApp(
                 "register" -> RegistrationScreen(
                     viewModel = viewModel,
                     onBack = { currentScreen = "auth" }
+                )
+
+                "pin_setup" -> PinSetupScreen(
+                    onPinCreated = { pin ->
+                        viewModel.setPin(pin)
+                    },
+                    onSkip = {
+                        viewModel.skipPinSetup()
+                    }
+                )
+
+                "pin_verify" -> PinVerifyScreen(
+                    onPinEntered = { pin ->
+                        viewModel.verifyPin(pin)
+                    },
+                    onLogout = {
+                        viewModel.logout()
+                        currentScreen = "auth"
+                    },
+                    errorFlow = pinVerifyError,
+                    onErrorConsumed = { viewModel.consumePinError() }
                 )
 
                 "home" -> when (authState) {
