@@ -393,10 +393,12 @@ fun SanteApp(
 
         // ─── Bottom Navigation Bar ────────────────────────────
         if (showBottomNav) {
+            val isDoctor = authState is AuthState.DoctorAuthenticated
             BottomNavBar(
                 modifier = Modifier.align(Alignment.BottomCenter),
                 selectedRoute = currentScreen,
                 activeConsultationId = activeConsultationId,
+                showNewConsultationButton = !isDoctor,
                 onSelect = { route -> currentScreen = route },
                 onNewConsultation = { currentScreen = "intake" }
             )
@@ -414,6 +416,7 @@ private fun BottomNavBar(
     modifier: Modifier = Modifier,
     selectedRoute: String,
     activeConsultationId: String?,
+    showNewConsultationButton: Boolean = true,
     onSelect: (String) -> Unit,
     onNewConsultation: () -> Unit
 ) {
@@ -464,7 +467,7 @@ private fun BottomNavBar(
                 }
 
                 // Center spacer for the raised + button
-                Box(modifier = Modifier.weight(1f))
+                Box(modifier = Modifier.weight(if (showNewConsultationButton) 1f else 0.5f))
 
                 // Notifications
                 Box(
@@ -493,23 +496,25 @@ private fun BottomNavBar(
                 }
             }
 
-            // Raised center + button (overlaid, raised 12dp above the bar)
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .offset(y = (-12).dp)
-                    .size(48.dp)
-                    .shadow(6.dp, CircleShape)
-                    .background(PrimaryGreen, CircleShape)
-                    .clickable { onNewConsultation() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Nouvelle consultation",
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
+            // Raised center + button (only for patients)
+            if (showNewConsultationButton) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset(y = (-12).dp)
+                        .size(48.dp)
+                        .shadow(6.dp, CircleShape)
+                        .background(PrimaryGreen, CircleShape)
+                        .clickable { onNewConsultation() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Nouvelle consultation",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
         }
     }

@@ -61,9 +61,15 @@ fun ProfileScreen(
     var passwordError by remember { mutableStateOf("") }
 
     val context = LocalContext.current
-    val displayName = profile?.name?.ifBlank { null } ?: doctorProfile?.name?.ifBlank { null }
-    val displayEmail = profile?.email?.ifBlank { null } ?: (authState as? AuthState.DoctorAuthenticated)?.serverUser?.email
-    val displayPhone = profile?.phone?.ifBlank { null }
+    val isDoctor = authState is AuthState.DoctorAuthenticated
+    val serverUser = when (val auth = authState) {
+        is AuthState.PatientAuthenticated -> auth.serverUser
+        is AuthState.DoctorAuthenticated -> auth.serverUser
+        else -> null
+    }
+    val displayName = if (isDoctor) doctorProfile?.name else profile?.name
+    val displayEmail = serverUser?.email
+    val displayPhone = if (isDoctor) serverUser?.phone else profile?.phone
 
     Box(
         modifier = Modifier
@@ -360,16 +366,24 @@ fun ProfileScreen(
             confirmButton = {
                 TextButton(onClick = {
                     if (editName.isNotBlank()) {
-                        viewModel.updatePatientProfile(
-                            name = editName.trim(),
-                            email = editEmail.trim(),
-                            phone = editPhone.trim(),
-                            age = 0,
-                            gender = "",
-                            allergies = "",
-                            medications = "",
-                            history = ""
-                        )
+                        if (isDoctor) {
+                            viewModel.updateDoctorProfile(
+                                name = editName.trim(),
+                                email = editEmail.trim(),
+                                phone = editPhone.trim()
+                            )
+                        } else {
+                            viewModel.updatePatientProfile(
+                                name = editName.trim(),
+                                email = editEmail.trim(),
+                                phone = editPhone.trim(),
+                                age = 0,
+                                gender = "",
+                                allergies = "",
+                                medications = "",
+                                history = ""
+                            )
+                        }
                         showEditDialog = false
                     }
                 }) {

@@ -375,7 +375,7 @@ fun DoctorDashboardScreen(
                                     consultation = consultation,
                                     onClick = {
                                         viewModel.setActiveConsultation(consultation.id)
-                                        onNavigate("consultation_detail")
+                                        onNavigate("chat")
                                     }
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))

@@ -340,7 +340,7 @@ private fun PinScreenScaffold(
             Image(
                 painter = painterResource(R.drawable.medika_logo_header),
                 contentDescription = "Medika",
-                modifier = Modifier.size(68.dp),
+                modifier = Modifier.size(160.dp),
                 contentScale = ContentScale.Fit
             )
 

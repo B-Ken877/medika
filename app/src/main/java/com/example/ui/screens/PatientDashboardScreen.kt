@@ -400,7 +400,7 @@ private fun QuickActionsRow(onNavigate: (String) -> Unit) {
             label = "Mes\nConsultations",
             icon = Icons.AutoMirrored.Filled.Chat,
             backgroundColor = SanteInfo,
-            onClick = { onNavigate("chat") },
+            onClick = { onNavigate("notifications") },
         )
         QuickActionItem(
             label = "Mon\nProfil",

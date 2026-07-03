@@ -217,7 +217,12 @@ fun NotificationsScreen(
                                 notification = notification,
                                 onClick = {
                                     when (notification.type) {
-                                        "consultation", "message" -> onNavigate("chat")
+                                        "consultation" -> {
+                                            val consId = notification.id.removePrefix("cons_").removePrefix("cons_active_").removePrefix("cons_done_")
+                                            if (consId.isNotBlank()) viewModel.setActiveConsultation(consId)
+                                            onNavigate("chat")
+                                        }
+                                        "message" -> onNavigate("chat")
                                     }
                                 },
                                 onDismiss = { dismissedIds.add(notification.id) }

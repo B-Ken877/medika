@@ -1190,6 +1190,19 @@ class SanteViewModel(
         startSyncPolling()
     }
 
+    fun updateDoctorProfile(name: String, email: String, phone: String) {
+        viewModelScope.launch {
+            try {
+                val token = authToken ?: return@launch
+                val body = mapOf("name" to name, "email" to email, "phone" to phone)
+                MedikaNetwork.api.updateProfile(token, body)
+                com.example.CrashLogger.log("[PROFILE] Doctor profile updated")
+            } catch (e: Exception) {
+                com.example.CrashLogger.log("[PROFILE] Update failed: \${e.message}")
+            }
+        }
+    }
+
     fun clearLoginError() { _loginError.value = null }
     fun clearRegisterError() { _registerError.value = null }
 
