@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -282,9 +283,7 @@ fun SanteApp(
         ) { screen ->
             when (screen) {
                 "loading" -> Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.White),
+                    modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
@@ -292,31 +291,10 @@ fun SanteApp(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Image(
-                            painter = painterResource(R.drawable.medika_logo_header),
+                            painter = painterResource(R.drawable.medika_logo_splash),
                             contentDescription = "Medika",
-                            modifier = Modifier.size(110.dp),
+                            modifier = Modifier.size(180.dp),
                             contentScale = ContentScale.Fit
-                        )
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Text(
-                            text = "Medika",
-                            fontSize = 32.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = PrimaryGreen,
-                            letterSpacing = 1.sp
-                        )
-                        Spacer(modifier = Modifier.height(32.dp))
-                        CircularProgressIndicator(
-                            color = PrimaryGreen,
-                            strokeWidth = 3.dp,
-                            modifier = Modifier.size(36.dp)
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Text(
-                            text = "Chargement...",
-                            color = TextSecondary,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium
                         )
                     }
                 }

@@ -270,6 +270,8 @@ class SanteViewModel(
             if (isPinSet()) {
                 _needsPinVerify.value = true
             }
+        } else {
+            _authState.value = AuthState.Unauthenticated
         }
     }
 
