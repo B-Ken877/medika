@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -66,7 +67,7 @@ private val PrimaryGreenDark = Color(0xFF0D7A35)
 private val Neutral200 = Color(0xFFE5E7EB)
 private val NavGray = Color(0xFF9E9E9E)
 
-private val screenOrder = listOf("auth", "register", "home", "intake", "chat", "profile", "notifications")
+private val screenOrder = listOf("loading", "auth", "register", "home", "intake", "chat", "profile", "notifications")
 
 // Navigation history for back button support
 private val screenBackMap = mapOf(
@@ -88,7 +89,7 @@ fun SanteApp(
     val activeConsultationId by viewModel.activeConsultationId.collectAsStateWithLifecycle()
     val wsConnected by viewModel.wsConnected.collectAsStateWithLifecycle()
 
-    var currentScreen by remember { mutableStateOf("auth") }
+    var currentScreen by remember { mutableStateOf(if (authState is AuthState.Loading) "loading" else "auth") }
 
     // ─── System Bars Styling ────────────────────────────
     val view = LocalView.current
@@ -170,11 +171,15 @@ fun SanteApp(
     // Sync auth state
     LaunchedEffect(authState) {
         when (authState) {
+            is AuthState.Loading -> {
+                // Show loading screen while restoring session
+                if (currentScreen == "auth") currentScreen = "loading"
+            }
             is AuthState.Unauthenticated -> currentScreen = "auth"
             is AuthState.PatientAuthenticated,
             is AuthState.DoctorAuthenticated,
             is AuthState.AdminAuthenticated -> {
-                if (currentScreen == "auth" || currentScreen == "register") currentScreen = "home"
+                if (currentScreen == "auth" || currentScreen == "register" || currentScreen == "loading") currentScreen = "home"
             }
             else -> {}
         }
@@ -211,6 +216,17 @@ fun SanteApp(
             label = "screen_transition"
         ) { screen ->
             when (screen) {
+                "loading" -> Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = PrimaryGreen)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Chargement...", color = PrimaryGreen, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+
                 "auth" -> AuthScreen(
                     viewModel = viewModel,
                     onNavigateToRegister = { currentScreen = "register" }

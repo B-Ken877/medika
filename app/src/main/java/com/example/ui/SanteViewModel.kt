@@ -29,6 +29,7 @@ import java.io.FileOutputStream
 import java.net.URL
 import android.content.Intent
 import kotlin.concurrent.thread
+import android.content.SharedPreferences
 
 // ─── Auth States ─────────────────────────────────────────────
 
@@ -81,6 +82,11 @@ class SanteViewModel(
     private var authToken: String? = null
     private var currentServerUserId: String? = null
     private var currentUserName: String? = null
+
+    // ─── Session Persistence (SharedPreferences) ──────────
+    private val prefs: SharedPreferences by lazy {
+        getApplication<Application>().getSharedPreferences("medika_session", android.content.Context.MODE_PRIVATE)
+    }
 
     // ─── State Flows ─────────────────────────────────
     private val _authState = MutableStateFlow<AuthState>(AuthState.Unauthenticated)
@@ -762,6 +768,153 @@ class SanteViewModel(
         }
     }
 
+    // ─── Session Persistence Helpers ──────────────────────────
+
+    /** Save the current auth session to SharedPreferences so the user stays logged in across app restarts. */
+    private fun saveSession(token: String, user: UserDto) {
+        prefs.edit()
+            .putString("auth_token", token)
+            .putString("user_id", user.id)
+            .putString("user_name", user.name)
+            .putString("user_role", user.role)
+            .putString("user_username", user.username)
+            .putString("user_email", user.email ?: "")
+            .putString("user_phone", user.phone ?: "")
+            .putInt("user_age", user.age ?: 0)
+            .putString("user_gender", user.gender ?: "")
+            .putString("user_specialty", user.specialty ?: "")
+            .putString("user_license_number", user.license_number ?: "")
+            .putString("user_location", user.location ?: "")
+            .putString("user_hospital", user.hospital ?: "")
+            .putString("user_biography", user.biography ?: "")
+            .putString("user_avatar_url", user.avatar_url ?: "")
+            .putFloat("user_rating", (user.rating ?: 4.9).toFloat())
+            .putInt("user_is_available", user.is_available ?: 1)
+            .putLong("session_saved_at", System.currentTimeMillis())
+            .apply()
+        com.example.CrashLogger.log("[SESSION] Saved session for user ${user.id} (${user.role})")
+    }
+
+    /** Try to restore a previously saved session. Returns true if session was restored. */
+    private suspend fun restoreSession(): Boolean {
+        val token = prefs.getString("auth_token", null) ?: return false
+        val userId = prefs.getString("user_id", null) ?: return false
+        val role = prefs.getString("user_role", null) ?: return false
+        val userName = prefs.getString("user_name", "") ?: ""
+        val userEmail = prefs.getString("user_email", "") ?: ""
+        val userPhone = prefs.getString("user_phone", "") ?: ""
+        val userAge = prefs.getInt("user_age", 0)
+        val userGender = prefs.getString("user_gender", "") ?: ""
+        val userUsername = prefs.getString("user_username", "") ?: ""
+        val userSpecialty = prefs.getString("user_specialty", "") ?: ""
+        val userLicenseNumber = prefs.getString("user_license_number", "") ?: ""
+        val userLocation = prefs.getString("user_location", "") ?: ""
+        val userHospital = prefs.getString("user_hospital", "") ?: ""
+        val userBiography = prefs.getString("user_biography", "") ?: ""
+        val userAvatarUrl = prefs.getString("user_avatar_url", "") ?: ""
+        val userRating = prefs.getFloat("user_rating", 4.9f).toDouble()
+        val userIsAvailable = prefs.getInt("user_is_available", 1)
+
+        // Reconstruct the UserDto
+        val serverUser = UserDto(
+            id = userId,
+            username = userUsername,
+            role = role,
+            name = userName,
+            email = userEmail.ifBlank { null },
+            phone = userPhone.ifBlank { null },
+            age = userAge,
+            gender = userGender.ifBlank { null },
+            specialty = userSpecialty.ifBlank { null },
+            license_number = userLicenseNumber.ifBlank { null },
+            location = userLocation.ifBlank { null },
+            hospital = userHospital.ifBlank { null },
+            biography = userBiography.ifBlank { null },
+            avatar_url = userAvatarUrl.ifBlank { null },
+            rating = userRating,
+            is_available = userIsAvailable
+        )
+
+        // Restore in-memory state
+        authToken = "Bearer $token"
+        currentServerUserId = userId
+        currentUserName = userName
+        MedikaNetwork.authToken = "Bearer $token"
+
+        // Restore auth state based on role
+        when (role) {
+            "patient" -> {
+                val profile = PatientProfileEntity(
+                    id = "current_patient",
+                    name = userName,
+                    email = userEmail,
+                    phone = userPhone,
+                    age = userAge,
+                    gender = userGender.ifBlank { "Homme" }
+                )
+                repository.savePatientProfile(profile)
+                _authState.value = AuthState.PatientAuthenticated(profile, serverUser)
+            }
+            "doctor" -> {
+                val doctor = DoctorEntity(
+                    id = userId,
+                    name = userName,
+                    specialty = userSpecialty.ifBlank { "Medecine Generale" },
+                    licenseNumber = userLicenseNumber,
+                    location = userLocation,
+                    avatarUrl = userAvatarUrl,
+                    rating = userRating,
+                    isAvailable = userIsAvailable == 1,
+                    hospital = userHospital,
+                    biography = userBiography
+                )
+                repository.insertDoctors(listOf(doctor))
+                _authState.value = AuthState.DoctorAuthenticated(doctor, serverUser)
+            }
+        }
+
+        // Reconnect WebSocket
+        MedikaNetwork.connectWebSocket(userId)
+
+        // Re-initialize ZEGO services
+        try {
+            ZegoCallManager.init(getApplication(), userId, userName)
+            _zegoCallReady.value = ZegoCallManager.isInitialized()
+        } catch (e: Throwable) {
+            com.example.CrashLogger.log("[SESSION] ZegoCall re-init failed: ${e.message}")
+            _zegoCallReady.value = false
+        }
+        try {
+            val instanceCreated = ZegoChatManager.init(getApplication(), userId, userName)
+            ZegoChatManager.onLoginResult = { success, errorCode, errorMsg ->
+                viewModelScope.launch {
+                    _zegoChatReady.value = success
+                    if (!success) {
+                        com.example.CrashLogger.log("[SESSION] ZegoChat re-login failed: $errorCode $errorMsg")
+                    }
+                }
+            }
+            _zegoChatReady.value = instanceCreated
+        } catch (e: Throwable) {
+            com.example.CrashLogger.log("[SESSION] ZegoChat re-init failed: ${e.message}")
+            _zegoChatReady.value = false
+        }
+
+        // Start syncing consultations
+        syncConsultationsFromServer()
+        startSyncPolling()
+        processedMessageIds.clear()
+
+        com.example.CrashLogger.log("[SESSION] Restored session for user $userId ($role)")
+        return true
+    }
+
+    /** Clear the persisted session (called on logout). */
+    private fun clearSession() {
+        prefs.edit().clear().apply()
+        com.example.CrashLogger.log("[SESSION] Cleared saved session")
+    }
+
     // ─── LOGIN ─────────────────────────────────
 
     fun loginWithCredentials(username: String, password: String) {
@@ -819,6 +972,7 @@ class SanteViewModel(
                     _zegoChatReady.value = false
                 }
                 handleAuthResponse(response)
+                saveSession(response.token, response.user)
             } catch (e: Exception) {
                 _authState.value = AuthState.Unauthenticated
                 _loginError.value = "Nom d'utilisateur ou mot de passe incorrect"
@@ -881,6 +1035,7 @@ class SanteViewModel(
                     _zegoChatReady.value = false
                 }
                 handleAuthResponse(response)
+                saveSession(response.token, response.user)
             } catch (e: Exception) {
                 _authState.value = AuthState.Unauthenticated
                 _registerError.value = "Erreur d'inscription: ${e.localizedMessage}"
@@ -931,6 +1086,7 @@ class SanteViewModel(
     // ─── LOGOUT ─────────────────────────────────
 
     fun logout() {
+        clearSession()
         MedikaNetwork.disconnectWebSocket()
         cleanupCall()
         ZegoCallManager.uninit()
