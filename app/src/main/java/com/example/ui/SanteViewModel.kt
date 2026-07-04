@@ -191,27 +191,27 @@ class SanteViewModel(
 
     // ─── Local Data (Room) ─────────────────────────────
     val allDoctors: StateFlow<List<DoctorEntity>> = repository.allDoctors
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     val allConsultations: StateFlow<List<ConsultationEntity>> = repository.allConsultations
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     val patientProfile: StateFlow<PatientProfileEntity?> = repository.patientProfile
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+        .stateIn(viewModelScope, SharingStarted.Lazily, null)
 
     val activeConsultation: StateFlow<ConsultationEntity?> = _activeConsultationId
         .flatMapLatest { id ->
             if (id == null) flowOf(null)
             else repository.allConsultations.map { list -> list.find { it.id == id } }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+        .stateIn(viewModelScope, SharingStarted.Lazily, null)
 
     val activeMessages: StateFlow<List<MessageEntity>> = _activeConsultationId
         .flatMapLatest { id ->
             if (id == null) flowOf(emptyList())
             else repository.getMessagesForConsultation(id)
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     private var callTimerJob: kotlinx.coroutines.Job? = null
     private var syncPollingJob: kotlinx.coroutines.Job? = null
@@ -261,6 +261,38 @@ class SanteViewModel(
             target
         } catch (e: Exception) {
             println("[MEDIA-DL] Error: ${e.message}")
+            null
+        }
+    }
+
+    /** Download a media file from an absolute URL (e.g. ZIM CDN) into the per-consultation folder. */
+    private suspend fun downloadAbsoluteUrlToLocal(consultationId: String, absoluteUrl: String, messageType: String?): File? = withContext(Dispatchers.IO) {
+        try {
+            val dir = medikaMediaDir(consultationId)
+            val urlName = absoluteUrl.substringAfterLast('/').ifBlank { "media_${System.currentTimeMillis()}" }
+            // Ensure proper extension based on type
+            val ext = when (messageType) {
+                "voice" -> if (!urlName.endsWith(".m4a") && !urlName.endsWith(".aac") && !urlName.endsWith(".mp3")) ".m4a" else ""
+                "image" -> if (!urlName.endsWith(".jpg") && !urlName.endsWith(".png") && !urlName.endsWith(".webp")) ".jpg" else ""
+                "video" -> if (!urlName.endsWith(".mp4") && !urlName.endsWith(".3gp")) ".mp4" else ""
+                else -> ""
+            }
+            val target = File(dir, urlName + ext)
+            if (target.exists() && target.length() > 0) return@withContext target
+
+            println("[ABS-DL] Downloading $absoluteUrl -> ${target.absolutePath}")
+            java.net.URL(absoluteUrl).openStream().use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            }
+            if (target.exists() && target.length() > 0) {
+                println("[ABS-DL] OK ${target.length()} bytes")
+                target
+            } else {
+                println("[ABS-DL] Downloaded file is empty")
+                null
+            }
+        } catch (e: Exception) {
+            println("[ABS-DL] Error: ${e.message}")
             null
         }
     }
@@ -677,12 +709,18 @@ class SanteViewModel(
                     )
                     repository.insertMessage(entity)
 
-                    // Trigger auto-download for new media messages
+                    // Trigger auto-download for new media messages.
+                    // Supports both server-relative URLs ("/uploads/...") and absolute URLs (ZIM CDN).
                     val mt = msg.message_type
                     val fu = msg.file_url
                     if (!fu.isNullOrBlank() && (mt == "voice" || mt == "image" || mt == "video")) {
                         viewModelScope.launch(Dispatchers.IO) {
-                            val local = downloadMediaToLocal(msg.consultation_id, fu)
+                            val local = if (fu.startsWith("http")) {
+                                // Absolute URL (ZIM CDN or similar) — download directly
+                                downloadAbsoluteUrlToLocal(msg.consultation_id, fu, mt)
+                            } else {
+                                downloadMediaToLocal(msg.consultation_id, fu)
+                            }
                             if (local != null) {
                                 repository.updateMessageLocalFile(serverId, local.absolutePath, local.length())
                             }
@@ -692,13 +730,23 @@ class SanteViewModel(
                 processedMessageIds[msg.id] = true
             }
 
-            // Delete local rows that have no server match AND are not pending
-            // (pending = failed/sending, keep them so user can retry)
+            // Delete local rows that have no server match AND are not pending.
+            // IMPORTANT: only delete messages that clearly originated from the server
+            // (have a server-relative fileUrl starting with "/"). ZIM-originated messages
+            // (ZIM-sent, ZIM-received text/media) are NOT on the Medika server and must
+            // be preserved to avoid losing them on every sync cycle.
             for (local in existing) {
                 if (local.id !in matchedLocalIds) {
                     val isPending = local.sendStatus == "failed" || local.sendStatus == "sending"
-                    if (!isPending) {
-                        // This row was deleted from the server — remove it locally
+                    val hasLocalFile = !local.localFilePath.isNullOrBlank()
+                    // ZIM-sent messages: sendStatus="sent" but no server fileUrl
+                    val isZimSent = local.sendStatus == "sent" && local.fileUrl.isNullOrBlank()
+                    // ZIM-received text: sendStatus=null, no fileUrl, no local file
+                    val isZimReceivedText = local.sendStatus == null && local.fileUrl.isNullOrBlank() && local.messageType == "text"
+                    // ZIM CDN URL (absolute http/https) — not from Medika server
+                    val hasZimCdnUrl = !local.fileUrl.isNullOrBlank() && (local.fileUrl.startsWith("http://") || local.fileUrl.startsWith("https://"))
+
+                    if (!isPending && !hasLocalFile && !isZimSent && !isZimReceivedText && !hasZimCdnUrl) {
                         repository.deleteMessage(local.id)
                     }
                 }
@@ -2098,16 +2146,92 @@ class SanteViewModel(
 
     // ─── Voice Playback ──────────────────────────────────
 
+    /**
+     * Download a media file on-demand for playback.
+     * Handles both server-relative URLs ("/uploads/...") and absolute URLs (ZIM CDN).
+     * Returns the local File if successful, null otherwise.
+     */
+    private suspend fun downloadMediaForPlayback(message: MessageEntity): File? = withContext(Dispatchers.IO) {
+        val fileUrl = message.fileUrl ?: return@withContext null
+        val consultationId = message.consultationId
+
+        // Determine target local file path
+        val target = if (!fileUrl.startsWith("http")) {
+            // Server-relative URL (e.g. "/uploads/consId/file.m4a")
+            localFileForReceivedMessage(consultationId, fileUrl)
+        } else {
+            // Absolute URL (ZIM CDN) — extract filename or generate one
+            val dir = medikaMediaDir(consultationId)
+            val urlName = fileUrl.substringAfterLast('/').ifBlank { "zim_playback_${message.timestamp}" }
+            File(dir, urlName)
+        } ?: run {
+            val dir = medikaMediaDir(consultationId)
+            val ext = when (message.messageType) {
+                "voice" -> ".m4a"
+                "video" -> ".mp4"
+                "image" -> ".jpg"
+                else -> ""
+            }
+            File(dir, "playback_${message.timestamp}$ext")
+        }
+
+        // If file already exists locally, return it
+        if (target.exists() && target.length() > 0) return@withContext target
+
+        // Build the full download URL
+        val fullUrl = if (fileUrl.startsWith("http")) fileUrl else "http://167.86.124.101:3000$fileUrl"
+
+        try {
+            println("[PLAYBACK-DL] Downloading $fullUrl -> ${target.absolutePath}")
+            java.net.URL(fullUrl).openStream().use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            }
+            if (target.exists() && target.length() > 0) {
+                println("[PLAYBACK-DL] OK ${target.length()} bytes")
+                target
+            } else {
+                println("[PLAYBACK-DL] Downloaded file is empty")
+                null
+            }
+        } catch (e: Exception) {
+            println("[PLAYBACK-DL] Error: ${e.message}")
+            null
+        }
+    }
+
     fun playVoiceMessage(message: MessageEntity) {
         stopVoicePlayback()
         val path = message.localFilePath
         if (path.isNullOrBlank()) {
-            _uploadError.value = "Fichier audio non disponible"
+            // No local file — try on-demand download if we have a URL
+            if (!message.fileUrl.isNullOrBlank()) {
+                _isPlayingVoice.value = true  // Show loading/playing state while downloading
+                viewModelScope.launch {
+                    val local = downloadMediaForPlayback(message)
+                    if (local != null) {
+                        // Update DB so we don't re-download next time
+                        repository.updateMessageLocalFile(message.id, local.absolutePath, local.length())
+                        // Now play the downloaded file
+                        actuallyPlayVoice(local.absolutePath)
+                    } else {
+                        _isPlayingVoice.value = false
+                        _uploadError.value = "Fichier audio non disponible"
+                    }
+                }
+            } else {
+                _uploadError.value = "Fichier audio non disponible"
+            }
             return
         }
+        actuallyPlayVoice(path)
+    }
+
+    /** Core voice playback logic — used after confirming a valid local path exists. */
+    private fun actuallyPlayVoice(path: String) {
         val file = File(path)
         if (!file.exists()) {
             _uploadError.value = "Fichier audio introuvable"
+            _isPlayingVoice.value = false
             return
         }
         try {
