@@ -19,13 +19,19 @@ android {
         ndk {
             // Only ship ARM native libs — x86/x86_64 are emulator-only.
             // Saves ~120 MB (Agora + ZIM SDK have large .so files per ABI).
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            abiFilters += listOf("arm64-v8a")
         }
     }
 
     buildTypes {
+        debug {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -39,6 +45,16 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    packaging {
+        // Exclude unused Agora extensions — saves ~20 MB
+        jniLibs {
+            excludes += listOf(
+                "**/libagora_lip_sync_extension.so",
+                "**/libagora_spatial_audio_extension.so"
+            )
+        }
     }
 }
 

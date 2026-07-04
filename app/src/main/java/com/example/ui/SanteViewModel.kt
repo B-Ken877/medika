@@ -949,39 +949,52 @@ class SanteViewModel(
             }
         }
 
-        // Reconnect WebSocket
-        MedikaNetwork.connectWebSocket(userId)
+        // ── FAST PATH: auth state is already set above, UI can render now.
+        //    Defer all heavy init (WS, ZEGO, ZIM) to background so the user
+        //    sees the PIN/home screen instantly instead of a blank loading spinner.
 
-        // Re-initialize ZEGO services
-        try {
-            ZegoCallManager.init(getApplication(), userId, userName)
-            _zegoCallReady.value = ZegoCallManager.isInitialized()
-        } catch (e: Throwable) {
-            com.example.CrashLogger.log("[SESSION] ZegoCall re-init failed: ${e.message}")
-            _zegoCallReady.value = false
-        }
-        try {
-            val instanceCreated = ZegoChatManager.init(getApplication(), userId, userName)
-            ZegoChatManager.onLoginResult = { success, errorCode, errorMsg ->
-                viewModelScope.launch {
-                    _zegoChatReady.value = success
-                    if (!success) {
-                        com.example.CrashLogger.log("[SESSION] ZegoChat re-login failed: $errorCode $errorMsg")
+        viewModelScope.launch(Dispatchers.Default) {
+            com.example.CrashLogger.log("[SESSION] Background init starting...")
+
+            // Reconnect WebSocket (non-blocking OkHttp, but do it off main)
+            MedikaNetwork.connectWebSocket(userId)
+
+            // Re-initialize ZEGO call service (loads native .so — heavy)
+            try {
+                ZegoCallManager.init(getApplication(), userId, userName)
+                _zegoCallReady.value = ZegoCallManager.isInitialized()
+                com.example.CrashLogger.log("[SESSION] ZegoCall ready in background")
+            } catch (e: Throwable) {
+                com.example.CrashLogger.log("[SESSION] ZegoCall re-init failed: ${e.message}")
+                _zegoCallReady.value = false
+            }
+
+            // Re-initialize ZIM chat (loads native .so — heavy)
+            try {
+                val instanceCreated = ZegoChatManager.init(getApplication(), userId, userName)
+                ZegoChatManager.onLoginResult = { success, errorCode, errorMsg ->
+                    viewModelScope.launch {
+                        _zegoChatReady.value = success
+                        if (!success) {
+                            com.example.CrashLogger.log("[SESSION] ZegoChat re-login failed: $errorCode $errorMsg")
+                        }
                     }
                 }
+                _zegoChatReady.value = instanceCreated
+                com.example.CrashLogger.log("[SESSION] ZegoChat init done in background")
+            } catch (e: Throwable) {
+                com.example.CrashLogger.log("[SESSION] ZegoChat re-init failed: ${e.message}")
+                _zegoChatReady.value = false
             }
-            _zegoChatReady.value = instanceCreated
-        } catch (e: Throwable) {
-            com.example.CrashLogger.log("[SESSION] ZegoChat re-init failed: ${e.message}")
-            _zegoChatReady.value = false
+
+            // Sync consultations from server (network I/O)
+            syncConsultationsFromServer()
+            startSyncPolling()
+            processedMessageIds.clear()
+
+            com.example.CrashLogger.log("[SESSION] Background init complete for user $userId ($role)")
         }
 
-        // Start syncing consultations
-        syncConsultationsFromServer()
-        startSyncPolling()
-        processedMessageIds.clear()
-
-        com.example.CrashLogger.log("[SESSION] Restored session for user $userId ($role)")
         return true
     }
 
@@ -1089,43 +1102,39 @@ class SanteViewModel(
                 MedikaNetwork.connectWebSocket(response.user.id)
                 // Initialize ZEGOCLOUD call service so this user can send/receive
                 // call invitations. The userID MUST match the server user ID.
-                try {
-                    ZegoCallManager.init(getApplication(), response.user.id, response.user.name)
-                    _zegoCallReady.value = ZegoCallManager.isInitialized()
-                    com.example.CrashLogger.log("[LOGIN] ZegoCall ready: ${ZegoCallManager.isInitialized()}")
-                } catch (e: Throwable) {
-                    android.util.Log.e("[ZEGO]", "CallManager.init failed: ${e.message}")
-                    com.example.CrashLogger.log("[LOGIN] ZegoCall init EXCEPTION: ${e.message}")
-                    _zegoCallReady.value = false
-                }
-                com.example.CrashLogger.log("[ORDER] ZegoCallManager.init() completed, about to init ZegoChatManager")
-                // Initialize ZEGOCLOUD ZIM for in-app chat (text + media).
-                // init() is NON-BLOCKING — creates the ZIM instance synchronously
-                // and kicks off login() asynchronously. The onLoginResult callback
-                // fires later (on a ZIM thread) when login completes.
-                try {
-                    val instanceCreated = ZegoChatManager.init(getApplication(), response.user.id, response.user.name)
-                    com.example.CrashLogger.log("[LOGIN] ZegoChat instance created: $instanceCreated")
-                    // Set the login result callback so we know when login completes.
-                    // This fires on a ZIM thread, so we hop to viewModelScope.
-                    ZegoChatManager.onLoginResult = { success, errorCode, errorMsg ->
-                        viewModelScope.launch {
-                            _zegoChatReady.value = success
-                            com.example.CrashLogger.log("[LOGIN] ZegoChat login result: success=$success code=$errorCode msg=$errorMsg")
-                            if (!success) {
-                                _uploadError.value = "Echec chat ZIM ($errorCode): $errorMsg"
+                // Set auth state and sync FIRST so UI renders immediately
+                handleAuthResponse(response)
+                // Defer heavy ZEGO/ZIM init to background (native .so loading)
+                viewModelScope.launch(Dispatchers.Default) {
+                    try {
+                        ZegoCallManager.init(getApplication(), response.user.id, response.user.name)
+                        _zegoCallReady.value = ZegoCallManager.isInitialized()
+                        com.example.CrashLogger.log("[LOGIN] ZegoCall ready: ${ZegoCallManager.isInitialized()}")
+                    } catch (e: Throwable) {
+                        android.util.Log.e("[ZEGO]", "CallManager.init failed: ${e.message}")
+                        com.example.CrashLogger.log("[LOGIN] ZegoCall init EXCEPTION: ${e.message}")
+                        _zegoCallReady.value = false
+                    }
+                    com.example.CrashLogger.log("[ORDER] ZegoCallManager.init() completed, about to init ZegoChatManager")
+                    try {
+                        val instanceCreated = ZegoChatManager.init(getApplication(), response.user.id, response.user.name)
+                        com.example.CrashLogger.log("[LOGIN] ZegoChat instance created: $instanceCreated")
+                        ZegoChatManager.onLoginResult = { success, errorCode, errorMsg ->
+                            viewModelScope.launch {
+                                _zegoChatReady.value = success
+                                com.example.CrashLogger.log("[LOGIN] ZegoChat login result: success=$success code=$errorCode msg=$errorMsg")
+                                if (!success) {
+                                    _uploadError.value = "Echec chat ZIM ($errorCode): $errorMsg"
+                                }
                             }
                         }
+                        _zegoChatReady.value = instanceCreated
+                    } catch (e: Throwable) {
+                        android.util.Log.e("[ZIM]", "ChatManager.init failed: ${e.message}")
+                        com.example.CrashLogger.log("[LOGIN] ZegoChat init EXCEPTION: ${e.message}")
+                        _zegoChatReady.value = false
                     }
-                    // Mark as ready=true optimistically so the user can try sending.
-                    // If login fails, the callback above will flip it to false.
-                    _zegoChatReady.value = instanceCreated
-                } catch (e: Throwable) {
-                    android.util.Log.e("[ZIM]", "ChatManager.init failed: ${e.message}")
-                    com.example.CrashLogger.log("[LOGIN] ZegoChat init EXCEPTION: ${e.message}")
-                    _zegoChatReady.value = false
                 }
-                handleAuthResponse(response)
                 saveSession(response.token, response.user)
                 // Check if user needs to set up PIN
                 if (!isPinSet()) {
