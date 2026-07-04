@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -54,6 +55,7 @@ import com.example.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.material.icons.filled.PlayArrow
 
 // ═══════════════════════════════════════════════════════════════════════
 // 1. AnimatedButton — Primary action button with refined press animation
@@ -499,6 +501,7 @@ fun ShimmerBox(
 fun MessageBubble(
     message: MessageEntity,
     isOwn: Boolean,
+    onPlayVoice: ((MessageEntity) -> Unit)? = null,
 ) {
     val bubbleColor = if (isOwn) PrimaryGreen else Neutral50
     val textColor = if (isOwn) Color.White else TextPrimary
@@ -536,7 +539,7 @@ fun MessageBubble(
             .padding(horizontal = 8.dp, vertical = 2.dp),
         horizontalAlignment = if (isOwn) Alignment.End else Alignment.Start,
     ) {
-        // Sender name for non-own messages (group context)
+        // Sender name for non-own messages
         if (!isOwn && message.senderName.isNotBlank()) {
             Text(
                 text = message.senderName,
@@ -547,33 +550,148 @@ fun MessageBubble(
             )
         }
 
-        Surface(
-            shape = bubbleShape,
-            color = bubbleColor,
-            shadowElevation = 0.5.dp,
-            tonalElevation = 0.dp,
-            modifier = Modifier.widthIn(max = 280.dp),
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text(
-                    text = message.text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = textColor,
-                    lineHeight = 20.sp,
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
+        when (message.messageType) {
+            "image" -> {
+                Surface(
+                    shape = bubbleShape,
+                    color = bubbleColor,
+                    shadowElevation = 0.5.dp,
+                    tonalElevation = 0.dp,
+                    modifier = Modifier.widthIn(max = 280.dp),
                 ) {
-                    Text(
-                        text = formattedTime,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = timeColor,
-                        fontSize = 10.sp,
-                    )
+                    Column(modifier = Modifier.padding(4.dp)) {
+                        val displayPath = message.localFilePath ?: message.fileUrl
+                        if (displayPath != null) {
+                            val isLocal = message.localFilePath != null
+                            if (isLocal) {
+                                val bitmap = remember(displayPath) {
+                                    try {
+                                        val bmp = android.graphics.BitmapFactory.decodeFile(displayPath)
+                                        bmp?.asImageBitmap()
+                                    } catch (_: Exception) { null }
+                                }
+                                if (bitmap != null) {
+                                    androidx.compose.foundation.Image(
+                                        bitmap = bitmap,
+                                        contentDescription = "Image",
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(10.dp))
+                                    )
+                                } else {
+                                    Text(text = "[Image]", color = textColor, modifier = Modifier.padding(12.dp))
+                                }
+                            } else {
+                                Text(text = "[Image]", color = textColor, modifier = Modifier.padding(12.dp))
+                            }
+                        } else {
+                            Text(
+                                text = message.text.ifBlank { "[Image]" },
+                                color = textColor,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            Text(
+                                text = formattedTime,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = timeColor,
+                                fontSize = 10.sp,
+                            )
+                        }
+                    }
+                }
+            }
+
+            "voice" -> {
+                Surface(
+                    shape = bubbleShape,
+                    color = bubbleColor,
+                    shadowElevation = 0.5.dp,
+                    tonalElevation = 0.dp,
+                    modifier = Modifier.widthIn(max = 280.dp),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .clickable { onPlayVoice?.invoke(message) }
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Lire",
+                            tint = textColor,
+                            modifier = Modifier.size(28.dp),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            repeat(12) { i ->
+                                val h = when {
+                                    i % 3 == 0 -> 14.dp
+                                    i % 3 == 1 -> 8.dp
+                                    else -> 4.dp
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .width(3.dp)
+                                        .height(h)
+                                        .background(textColor.copy(alpha = 0.6f), RoundedCornerShape(1.dp))
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if ((message.duration ?: 0) > 0)
+                                String.format("%d:%02d", (message.duration ?: 0) / 60, (message.duration ?: 0) % 60)
+                            else "0:00",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = timeColor,
+                            fontSize = 11.sp,
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                }
+            }
+
+            else -> {
+                // Text message bubble (default)
+                Surface(
+                    shape = bubbleShape,
+                    color = bubbleColor,
+                    shadowElevation = 0.5.dp,
+                    tonalElevation = 0.dp,
+                    modifier = Modifier.widthIn(max = 280.dp),
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        if (message.text.isNotBlank()) {
+                            Text(
+                                text = message.text,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = textColor,
+                                lineHeight = 20.sp,
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            Text(
+                                text = formattedTime,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = timeColor,
+                                fontSize = 10.sp,
+                            )
+                        }
+                    }
                 }
             }
         }

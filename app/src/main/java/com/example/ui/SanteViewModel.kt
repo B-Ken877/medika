@@ -22,6 +22,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import java.util.UUID
+import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.os.Build
 import java.io.File
@@ -175,6 +176,9 @@ class SanteViewModel(
 
     private var mediaRecorder: MediaRecorder? = null
     private var currentRecordingFile: File? = null
+    private var mediaPlayer: MediaPlayer? = null
+    private val _isPlayingVoice = MutableStateFlow(false)
+    val isPlayingVoice: StateFlow<Boolean> = _isPlayingVoice.asStateFlow()
     private var recordingTimerJob: kotlinx.coroutines.Job? = null
 
     // ─── LiveKit ─────────────────────────────────────
@@ -1267,23 +1271,49 @@ class SanteViewModel(
                 return@launch
             }
 
-            // Send via ZIM. ZIM doesn't echo back to sender for PEER chat, so
-            // we mark as "sent" when the callback fires.
+            // Try ZIM first, fall back to WebSocket if ZIM is not ready
+            var zimSent = false
             withContext(Dispatchers.IO) {
-                ZegoChatManager.sendTextMessage(text, peerUserId, consultationId, senderName) { success, _, errMsg ->
-                    viewModelScope.launch {
-                        val row = repository.getMessagesForConsultationOnce(consultationId)
-                            .firstOrNull { it.timestamp == ts && it.senderId == senderId && it.text == text }
-                        if (row != null) {
-                            if (success) {
-                                repository.updateMessageStatus(row.id, "sent", null, null)
-                                println("[TEXT] ZIM send OK for row ${row.id}")
-                            } else {
-                                repository.updateMessageStatus(row.id, "failed", null, null)
-                                _uploadError.value = "Echec envoi: ${errMsg ?: "erreur inconnue"}"
-                                println("[TEXT] ZIM send FAILED for row ${row.id}: $errMsg")
+                zimSent = ZegoChatManager.isLoggedIn()
+                if (zimSent) {
+                    ZegoChatManager.sendTextMessage(text, peerUserId, consultationId, senderName) { success, _, errMsg ->
+                        viewModelScope.launch {
+                            val row = repository.getMessagesForConsultationOnce(consultationId)
+                                .firstOrNull { it.timestamp == ts && it.senderId == senderId && it.text == text }
+                            if (row != null) {
+                                if (success) {
+                                    repository.updateMessageStatus(row.id, "sent", null, null)
+                                    println("[TEXT] ZIM send OK for row ${row.id}")
+                                } else {
+                                    // ZIM send failed — try WebSocket fallback
+                                    println("[TEXT] ZIM send FAILED for row ${row.id}: $errMsg — trying WS fallback")
+                                    val wsOk = MedikaNetwork.sendMessage(consultationId, senderId, senderName, text, "text")
+                                    if (wsOk) {
+                                        repository.updateMessageStatus(row.id, "sent", null, null)
+                                    } else {
+                                        repository.updateMessageStatus(row.id, "failed", null, null)
+                                        _uploadError.value = "Echec envoi: ${errMsg ?: "erreur inconnue"}"
+                                    }
+                                }
                             }
                         }
+                    }
+                }
+            }
+
+            // WebSocket fallback when ZIM is not logged in
+            if (!zimSent) {
+                println("[TEXT] ZIM not logged in — sending via WebSocket fallback")
+                val wsOk = MedikaNetwork.sendMessage(consultationId, senderId, senderName, text, "text")
+                val row = repository.getMessagesForConsultationOnce(consultationId)
+                    .firstOrNull { it.timestamp == ts && it.senderId == senderId && it.text == text }
+                if (row != null) {
+                    if (wsOk) {
+                        repository.updateMessageStatus(row.id, "sent", null, null)
+                        println("[TEXT] WS fallback send OK for row ${row.id}")
+                    } else {
+                        repository.updateMessageStatus(row.id, "failed", null, null)
+                        _uploadError.value = "Echec envoi: ZIM non disponible"
                     }
                 }
             }
@@ -1578,52 +1608,79 @@ class SanteViewModel(
     }
 
     private fun executeCall(consultationId: String, peerName: String, peerAvatar: String?, isVideo: Boolean) {
-        println("[CALL] Initiating ${if (isVideo) "video" else "voice"} call to $peerName")
+        val myId = currentServerUserId ?: run {
+            com.example.CrashLogger.log("[CALL] Not authenticated, cannot call")
+            return
+        }
+        val myName = currentUserName ?: "User"
+        val roomId = consultationId  // Use consultation ID as Agora room name
+
+        com.example.CrashLogger.log("[CALL] Initiating ${if (isVideo) "video" else "voice"} call to $peerName (room=$roomId)")
 
         _activeCall.value = CallSession(
             consultationId = consultationId, peerName = peerName, peerAvatar = peerAvatar,
             isOutgoing = true, status = CallStatus.RINGING,
             callType = if (isVideo) CallType.VIDEO else CallType.VOICE
         )
-
         currentCallIsVideo = isVideo
 
+        // 1. Send ZIM call signal to peer so they can join the same Agora room
+        try {
+            val peerId = getPeerUserIdForConsultation(consultationId, myId)
+            if (peerId != null) {
+                ZegoChatManager.sendCallSignal(
+                    toUserId = peerId,
+                    roomId = roomId,
+                    callType = if (isVideo) "video_call" else "voice_call",
+                    callerId = myId,
+                    callerName = myName
+                )
+                com.example.CrashLogger.log("[CALL] Sent ZIM signal: roomId=$roomId to=$peerId")
+            } else {
+                com.example.CrashLogger.log("[CALL] WARNING: Could not find peer ID for consultation $consultationId")
+            }
+        } catch (e: Throwable) {
+            com.example.CrashLogger.log("[CALL] Failed to send ZIM signal: ${e.message}")
+        }
+
+        // 2. Notify server via WebSocket
+        try {
+            MedikaNetwork.sendCallStart(
+                consultationId = consultationId,
+                callType = if (isVideo) "video" else "voice",
+                roomName = roomId,
+                callerName = myName
+            )
+        } catch (e: Throwable) {
+            com.example.CrashLogger.log("[CALL] WS sendCallStart failed: ${e.message}")
+        }
+
+        // 3. Insert system message
         viewModelScope.launch {
-            val token = authToken
-            if (token == null) {
-                println("[CALL] Not authenticated, cannot call")
-                cleanupCall()
-                return@launch
-            }
-            try {
-                println("[CALL] Fetching LiveKit token...")
-                val tokenResponse = MedikaNetwork.api.getCallToken(
-                    token, CallTokenRequest(consultationId = consultationId, isVideo = isVideo)
-                )
+            repository.insertMessage(
+                MessageEntity(consultationId = consultationId, senderId = "system", senderName = "Systeme",
+                    text = "Appel ${if (isVideo) "video" else "vocal"} sortant...")
+            )
+        }
 
-                val roomName = tokenResponse.roomName
-                currentRoomName = roomName
-
-                val callerName = currentUserName ?: "Unknown"
-                MedikaNetwork.sendCallStart(
-                    consultationId = consultationId,
-                    callType = if (isVideo) "video" else "voice",
-                    roomName = roomName,
-                    callerName = callerName
-                )
-
-                connectToLiveKitRoom(tokenResponse.token, tokenResponse.url, isVideo)
-
-                repository.insertMessage(
-                    MessageEntity(consultationId = consultationId, senderId = "system", senderName = "Systeme",
-                        text = "Appel ${if (isVideo) "video" else "vocal"} sortant..."
-                    )
-                )
-            } catch (e: Exception) {
-                println("[CALL] Error: ${e.message}")
-                e.printStackTrace()
-                cleanupCall()
-            }
+        // 4. Launch CallActivity (Agora-based, fetches its own token from port 9999)
+        currentRoomName = roomId
+        val appContext = getApplication<Application>()
+        try {
+            appContext.startActivity(
+                Intent(appContext, Class.forName("com.example.ui.screens.CallActivity")).apply {
+                    putExtra("ROOM_ID", roomId)
+                    putExtra("USER_ID", myId)
+                    putExtra("USER_NAME", myName)
+                    putExtra("IS_VIDEO", isVideo)
+                    putExtra("CONSULTATION_ID", consultationId)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                }
+            )
+            com.example.CrashLogger.log("[CALL] Opened CallActivity: roomId=$roomId uid=$myId video=$isVideo")
+        } catch (e: Throwable) {
+            com.example.CrashLogger.log("[CALL] Failed to open CallActivity: ${e.javaClass.name}: ${e.message}")
+            cleanupCall()
         }
     }
 
@@ -1663,6 +1720,9 @@ class SanteViewModel(
         currentCallIsVideo = isVideo
         currentRoomName = incoming.roomName
 
+        val myId = currentServerUserId ?: return
+        val myName = currentUserName ?: "User"
+
         _activeCall.value = CallSession(
             consultationId = incoming.consultationId, peerName = incoming.fromName, peerAvatar = null,
             isOutgoing = false, status = CallStatus.RINGING,
@@ -1670,24 +1730,27 @@ class SanteViewModel(
         )
         _incomingCall.value = null
 
-        println("[CALL] Accepting incoming ${incoming.callType} call from ${incoming.fromName}")
+        com.example.CrashLogger.log("[CALL] Accepting incoming ${incoming.callType} call from ${incoming.fromName} (room=${incoming.roomName})")
 
         MedikaNetwork.sendCallAccept(incoming.consultationId)
 
-        viewModelScope.launch {
-            try {
-                val token = authToken ?: return@launch
-                println("[CALL] Fetching LiveKit token for incoming call...")
-                val tokenResponse = MedikaNetwork.api.getCallToken(
-                    token, CallTokenRequest(consultationId = incoming.consultationId, isVideo = isVideo)
-                )
-
-                connectToLiveKitRoom(tokenResponse.token, tokenResponse.url, isVideo)
-            } catch (e: Exception) {
-                println("[CALL] Error accepting call: ${e.message}")
-                e.printStackTrace()
-                cleanupCall()
-            }
+        // Launch CallActivity directly (Agora-based, fetches its own token from port 9999)
+        val appContext = getApplication<Application>()
+        try {
+            appContext.startActivity(
+                Intent(appContext, Class.forName("com.example.ui.screens.CallActivity")).apply {
+                    putExtra("ROOM_ID", incoming.roomName)
+                    putExtra("USER_ID", myId)
+                    putExtra("USER_NAME", myName)
+                    putExtra("IS_VIDEO", isVideo)
+                    putExtra("CONSULTATION_ID", incoming.consultationId)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                }
+            )
+            com.example.CrashLogger.log("[CALL] Accept: Opened CallActivity: roomId=${incoming.roomName} uid=$myId")
+        } catch (e: Throwable) {
+            com.example.CrashLogger.log("[CALL] Accept: Failed to open CallActivity: ${e.javaClass.name}: ${e.message}")
+            cleanupCall()
         }
     }
 
@@ -1739,7 +1802,7 @@ class SanteViewModel(
 
         // Open CallActivity for the caller
         context.startActivity(
-            Intent(context, Class.forName("com.example.ui.screens.CallActivity")).apply { putExtra("ROOM_ID", roomId); putExtra("USER_ID", myId); putExtra("USER_NAME", myName); putExtra("IS_VIDEO", isVideo); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP) }
+            Intent(context, Class.forName("com.example.ui.screens.CallActivity")).apply { putExtra("ROOM_ID", roomId); putExtra("USER_ID", myId); putExtra("USER_NAME", myName); putExtra("IS_VIDEO", isVideo); putExtra("CONSULTATION_ID", roomId); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP) }
         )
         com.example.CrashLogger.log("[CALL] Caller opened CallActivity: roomId=$roomId")
     }
@@ -1763,7 +1826,7 @@ class SanteViewModel(
         ).show()
 
         context.startActivity(
-            Intent(context, Class.forName("com.example.ui.screens.CallActivity")).apply { putExtra("ROOM_ID", roomId); putExtra("USER_ID", myId); putExtra("USER_NAME", myName); putExtra("IS_VIDEO", isVideo); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP) }
+            Intent(context, Class.forName("com.example.ui.screens.CallActivity")).apply { putExtra("ROOM_ID", roomId); putExtra("USER_ID", myId); putExtra("USER_NAME", myName); putExtra("IS_VIDEO", isVideo); putExtra("CONSULTATION_ID", roomId); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP) }
         )
     }
 
@@ -2033,6 +2096,57 @@ class SanteViewModel(
         currentRecordingFile = null
     }
 
+    // ─── Voice Playback ──────────────────────────────────
+
+    fun playVoiceMessage(message: MessageEntity) {
+        stopVoicePlayback()
+        val path = message.localFilePath
+        if (path.isNullOrBlank()) {
+            _uploadError.value = "Fichier audio non disponible"
+            return
+        }
+        val file = File(path)
+        if (!file.exists()) {
+            _uploadError.value = "Fichier audio introuvable"
+            return
+        }
+        try {
+            mediaPlayer = MediaPlayer().apply {
+                setDataSource(path)
+                prepare()
+                setOnCompletionListener {
+                    _isPlayingVoice.value = false
+                    mediaPlayer?.release()
+                    mediaPlayer = null
+                }
+                setOnErrorListener { _, _, _ ->
+                    _isPlayingVoice.value = false
+                    mediaPlayer?.release()
+                    mediaPlayer = null
+                    true
+                }
+                start()
+            }
+            _isPlayingVoice.value = true
+            println("[VOICE] Playing: $path")
+        } catch (e: Exception) {
+            println("[VOICE] Playback error: ${e.message}")
+            _isPlayingVoice.value = false
+            _uploadError.value = "Erreur de lecture audio"
+        }
+    }
+
+    fun stopVoicePlayback() {
+        try {
+            mediaPlayer?.apply {
+                if (isPlaying) stop()
+                release()
+            }
+        } catch (_: Exception) {}
+        mediaPlayer = null
+        _isPlayingVoice.value = false
+    }
+
     /** Retry sending a voice/media message that previously failed (via ZIM). */
     fun retrySendMediaMessage(messageId: Int) {
         viewModelScope.launch {
@@ -2137,30 +2251,46 @@ class SanteViewModel(
                 }
 
                 // 2. Send via ZIM — ZIM uploads the file to its CDN automatically.
-                withContext(Dispatchers.IO) {
-                    val callback: (Boolean, String?) -> Unit = { success, errMsg ->
-                        viewModelScope.launch {
-                            if (success && rowId != null) {
-                                repository.updateMessageStatus(rowId, "sent", null, localPath)
-                                println("[MEDIA] ZIM $messageType send OK for row $rowId")
-                            } else if (rowId != null) {
-                                repository.updateMessageStatus(rowId, "failed", null, localPath)
-                                _uploadError.value = "Echec envoi media: ${errMsg ?: "erreur inconnue"}"
-                                println("[MEDIA] ZIM send FAILED for row $rowId: $errMsg")
+                // Fall back to WebSocket if ZIM is not logged in.
+                val zimReady = withContext(Dispatchers.IO) { ZegoChatManager.isLoggedIn() }
+                if (zimReady) {
+                    withContext(Dispatchers.IO) {
+                        val callback: (Boolean, String?) -> Unit = { success, errMsg ->
+                            viewModelScope.launch {
+                                if (success && rowId != null) {
+                                    repository.updateMessageStatus(rowId, "sent", null, localPath)
+                                    println("[MEDIA] ZIM $messageType send OK for row $rowId")
+                                } else if (rowId != null) {
+                                    // ZIM failed — try WS fallback
+                                    println("[MEDIA] ZIM send FAILED for row $rowId: $errMsg — trying WS fallback")
+                                    val wsOk = MedikaNetwork.sendMessage(consultationId, senderId, senderName, "[Image]", messageType)
+                                    if (wsOk) repository.updateMessageStatus(rowId, "sent", null, localPath)
+                                    else {
+                                        repository.updateMessageStatus(rowId, "failed", null, localPath)
+                                        _uploadError.value = "Echec envoi media: ${errMsg ?: "erreur inconnue"}"
+                                    }
+                                }
                             }
                         }
+                        when (messageType) {
+                            "voice" -> ZegoChatManager.sendAudioMessage(
+                                localPath, 0L, peerUserId, consultationId, senderName, callback
+                            )
+                            "image" -> ZegoChatManager.sendImageMessage(
+                                localPath, peerUserId, consultationId, senderName, callback
+                            )
+                            "video" -> ZegoChatManager.sendVideoMessage(
+                                localPath, 0L, peerUserId, consultationId, senderName, callback
+                            )
+                            else -> callback(false, "Type inconnu: $messageType")
+                        }
                     }
-                    when (messageType) {
-                        "voice" -> ZegoChatManager.sendAudioMessage(
-                            localPath, 0L, peerUserId, consultationId, senderName, callback
-                        )
-                        "image" -> ZegoChatManager.sendImageMessage(
-                            localPath, peerUserId, consultationId, senderName, callback
-                        )
-                        "video" -> ZegoChatManager.sendVideoMessage(
-                            localPath, 0L, peerUserId, consultationId, senderName, callback
-                        )
-                        else -> callback(false, "Type inconnu: $messageType")
+                } else {
+                    // ZIM not ready — notify user
+                    println("[MEDIA] ZIM not logged in — cannot send $messageType via ZIM")
+                    if (rowId != null) {
+                        repository.updateMessageStatus(rowId, "failed", null, localPath)
+                        _uploadError.value = "Chat non disponible (ZIM hors ligne). Reessayez."
                     }
                 }
             } catch (e: Exception) {

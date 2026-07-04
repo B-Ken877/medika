@@ -30,6 +30,7 @@ class CallActivity : AppCompatActivity() {
         const val USER_ID = "USER_ID"
         const val USER_NAME = "USER_NAME"
         const val IS_VIDEO = "IS_VIDEO"
+        const val CONSULTATION_ID = "CONSULTATION_ID"
         const val APP_ID = "854c306723a44d838db956729bedb7f7"
         const val TOKEN_SERVER = "http://167.86.124.101:9999"
     }
@@ -39,6 +40,7 @@ class CallActivity : AppCompatActivity() {
     private var isMuted = false
     private var isCameraOn = true
     private var isSpeakerOn = false
+    private var consultationId = ""
     private var callStartTime = 0L
     private val handler = Handler(Looper.getMainLooper())
     private var timerRunnable: Runnable? = null
@@ -111,8 +113,9 @@ class CallActivity : AppCompatActivity() {
         val roomId = intent.getStringExtra(ROOM_ID)
         val userId = intent.getStringExtra(USER_ID) ?: "0"
         isVideo = intent.getBooleanExtra(IS_VIDEO, false)
-
         if (roomId == null) { finish(); return }
+
+        consultationId = intent.getStringExtra(CONSULTATION_ID) ?: roomId
 
         CrashLogger.log("[AGORA] Start: room=$roomId user=$userId video=$isVideo")
 
@@ -137,7 +140,9 @@ class CallActivity : AppCompatActivity() {
                 engine?.muteLocalVideoStream(!isCameraOn)
                 btnCamera.alpha = if (isCameraOn) 1.0f else 0.4f
             }
-        btnHangup.setOnClickListener { stopTimer(); finish() }
+        btnHangup.setOnClickListener { sendCallEndAndFinish() }
+
+        findViewById<View>(R.id.btnBack)?.setOnClickListener { sendCallEndAndFinish() }
 
         val uid = userId.hashCode().toLong() and 0xFFFFFFFFL
         fetchTokenAndJoin(roomId, uid.toInt())
@@ -232,9 +237,23 @@ class CallActivity : AppCompatActivity() {
 
     private fun stopTimer() { timerRunnable?.let { handler.removeCallbacks(it) }; timerRunnable = null }
 
+    private fun sendCallEndAndFinish() {
+        stopTimer()
+        try {
+            com.example.data.api.MedikaNetwork.sendCallEnd(consultationId)
+            CrashLogger.log("[AGORA] Sent call:end for $consultationId")
+        } catch (e: Throwable) {
+            CrashLogger.log("[AGORA] sendCallEnd error: ${e.message}")
+        }
+        finish()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         stopTimer()
+        try {
+            com.example.data.api.MedikaNetwork.sendCallEnd(consultationId)
+        } catch (_: Throwable) {}
         try { engine?.leaveChannel(); RtcEngine.destroy() } catch (_: Throwable) {}
     }
 }

@@ -165,7 +165,12 @@ fun SanteApp(
 
     LaunchedEffect(requestStoragePerm) {
         if (requestStoragePerm) {
-            storagePermLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES)
+            val perm = if (android.os.Build.VERSION.SDK_INT >= 33) {
+                Manifest.permission.READ_MEDIA_IMAGES
+            } else {
+                Manifest.permission.READ_EXTERNAL_STORAGE
+            }
+            storagePermLauncher.launch(perm)
         }
     }
 
@@ -175,11 +180,16 @@ fun SanteApp(
         if (authState !is AuthState.Unauthenticated && !hasRequestedStartupPerms.value && !isPermissionRequestInProgress.value) {
             hasRequestedStartupPerms.value = true
             isPermissionRequestInProgress.value = true
+            val storagePerm = if (android.os.Build.VERSION.SDK_INT >= 33) {
+                Manifest.permission.READ_MEDIA_IMAGES
+            } else {
+                Manifest.permission.READ_EXTERNAL_STORAGE
+            }
             permissionLauncher.launch(
                 arrayOf(
                     Manifest.permission.RECORD_AUDIO,
                     Manifest.permission.CAMERA,
-                    Manifest.permission.READ_MEDIA_IMAGES,
+                    storagePerm,
                 )
             )
         }

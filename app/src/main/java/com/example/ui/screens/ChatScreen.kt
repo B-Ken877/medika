@@ -150,6 +150,13 @@ fun ChatScreen(
         }
     }
 
+    // Determine storage permission based on API level
+    val storagePermission = if (android.os.Build.VERSION.SDK_INT >= 33) {
+        Manifest.permission.READ_MEDIA_IMAGES
+    } else {
+        Manifest.permission.READ_EXTERNAL_STORAGE
+    }
+
     // Storage permission for media
     val storagePermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -213,12 +220,17 @@ fun ChatScreen(
                     onStopRecording = { viewModel.stopAndSendVoiceRecording(currentUserId, currentUserName) },
                     onAttachMedia = {
                         // Request storage permission then launch picker
-                        val hasPerm = context.checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) ==
+                        val storagePerm = if (android.os.Build.VERSION.SDK_INT >= 33) {
+                            Manifest.permission.READ_MEDIA_IMAGES
+                        } else {
+                            Manifest.permission.READ_EXTERNAL_STORAGE
+                        }
+                        val hasPerm = context.checkSelfPermission(storagePerm) ==
                             android.content.pm.PackageManager.PERMISSION_GRANTED
                         if (hasPerm) {
                             mediaLauncher.launch("image/*")
                         } else {
-                            storagePermLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES)
+                            storagePermLauncher.launch(storagePerm)
                         }
                     },
                 )
@@ -238,6 +250,7 @@ fun ChatScreen(
                     messages = messages,
                     currentUserId = currentUserId,
                     listState = listState,
+                    onPlayVoice = { viewModel.playVoiceMessage(it) },
                 )
             }
 
@@ -350,6 +363,7 @@ private fun MessageList(
     messages: List<MessageEntity>,
     currentUserId: String,
     listState: androidx.compose.foundation.lazy.LazyListState,
+    onPlayVoice: ((MessageEntity) -> Unit)? = null,
 ) {
     val displayItems = remember(messages) { buildDisplayItems(messages, currentUserId) }
 
@@ -384,7 +398,7 @@ private fun MessageList(
                                 ),
                             )
                         }
-                        MessageBubble(message = item.message, isOwn = item.isOwn)
+                        MessageBubble(message = item.message, isOwn = item.isOwn, onPlayVoice = onPlayVoice)
                     }
                 }
             }
