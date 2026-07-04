@@ -16,6 +16,11 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        ndk {
+            // Only ship ARM native libs — x86/x86_64 are emulator-only.
+            // Saves ~120 MB (Agora + ZIM SDK have large .so files per ABI).
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     buildTypes {
