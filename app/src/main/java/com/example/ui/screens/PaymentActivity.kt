@@ -3,6 +3,8 @@ package com.example.ui.screens
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.webkit.ConsoleMessage
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -73,6 +75,15 @@ class PaymentActivity : AppCompatActivity() {
 
         setupWebView()
 
+        // Long press on amount text to simulate sandbox payment (for testing only)
+        val amountTv = findViewById<TextView>(R.id.amountText)
+        amountTv.setOnLongClickListener {
+            Toast.makeText(this, "MODE TEST: Paiement simule", Toast.LENGTH_SHORT).show()
+            CrashLogger.log("[MONCASH] Sandbox test mode triggered - simulating success")
+            paymentSuccess("SANDBOX_TEST_${System.currentTimeMillis()}")
+            true
+        }
+
         // Fetch specialty price then create payment
         fetchSpecialtyPrice()
     }
@@ -116,6 +127,43 @@ class PaymentActivity : AppCompatActivity() {
         }.start()
     }
 
+    // JavaScript to inject into MonCash pages to detect errors
+    private val errorDetectionJs = """
+    (function() {
+        function checkForErrors() {
+            var body = document.body ? document.body.innerText : '';
+            var errorMsg = '';
+            
+            if (body.indexOf('does not exist') !== -1 || body.indexOf('n\\'existe pas') !== -1 || body.indexOf('invalide') !== -1) {
+                errorMsg = 'SANDBOX_ERROR';
+            } else if (body.indexOf('Transaction Id: 0') !== -1) {
+                errorMsg = 'SANDBOX_ERROR';
+            } else if (body.indexOf('expired') !== -1 || body.indexOf('expiree') !== -1) {
+                errorMsg = 'EXPIRED';
+            } else if (body.indexOf('erreur') !== -1 || body.indexOf('error') !== -1) {
+                if (body.indexOf('identifiant') !== -1 || body.indexOf('identifier') !== -1) {
+                    errorMsg = 'SANDBOX_ERROR';
+                }
+            }
+            
+            if (errorMsg) {
+                console.log('MONCASH_ERROR_DETECTED:' + errorMsg);
+            }
+        }
+        
+        // Check every 1 second
+        setInterval(checkForErrors, 1000);
+        // Also check after DOM mutations
+        var observer = new MutationObserver(function() { checkForErrors(); });
+        if (document.body) {
+            observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+        }
+        
+        // Initial check
+        setTimeout(checkForErrors, 500);
+    })();
+    """.trimIndent()
+
     private fun setupWebView() {
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
@@ -146,6 +194,38 @@ class PaymentActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView, url: String?) {
                 super.onPageFinished(view, url)
                 CrashLogger.log("[MONCASH] Page finished: $url")
+                // Inject error detection script on MonCash pages
+                if (url != null && (url.contains("moncash") || url.contains("digicel") || url.contains("sandbox"))) {
+                    view.evaluateJavascript(errorDetectionJs, null)
+                }
+            }
+        }
+
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onConsoleMessage(message: ConsoleMessage?): Boolean {
+                if (message != null && message.message().startsWith("MONCASH_ERROR_DETECTED:")) {
+                    val errorType = message.message().substringAfter("MONCASH_ERROR_DETECTED:")
+                    CrashLogger.log("[MONCASH] Error detected in WebView: $errorType")
+                    runOnUiThread {
+                        when (errorType) {
+                            "SANDBOX_ERROR" -> {
+                                showError(
+                                    "Mode Test MonCash: Votre numero n'est pas enregistré " +
+                                    "comme compte test. Appuyez longuement sur le montant pour " +
+                                    "simuler un paiement réussi, ou contactez Digicel pour activer " +
+                                    "le mode production."
+                                )
+                            }
+                            "EXPIRED" -> {
+                                showError("La session de paiement a expiré. Veuillez réessayer.")
+                            }
+                            else -> {
+                                showError("Erreur de paiement détectée. Veuillez réessayer.")
+                            }
+                        }
+                    }
+                }
+                return true
             }
         }
     }
