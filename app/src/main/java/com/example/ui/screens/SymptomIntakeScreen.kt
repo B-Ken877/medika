@@ -185,7 +185,7 @@ fun SymptomIntakeScreen(viewModel: SanteViewModel) {
                         pendingSymptom = symptomText
                         pendingCategory = state.category
                         val orderId = "MC_${System.currentTimeMillis()}_${doctor.id}"
-                        val intent = PaymentActivity.newIntent(context, "Dr. ${doctor.name}", orderId)
+                        val intent = PaymentActivity.newIntent(context, "Dr. ${doctor.name}", orderId, doctor.specialty)
                         paymentLauncher.launch(intent)
                     },
                     onReset = {

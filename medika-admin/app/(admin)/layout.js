@@ -4,7 +4,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
   LayoutDashboard, Users, MessageSquare, DollarSign,
-  LogOut, Menu, X, Stethoscope
+  LogOut, Menu, X, Stethoscope, Tag
 } from 'lucide-react';
 
 const navItems = [
@@ -12,6 +12,7 @@ const navItems = [
   { href: '/doctors', label: 'Medecins', icon: Stethoscope },
   { href: '/patients', label: 'Patients', icon: Users },
   { href: '/consultations', label: 'Consultations', icon: MessageSquare },
+  { href: '/tarification', label: 'Tarification', icon: Tag },
   { href: '/finance', label: 'Finance', icon: DollarSign },
 ];
 

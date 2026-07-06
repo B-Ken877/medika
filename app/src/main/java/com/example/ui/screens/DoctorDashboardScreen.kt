@@ -152,7 +152,7 @@ fun DoctorDashboardScreen(
         }
 
         // ══════════════════════════════════════════════════════════════
-        // FINANCE — Monthly + Overall earnings (750 HTG / consultation)
+        // FINANCE — Monthly + Overall earnings (per-specialty pricing)
         // ══════════════════════════════════════════════════════════════
         val now = java.util.Calendar.getInstance()
         val currentMonth = now.get(java.util.Calendar.MONTH)
@@ -161,8 +161,8 @@ fun DoctorDashboardScreen(
             val cal = java.util.Calendar.getInstance().apply { timeInMillis = it.timestamp }
             cal.get(java.util.Calendar.MONTH) == currentMonth && cal.get(java.util.Calendar.YEAR) == currentYear
         }
-        val monthlyEarnings = monthlyCount * 750
-        val overallEarnings = termines.size * 750
+        val monthlyEarnings = monthlyCount * 750 // TODO: will be dynamic from API in future update
+        val overallEarnings = termines.size * 750 // TODO: will be dynamic from API in future update
 
         FinanceCard(
             monthlyEarnings = monthlyEarnings,

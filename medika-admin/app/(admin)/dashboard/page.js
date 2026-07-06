@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { apiFetch, formatCurrency } from '../../../lib/api';
-import { Stethoscope, Users, MessageSquare, DollarSign, TrendingUp, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { Stethoscope, Users, MessageSquare, DollarSign, TrendingUp, Clock, CheckCircle, AlertCircle, Wallet } from 'lucide-react';
 
 export default function DashboardPage() {
   const [stats, setStats] = useState(null);
@@ -51,6 +51,27 @@ export default function DashboardPage() {
         })}
       </div>
 
+      {/* ── Earnings Split Card (Doctor vs Medika) ── */}
+      <div className="card" style={{ marginTop: 24 }}>
+        <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', fontWeight: 600, fontSize: 15 }}>Repartition des revenus</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
+          <div style={{ padding: '24px', borderRight: '1px solid #e5e7eb', textAlign: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8 }}>
+              <Wallet size={20} color="#059669" />
+              <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>Gains Medecins (ce mois)</span>
+            </div>
+            <div style={{ fontSize: 28, fontWeight: 700, color: '#059669' }}>{formatCurrency(stats.monthlyDoctorEarnings || 0)}</div>
+          </div>
+          <div style={{ padding: '24px', textAlign: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8 }}>
+              <DollarSign size={20} color="#b45309" />
+              <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>Gains Medika (ce mois)</span>
+            </div>
+            <div style={{ fontSize: 28, fontWeight: 700, color: '#b45309' }}>{formatCurrency(stats.monthlyMedikaEarnings || 0)}</div>
+          </div>
+        </div>
+      </div>
+
       {stats.doctorEarnings && stats.doctorEarnings.length > 0 && (
         <div className="card" style={{ marginTop: 24 }}>
           <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', fontWeight: 600, fontSize: 15 }}>Performance des medecins (ce mois)</div>
@@ -58,7 +79,7 @@ export default function DashboardPage() {
             <table className="data-table">
               <thead><tr>
                 <th>Medecin</th><th>Specialite</th><th style={{ textAlign: 'right' }}>Consult. (mois)</th>
-                <th style={{ textAlign: 'right' }}>Gains (mois)</th><th style={{ textAlign: 'right' }}>Total consult.</th>
+                <th style={{ textAlign: 'right' }}>Gains medecin (mois)</th><th style={{ textAlign: 'right' }}>Total consult.</th>
                 <th style={{ textAlign: 'right' }}>Gains totaux</th><th style={{ textAlign: 'center' }}>Note</th>
               </tr></thead>
               <tbody>

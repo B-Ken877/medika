@@ -1,0 +1,102 @@
+[
+  {
+    "id": "medecine_generale",
+    "name": "Medecine Generale",
+    "price": 750
+  },
+  {
+    "id": "cardiologie",
+    "name": "Cardiologie",
+    "price": 1500
+  },
+  {
+    "id": "dermatologie",
+    "name": "Dermatologie",
+    "price": 1000
+  },
+  {
+    "id": "endocrinologie",
+    "name": "Endocrinologie",
+    "price": 1500
+  },
+  {
+    "id": "gastro_enterologie",
+    "name": "Gastro-enterologie",
+    "price": 1500
+  },
+  {
+    "id": "gynecologie",
+    "name": "Gynecologie",
+    "price": 1200
+  },
+  {
+    "id": "neurologie",
+    "name": "Neurologie",
+    "price": 2000
+  },
+  {
+    "id": "ophtalmologie",
+    "name": "Ophtalmologie",
+    "price": 1000
+  },
+  {
+    "id": "orl",
+    "name": "ORL",
+    "price": 1000
+  },
+  {
+    "id": "pediatrie",
+    "name": "Pediatrie",
+    "price": 1000
+  },
+  {
+    "id": "psychiatrie",
+    "name": "Psychiatrie",
+    "price": 1500
+  },
+  {
+    "id": "pneumologie",
+    "name": "Pneumologie",
+    "price": 1200
+  },
+  {
+    "id": "radiologie",
+    "name": "Radiologie",
+    "price": 1500
+  },
+  {
+    "id": "rhumatologie",
+    "name": "Rhumatologie",
+    "price": 1200
+  },
+  {
+    "id": "urologie",
+    "name": "Urologie",
+    "price": 1500
+  },
+  {
+    "id": "chirurgie_generale",
+    "name": "Chirurgie Generale",
+    "price": 2000
+  },
+  {
+    "id": "orthopedie",
+    "name": "Orthopedie",
+    "price": 1500
+  },
+  {
+    "id": "odontologie",
+    "name": "Odontologie",
+    "price": 800
+  },
+  {
+    "id": "nutrition",
+    "name": "Nutrition",
+    "price": 800
+  },
+  {
+    "id": "medecine_interne",
+    "name": "Medecine Interne",
+    "price": 1500
+  }
+]

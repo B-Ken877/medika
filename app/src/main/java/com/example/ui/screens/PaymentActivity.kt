@@ -22,16 +22,20 @@ class PaymentActivity : AppCompatActivity() {
 
     companion object {
         const val PAYMENT_SERVER = "http://167.86.124.101:9998"
-        const val CONSULTATION_PRICE = 1000
+        const val API_BASE = "http://167.86.124.101:3000/api"
+        const val DEFAULT_PRICE = 750
         const val EXTRA_DOCTOR_NAME = "doctor_name"
         const val EXTRA_ORDER_ID = "order_id"
         const val EXTRA_PAYMENT_SUCCESS = "payment_success"
         const val EXTRA_TRANSACTION_ID = "transaction_id"
+        const val EXTRA_SPECIALTY = "specialty"
+        const val EXTRA_CONSULTATION_PRICE = "consultation_price"
 
-        fun newIntent(context: Context, doctorName: String, orderId: String): Intent {
+        fun newIntent(context: Context, doctorName: String, orderId: String, specialty: String? = null): Intent {
             return Intent(context, PaymentActivity::class.java).apply {
                 putExtra(EXTRA_DOCTOR_NAME, doctorName)
                 putExtra(EXTRA_ORDER_ID, orderId)
+                if (specialty != null) putExtra(EXTRA_SPECIALTY, specialty)
             }
         }
     }
@@ -43,17 +47,20 @@ class PaymentActivity : AppCompatActivity() {
     private lateinit var paymentInfoCard: LinearLayout
     private lateinit var errorText: TextView
     private var currentOrderId = ""
+    private var consultationPrice = DEFAULT_PRICE
+    private var specialty: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_payment)
 
         val doctorName = intent.getStringExtra(EXTRA_DOCTOR_NAME) ?: "Dr. Medecin"
+        specialty = intent.getStringExtra(EXTRA_SPECIALTY)
         currentOrderId = intent.getStringExtra(EXTRA_ORDER_ID)
             ?: "MC_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(8)}"
 
         findViewById<TextView>(R.id.doctorNameText).text = doctorName
-        findViewById<TextView>(R.id.amountText).text = "${CONSULTATION_PRICE} HTG"
+        findViewById<TextView>(R.id.amountText).text = "Chargement..."
         findViewById<android.widget.ImageButton>(R.id.btnBack).setOnClickListener { setResult(RESULT_CANCELED); finish() }
         findViewById<Button>(R.id.btnRetry).setOnClickListener { createPayment() }
 
@@ -65,7 +72,48 @@ class PaymentActivity : AppCompatActivity() {
         errorText = findViewById(R.id.errorText)
 
         setupWebView()
-        createPayment()
+
+        // Fetch specialty price then create payment
+        fetchSpecialtyPrice()
+    }
+
+    private fun fetchSpecialtyPrice() {
+        if (specialty.isNullOrBlank()) {
+            consultationPrice = DEFAULT_PRICE
+            findViewById<TextView>(R.id.amountText).text = "$consultationPrice HTG"
+            createPayment()
+            return
+        }
+
+        Thread {
+            try {
+                val encoded = java.net.URLEncoder.encode(specialty, "UTF-8")
+                val url = URL("$API_BASE/specialties/price?specialty=$encoded")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "GET"
+                conn.connectTimeout = 10000
+                conn.readTimeout = 10000
+                val code = conn.responseCode
+                if (code == 200) {
+                    val response = conn.inputStream.bufferedReader().readText()
+                    val json = JSONObject(response)
+                    consultationPrice = json.optInt("price", DEFAULT_PRICE)
+                    CrashLogger.log("[PRICE] Fetched price for $specialty: $consultationPrice HTG")
+                } else {
+                    consultationPrice = DEFAULT_PRICE
+                    CrashLogger.log("[PRICE] Failed to fetch price, using default: $DEFAULT_PRICE")
+                }
+                conn.disconnect()
+            } catch (e: Exception) {
+                consultationPrice = DEFAULT_PRICE
+                CrashLogger.log("[PRICE] Error fetching price: ${e.message}, using default")
+            }
+
+            runOnUiThread {
+                findViewById<TextView>(R.id.amountText).text = "$consultationPrice HTG"
+                createPayment()
+            }
+        }.start()
     }
 
     private fun setupWebView() {
@@ -81,14 +129,12 @@ class PaymentActivity : AppCompatActivity() {
                 val host = request.url.host ?: ""
                 CrashLogger.log("[MONCASH] WebView URL: $url")
 
-                // Catch custom app scheme from mock success page
                 if (scheme == "medika") {
                     CrashLogger.log("[MONCASH] App scheme detected, verifying payment")
                     verifyPayment()
                     return true
                 }
 
-                // Catch redirect away from MonCash domain (real mode)
                 if (host.isNotEmpty() && !host.contains("moncash") && !host.contains("digicel") && !host.contains("sandbox") && !host.contains("167.86.124.101")) {
                     CrashLogger.log("[MONCASH] External redirect detected, verifying payment")
                     verifyPayment()
@@ -115,7 +161,7 @@ class PaymentActivity : AppCompatActivity() {
             try {
                 val json = JSONObject()
                 json.put("orderId", currentOrderId)
-                json.put("amount", CONSULTATION_PRICE)
+                json.put("amount", consultationPrice)
                 val postData = json.toString()
                 val url = URL("$PAYMENT_SERVER/api/payment/create")
                 val conn = url.openConnection() as HttpURLConnection
@@ -127,7 +173,7 @@ class PaymentActivity : AppCompatActivity() {
                 conn.outputStream.write(postData.toByteArray())
                 conn.outputStream.flush()
                 val code = conn.responseCode
-                CrashLogger.log("[MONCASH] Create payment HTTP $code")
+                CrashLogger.log("[MONCASH] Create payment HTTP $code for $consultationPrice HTG")
                 if (code == 200) {
                     val response = conn.inputStream.bufferedReader().readText()
                     val respJson = JSONObject(response)
@@ -205,6 +251,7 @@ class PaymentActivity : AppCompatActivity() {
             putExtra(EXTRA_PAYMENT_SUCCESS, true)
             putExtra(EXTRA_TRANSACTION_ID, transactionId)
             putExtra(EXTRA_ORDER_ID, currentOrderId)
+            putExtra(EXTRA_CONSULTATION_PRICE, consultationPrice)
         }
         setResult(RESULT_OK, resultIntent)
         Toast.makeText(this, "Paiement reussi!", Toast.LENGTH_SHORT).show()
