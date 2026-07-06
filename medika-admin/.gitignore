@@ -1,0 +1,5 @@
+node_modules/
+.next/cache/
+.next/trace
+*.log
+.DS_Store
