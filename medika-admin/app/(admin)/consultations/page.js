@@ -45,7 +45,7 @@ export default function ConsultationsPage() {
     setViewMessages(cons);
     setLoadingMsgs(true);
     try {
-      const msgs = await apiFetch(`/admin/consultations/${cons.id}/messages`);
+      const msgs = await apiFetch('/admin/consultations/' + cons.id + '/messages');
       setMessages(msgs);
     } catch (e) { console.error(e); }
     finally { setLoadingMsgs(false); }
@@ -53,7 +53,7 @@ export default function ConsultationsPage() {
 
   const handleDelete = async (c) => {
     try {
-      await apiFetch(`/admin/consultations/${c.id}`, { method: 'DELETE' });
+      await apiFetch('/admin/consultations/' + c.id, { method: 'DELETE' });
       showToast('Consultation supprimee');
       setConfirmDelete(null);
       load();
@@ -103,11 +103,11 @@ export default function ConsultationsPage() {
                   </td>
                   <td><span className="badge badge-blue">{c.specialty_needed}</span></td>
                   <td>
-                    <span className={`badge ${c.urgency_level === 'Urgente' ? 'badge-red' : c.urgency_level === 'Faible' ? 'badge-green' : 'badge-yellow'}`}>
+                    <span className={'badge ' + (c.urgency_level === 'Urgente' ? 'badge-red' : c.urgency_level === 'Faible' ? 'badge-green' : 'badge-yellow')}>
                       {c.urgency_level}
                     </span>
                   </td>
-                  <td><span className={`badge ${statusBadge(c.status)}`}>{statusLabel(c.status)}</span></td>
+                  <td><span className={'badge ' + statusBadge(c.status)}>{statusLabel(c.status)}</span></td>
                   <td style={{ fontSize: 13 }}>{formatDate(c.created_at)}</td>
                   <td style={{ textAlign: 'center' }}>
                     <button className="btn btn-secondary btn-sm" onClick={() => openMessages(c)}>
@@ -132,7 +132,7 @@ export default function ConsultationsPage() {
             <div className="modal-header">
               <div>
                 <h2 style={{ fontSize: 16, fontWeight: 700 }}>Messages - {viewMessages.id}</h2>
-                <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>{viewMessages.patient_name} {viewMessages.doctor_name ? `<> ${viewMessages.doctor_name}` : ''}</div>
+                <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>{viewMessages.patient_name} {viewMessages.doctor_name || ''}</div>
               </div>
               <button onClick={() => setViewMessages(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
             </div>
@@ -194,7 +194,7 @@ export default function ConsultationsPage() {
         </div>
       )}
 
-      {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
+      {toast && <div className={'toast toast-' + toast.type}>{toast.msg}</div>}
     </div>
   );
 }
