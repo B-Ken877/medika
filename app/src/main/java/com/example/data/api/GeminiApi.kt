@@ -1,6 +1,8 @@
 package com.example.data.api
 
+import com.squareup.moshi.FromJson
 import com.squareup.moshi.Json
+import com.squareup.moshi.ToJson
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -33,7 +35,7 @@ data class RegisterRequest(
     val name: String,
     val email: String = "",
     val phone: String = "",
-    val age: Int = 0,
+    val age: Int? = null,
     val gender: String = "Homme"
 )
 
@@ -236,11 +238,22 @@ data class UploadResponse(
 
 // ─── Singleton Clients ───────────────────────────────────────────────────────
 
+
+// Handles backend sending "" or null for Int? fields
+class SafeIntJsonAdapter {
+    @FromJson fun fromJson(value: Any?): Int? = when (value) {
+        is Number -> value.toInt()
+        is String -> value.toIntOrNull()
+        else -> null
+    }
+    @ToJson fun toJson(value: Int?): Any? = value
+}
+
 object MedikaNetwork {
 
     const val BASE_URL = "http://167.86.124.101:3000/"
 
-    private val moshi = Moshi.Builder()
+    private val moshi = Moshi.Builder().add(SafeIntJsonAdapter())
         .addLast(KotlinJsonAdapterFactory())
         .build()
 
@@ -546,7 +559,7 @@ object MedikaNetwork {
                 return null
             }
             val parsed = try {
-                val moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
+                val moshi = Moshi.Builder().add(SafeIntJsonAdapter()).addLast(KotlinJsonAdapterFactory()).build()
                 val adapter = moshi.adapter(UploadResponse::class.java)
                 adapter.fromJson(body)
             } catch (e: Exception) {
