@@ -82,6 +82,9 @@ interface SanteDao {
     @Query("SELECT * FROM doctors")
     suspend fun getAllDoctors(): List<DoctorEntity>
 
+    @Query("SELECT * FROM doctors WHERE id = :id")
+    suspend fun getDoctorById(id: String): DoctorEntity?
+
     @Query("SELECT * FROM doctors WHERE specialty = :specialty AND isAvailable = 1")
     suspend fun getAvailableDoctorsBySpecialty(specialty: String): List<DoctorEntity>
 

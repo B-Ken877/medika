@@ -163,4 +163,6 @@ class SanteRepository(private val dao: SanteDao) {
             dao.updateDoctor(match.copy(isAvailable = isAvailable))
         }
     }
+
+    suspend fun getDoctorById(id: String): DoctorEntity? = dao.getDoctorById(id)
 }

@@ -206,6 +206,31 @@ class SanteViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.Lazily, null)
 
+    /** Display name of the chat peer (doctor name for patients, patient name for doctors). */
+    val peerDisplayNameForChat: StateFlow<String> = _activeConsultationId
+        .flatMapLatest { id ->
+            if (id == null) flowOf("")
+            else flow {
+                val consultation = repository.getConsultationById(id)
+                val auth = _authState.value
+                val name = when (auth) {
+                    is AuthState.PatientAuthenticated -> {
+                        val docId = consultation?.doctorId
+                        if (!docId.isNullOrBlank()) {
+                            val doc = repository.getDoctorById(docId)
+                            if (doc != null) "Dr. ${doc.name}" else "Medecin"
+                        } else "Medecin"
+                    }
+                    is AuthState.DoctorAuthenticated -> {
+                        consultation?.patientName ?: "Patient"
+                    }
+                    else -> "Consultation"
+                }
+                emit(name)
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.Lazily, "")
+
     val activeMessages: StateFlow<List<MessageEntity>> = _activeConsultationId
         .flatMapLatest { id ->
             if (id == null) flowOf(emptyList())
@@ -269,7 +294,7 @@ class SanteViewModel(
     private suspend fun downloadAbsoluteUrlToLocal(consultationId: String, absoluteUrl: String, messageType: String?): File? = withContext(Dispatchers.IO) {
         try {
             val dir = medikaMediaDir(consultationId)
-            val urlName = absoluteUrl.substringAfterLast('/').ifBlank { "media_${System.currentTimeMillis()}" }
+            val urlName = absoluteUrl.substringAfterLast('/').substringBefore('?').ifBlank { "media_${System.currentTimeMillis()}" }
             // Ensure proper extension based on type
             val ext = when (messageType) {
                 "voice" -> if (!urlName.endsWith(".m4a") && !urlName.endsWith(".aac") && !urlName.endsWith(".mp3")) ".m4a" else ""
@@ -591,7 +616,9 @@ class SanteViewModel(
         // Auto-download media into the per-consultation folder
         if (zimMsg.messageType != "text" && zimMsg.fileUrl != null) {
             val dir = medikaMediaDir(consultationId)
-            val fileName = zimMsg.fileUrl.substringAfterLast('/').ifBlank { "zim_${zimMsg.zimMessage.messageID}" }
+            // Strip query parameters from ZIM CDN URL for a valid filename
+            val rawName = zimMsg.fileUrl.substringAfterLast('/').ifBlank { "zim_${zimMsg.zimMessage.messageID}" }
+            val fileName = rawName.substringBefore('?').ifBlank { "zim_${zimMsg.zimMessage.messageID}" }
             val targetPath = java.io.File(dir, fileName).absolutePath
 
             viewModelScope.launch(Dispatchers.IO) {
@@ -2210,7 +2237,15 @@ class SanteViewModel(
 
     fun playVoiceMessage(message: MessageEntity) {
         stopVoicePlayback()
-        val path = message.localFilePath
+        var path = message.localFilePath
+
+        // If localFilePath is set but file doesn't exist (e.g. deleted, wrong path),
+        // clear it and fall through to on-demand download
+        if (!path.isNullOrBlank() && !File(path).exists()) {
+            com.example.CrashLogger.log("[VOICE] localFilePath exists but file missing: $path — will re-download")
+            path = null
+        }
+
         if (path.isNullOrBlank()) {
             // No local file — try on-demand download if we have a URL
             if (!message.fileUrl.isNullOrBlank()) {

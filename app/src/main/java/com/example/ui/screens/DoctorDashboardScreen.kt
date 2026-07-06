@@ -46,6 +46,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -148,6 +150,26 @@ fun DoctorDashboardScreen(
                 onNotificationClick = { onNavigate("notifications") }
             )
         }
+
+        // ══════════════════════════════════════════════════════════════
+        // FINANCE — Monthly + Overall earnings (750 HTG / consultation)
+        // ══════════════════════════════════════════════════════════════
+        val now = java.util.Calendar.getInstance()
+        val currentMonth = now.get(java.util.Calendar.MONTH)
+        val currentYear = now.get(java.util.Calendar.YEAR)
+        val monthlyCount = termines.count {
+            val cal = java.util.Calendar.getInstance().apply { timeInMillis = it.timestamp }
+            cal.get(java.util.Calendar.MONTH) == currentMonth && cal.get(java.util.Calendar.YEAR) == currentYear
+        }
+        val monthlyEarnings = monthlyCount * 750
+        val overallEarnings = termines.size * 750
+
+        FinanceCard(
+            monthlyEarnings = monthlyEarnings,
+            monthlyCount = monthlyCount,
+            overallEarnings = overallEarnings,
+            overallCount = termines.size
+        )
 
         Spacer(modifier = Modifier.height(20.dp))
 
@@ -410,8 +432,7 @@ private fun DoctorDashboardHeader(
                 ),
                 shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)
             )
-            .padding(top = 48.dp) // status bar space
-            .padding(horizontal = 20.dp, vertical = 20.dp)
+            .padding(start = 20.dp, top = 24.dp, end = 20.dp, bottom = 20.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1144,6 +1165,95 @@ private fun formatWaitingTime(timestamp: Long): String {
         else -> {
             val days = minutes / 1440
             "${days}j"
+        }
+    }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════
+// FinanceCard — Shows monthly and overall earnings for doctors
+// ═══════════════════════════════════════════════════════════════════════
+@Composable
+private fun FinanceCard(
+    monthlyEarnings: Int,
+    monthlyCount: Int,
+    overallEarnings: Int,
+    overallCount: Int,
+) {
+    val monthName = java.text.SimpleDateFormat("MMMM", java.util.Locale.FRENCH)
+        .format(java.util.Date())
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            // Monthly earnings
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(
+                    text = "Ce mois",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextSecondary,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "$monthlyEarnings HTG",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryGreen,
+                    ),
+                )
+                Text(
+                    text = "$monthlyCount consultation${if (monthlyCount != 1) "s" else ""}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextTertiary,
+                )
+            }
+
+            // Divider
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(48.dp)
+                    .background(Color(0xFFE0E0E0))
+            )
+
+            // Overall earnings
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(
+                    text = "Total",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextSecondary,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "$overallEarnings HTG",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                    ),
+                )
+                Text(
+                    text = "$overallCount consultation${if (overallCount != 1) "s" else ""}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextTertiary,
+                )
+            }
         }
     }
 }

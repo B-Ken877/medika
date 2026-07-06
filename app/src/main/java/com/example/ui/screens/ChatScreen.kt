@@ -123,14 +123,13 @@ fun ChatScreen(
         else -> "" to ""
     }
 
-    // Peer display name
-    val peerName = when (authState) {
-        is AuthState.PatientAuthenticated ->
-            activeConsultation?.patientName?.let { if (it.isNotBlank()) it else null }
-                ?.let { "Dr. $it" } ?: "M\u00e9decin"
-        is AuthState.DoctorAuthenticated ->
-            activeConsultation?.patientName ?: "Patient"
-        else -> "Consultation"
+    // Peer display name — resolved from ViewModel (looks up doctor name for patients)
+    val peerName by viewModel.peerDisplayNameForChat.collectAsStateWithLifecycle()
+    val effectivePeerName = peerName.ifBlank {
+        when (authState) {
+            is AuthState.DoctorAuthenticated -> activeConsultation?.patientName ?: "Patient"
+            else -> "Consultation"
+        }
     }
 
     // Peer user ID for call routing
@@ -179,7 +178,7 @@ fun ChatScreen(
     Scaffold(
         topBar = {
             ChatTopBar(
-                peerName = peerName,
+                peerName = effectivePeerName,
                 isOnline = wsConnected,
                 isTyping = isTyping,
                 onBack = onBack,
