@@ -25,7 +25,6 @@ class PaymentActivity : AppCompatActivity() {
     companion object {
         const val PAYMENT_SERVER = "http://167.86.124.101:9998"
         const val API_BASE = "http://167.86.124.101:3000/api"
-        const val DEFAULT_PRICE = 750
         const val EXTRA_DOCTOR_NAME = "doctor_name"
         const val EXTRA_ORDER_ID = "order_id"
         const val EXTRA_PAYMENT_SUCCESS = "payment_success"
@@ -49,7 +48,7 @@ class PaymentActivity : AppCompatActivity() {
     private lateinit var paymentInfoCard: LinearLayout
     private lateinit var errorText: TextView
     private var currentOrderId = ""
-    private var consultationPrice = DEFAULT_PRICE
+    private var consultationPrice = 0
     private var specialty: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,7 +63,7 @@ class PaymentActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.doctorNameText).text = doctorName
         findViewById<TextView>(R.id.amountText).text = "Chargement..."
         findViewById<android.widget.ImageButton>(R.id.btnBack).setOnClickListener { setResult(RESULT_CANCELED); finish() }
-        findViewById<Button>(R.id.btnRetry).setOnClickListener { createPayment() }
+        findViewById<Button>(R.id.btnRetry).setOnClickListener { fetchSpecialtyPrice() }
 
         webView = findViewById(R.id.paymentWebView)
         loadingContainer = findViewById(R.id.loadingContainer)
@@ -75,29 +74,43 @@ class PaymentActivity : AppCompatActivity() {
 
         setupWebView()
 
-        // Long press on amount text to simulate sandbox payment (for testing only)
+        // Long press on amount to simulate sandbox payment (testing only)
         val amountTv = findViewById<TextView>(R.id.amountText)
         amountTv.setOnLongClickListener {
-            Toast.makeText(this, "MODE TEST: Paiement simule", Toast.LENGTH_SHORT).show()
-            CrashLogger.log("[MONCASH] Sandbox test mode triggered - simulating success")
-            paymentSuccess("SANDBOX_TEST_${System.currentTimeMillis()}")
+            if (consultationPrice > 0) {
+                Toast.makeText(this, "MODE TEST: Paiement simule", Toast.LENGTH_SHORT).show()
+                CrashLogger.log("[MONCASH] Sandbox test mode - simulating success for $consultationPrice HTG")
+                paymentSuccess("SANDBOX_TEST_${System.currentTimeMillis()}")
+            }
             true
         }
 
-        // Fetch specialty price then create payment
+        // Fetch the admin-set price for this specialty
         fetchSpecialtyPrice()
     }
 
+    /**
+     * Fetches the consultation price from the backend API.
+     * The admin sets prices per specialty in the admin panel.
+     * This is NOT hardcoded — it comes from GET /api/specialties/price
+     * Falls back to GET /api/specialties/prices (full list) if single lookup fails.
+     */
     private fun fetchSpecialtyPrice() {
+        loadingContainer.visibility = android.view.View.VISIBLE
+        webView.visibility = android.view.View.GONE
+        verifyContainer.visibility = android.view.View.GONE
+        errorContainer.visibility = android.view.View.GONE
+        paymentInfoCard.visibility = android.view.View.VISIBLE
+
         if (specialty.isNullOrBlank()) {
-            consultationPrice = DEFAULT_PRICE
-            findViewById<TextView>(R.id.amountText).text = "$consultationPrice HTG"
-            createPayment()
+            showError("Specialite non determinee. Veuillez reessayer.")
+            CrashLogger.log("[PRICE] Specialty is null or blank")
             return
         }
 
         Thread {
             try {
+                // Step 1: Try exact specialty price lookup
                 val encoded = java.net.URLEncoder.encode(specialty, "UTF-8")
                 val url = URL("$API_BASE/specialties/price?specialty=$encoded")
                 val conn = url.openConnection() as HttpURLConnection
@@ -105,24 +118,81 @@ class PaymentActivity : AppCompatActivity() {
                 conn.connectTimeout = 10000
                 conn.readTimeout = 10000
                 val code = conn.responseCode
+
                 if (code == 200) {
                     val response = conn.inputStream.bufferedReader().readText()
                     val json = JSONObject(response)
-                    consultationPrice = json.optInt("price", DEFAULT_PRICE)
-                    CrashLogger.log("[PRICE] Fetched price for $specialty: $consultationPrice HTG")
-                } else {
-                    consultationPrice = DEFAULT_PRICE
-                    CrashLogger.log("[PRICE] Failed to fetch price, using default: $DEFAULT_PRICE")
+                    val fetchedPrice = json.optInt("price", 0)
+                    CrashLogger.log("[PRICE] Fetched price for '$specialty': $fetchedPrice HTG (HTTP $code)")
+
+                    if (fetchedPrice > 0) {
+                        consultationPrice = fetchedPrice
+                        runOnUiThread {
+                            findViewById<TextView>(R.id.amountText).text = "$consultationPrice HTG"
+                            createPayment()
+                        }
+                        conn.disconnect()
+                        return@Thread
+                    }
                 }
                 conn.disconnect()
-            } catch (e: Exception) {
-                consultationPrice = DEFAULT_PRICE
-                CrashLogger.log("[PRICE] Error fetching price: ${e.message}, using default")
-            }
 
-            runOnUiThread {
-                findViewById<TextView>(R.id.amountText).text = "$consultationPrice HTG"
-                createPayment()
+                // Step 2: Fallback — fetch all prices and find matching specialty
+                CrashLogger.log("[PRICE] Single lookup failed or price=0, fetching all prices...")
+                val allUrl = URL("$API_BASE/specialties/prices")
+                val allConn = allUrl.openConnection() as HttpURLConnection
+                allConn.requestMethod = "GET"
+                allConn.connectTimeout = 10000
+                allConn.readTimeout = 10000
+                val allCode = allConn.responseCode
+
+                if (allCode == 200) {
+                    val allResponse = allConn.inputStream.bufferedReader().readText()
+                    val arr = org.json.JSONArray(allResponse)
+                    var matchedPrice = 0
+
+                    // Exact match first
+                    for (i in 0 until arr.length()) {
+                        val item = arr.getJSONObject(i)
+                        if (item.optString("name", "").equals(specialty, ignoreCase = true)) {
+                            matchedPrice = item.optInt("price", 0)
+                            break
+                        }
+                    }
+
+                    // Partial match if exact failed
+                    if (matchedPrice == 0) {
+                        val specLower = specialty!!.lowercase()
+                        for (i in 0 until arr.length()) {
+                            val item = arr.getJSONObject(i)
+                            val nameLower = item.optString("name", "").lowercase()
+                            if (nameLower.contains(specLower) || specLower.contains(nameLower)) {
+                                matchedPrice = item.optInt("price", 0)
+                                if (matchedPrice > 0) break
+                            }
+                        }
+                    }
+
+                    CrashLogger.log("[PRICE] Fallback lookup for '$specialty': $matchedPrice HTG")
+                    allConn.disconnect()
+
+                    if (matchedPrice > 0) {
+                        consultationPrice = matchedPrice
+                        runOnUiThread {
+                            findViewById<TextView>(R.id.amountText).text = "$consultationPrice HTG"
+                            createPayment()
+                        }
+                        return@Thread
+                    }
+                }
+                allConn.disconnect()
+
+                // No price found at all
+                runOnUiThread { showError("Prix non configure pour '$specialty'. L'administrateur doit definir le prix dans le panneau d'administration.") }
+
+            } catch (e: Exception) {
+                CrashLogger.log("[PRICE] Error fetching price: ${e.message}")
+                runOnUiThread { showError("Erreur de connexion au serveur. Verifiez votre connexion internet et reessayez.") }
             }
         }.start()
     }
@@ -133,33 +203,20 @@ class PaymentActivity : AppCompatActivity() {
         function checkForErrors() {
             var body = document.body ? document.body.innerText : '';
             var errorMsg = '';
-            
             if (body.indexOf('does not exist') !== -1 || body.indexOf('n\\'existe pas') !== -1 || body.indexOf('invalide') !== -1) {
                 errorMsg = 'SANDBOX_ERROR';
             } else if (body.indexOf('Transaction Id: 0') !== -1) {
                 errorMsg = 'SANDBOX_ERROR';
             } else if (body.indexOf('expired') !== -1 || body.indexOf('expiree') !== -1) {
                 errorMsg = 'EXPIRED';
-            } else if (body.indexOf('erreur') !== -1 || body.indexOf('error') !== -1) {
-                if (body.indexOf('identifiant') !== -1 || body.indexOf('identifier') !== -1) {
-                    errorMsg = 'SANDBOX_ERROR';
-                }
+            } else if (body.indexOf('identifiant') !== -1 && (body.indexOf('invalide') !== -1 || body.indexOf('exist') !== -1)) {
+                errorMsg = 'SANDBOX_ERROR';
             }
-            
-            if (errorMsg) {
-                console.log('MONCASH_ERROR_DETECTED:' + errorMsg);
-            }
+            if (errorMsg) { console.log('MONCASH_ERROR_DETECTED:' + errorMsg); }
         }
-        
-        // Check every 1 second
         setInterval(checkForErrors, 1000);
-        // Also check after DOM mutations
         var observer = new MutationObserver(function() { checkForErrors(); });
-        if (document.body) {
-            observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-        }
-        
-        // Initial check
+        if (document.body) { observer.observe(document.body, { childList: true, subtree: true, characterData: true }); }
         setTimeout(checkForErrors, 500);
     })();
     """.trimIndent()
@@ -194,7 +251,6 @@ class PaymentActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView, url: String?) {
                 super.onPageFinished(view, url)
                 CrashLogger.log("[MONCASH] Page finished: $url")
-                // Inject error detection script on MonCash pages
                 if (url != null && (url.contains("moncash") || url.contains("digicel") || url.contains("sandbox"))) {
                     view.evaluateJavascript(errorDetectionJs, null)
                 }
@@ -208,20 +264,14 @@ class PaymentActivity : AppCompatActivity() {
                     CrashLogger.log("[MONCASH] Error detected in WebView: $errorType")
                     runOnUiThread {
                         when (errorType) {
-                            "SANDBOX_ERROR" -> {
-                                showError(
-                                    "Mode Test MonCash: Votre numero n'est pas enregistré " +
-                                    "comme compte test. Appuyez longuement sur le montant pour " +
-                                    "simuler un paiement réussi, ou contactez Digicel pour activer " +
-                                    "le mode production."
-                                )
-                            }
-                            "EXPIRED" -> {
-                                showError("La session de paiement a expiré. Veuillez réessayer.")
-                            }
-                            else -> {
-                                showError("Erreur de paiement détectée. Veuillez réessayer.")
-                            }
+                            "SANDBOX_ERROR" -> showError(
+                                "Mode Test MonCash: Votre numero n'est pas enregistre " +
+                                "comme compte test. Appuyez longuement sur le montant pour " +
+                                "simuler un paiement reussi, ou contactez Digicel pour activer " +
+                                "le mode production."
+                            )
+                            "EXPIRED" -> showError("La session de paiement a expire. Veuillez reessayer.")
+                            else -> showError("Erreur de paiement detectee. Veuillez reessayer.")
                         }
                     }
                 }
@@ -231,6 +281,11 @@ class PaymentActivity : AppCompatActivity() {
     }
 
     private fun createPayment() {
+        if (consultationPrice <= 0) {
+            showError("Montant invalide. Veuillez reessayer.")
+            return
+        }
+
         loadingContainer.visibility = android.view.View.VISIBLE
         webView.visibility = android.view.View.GONE
         verifyContainer.visibility = android.view.View.GONE
