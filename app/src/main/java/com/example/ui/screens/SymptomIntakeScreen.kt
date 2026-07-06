@@ -125,11 +125,16 @@ fun SymptomIntakeScreen(viewModel: SanteViewModel) {
         if (result.resultCode == android.app.Activity.RESULT_OK) {
             val success = result.data?.getBooleanExtra(PaymentActivity.EXTRA_PAYMENT_SUCCESS, false) ?: false
             val txId = result.data?.getStringExtra(PaymentActivity.EXTRA_TRANSACTION_ID) ?: ""
+            val price = result.data?.getIntExtra(PaymentActivity.EXTRA_CONSULTATION_PRICE, 0) ?: 0
+            val oId = result.data?.getStringExtra(PaymentActivity.EXTRA_ORDER_ID) ?: ""
             if (success && pendingDoctor != null) {
                 viewModel.selectDoctorAndSendRequest(
                     doctor = pendingDoctor!!,
                     symptomText = pendingSymptom,
-                    category = pendingCategory
+                    category = pendingCategory,
+                    transactionId = if (txId.isNotEmpty()) txId else null,
+                    paymentAmount = if (price > 0) price else null,
+                    orderId = if (oId.isNotEmpty()) oId else null
                 )
                 pendingDoctor = null
             }

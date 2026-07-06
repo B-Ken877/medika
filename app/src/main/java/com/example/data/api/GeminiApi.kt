@@ -71,7 +71,10 @@ data class CreateConsultationRequest(
     val aiSummary: String,
     val aiExplanation: String,
     val doctorId: String? = null,
-    val patientAge: Int? = null
+    val patientAge: Int? = null,
+    val transactionId: String? = null,
+    val paymentAmount: Int? = null,
+    val orderId: String? = null
 )
 
 @JsonClass(generateAdapter = true)

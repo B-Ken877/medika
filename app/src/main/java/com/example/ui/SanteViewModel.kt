@@ -1482,7 +1482,7 @@ class SanteViewModel(
         }
     }
 
-    fun selectDoctorAndSendRequest(doctor: DoctorEntity, symptomText: String, category: String) {
+    fun selectDoctorAndSendRequest(doctor: DoctorEntity, symptomText: String, category: String, transactionId: String? = null, paymentAmount: Int? = null, orderId: String? = null) {
         viewModelScope.launch {
             try {
                 val profile = repository.getPatientProfile() ?: PatientProfileEntity(
@@ -1499,7 +1499,10 @@ class SanteViewModel(
                         aiSummary = "Consultation $category - $symptomText",
                         aiExplanation = "",
                         doctorId = doctor.id,
-                        patientAge = profile.age
+                        patientAge = profile.age,
+                        transactionId = transactionId,
+                        paymentAmount = paymentAmount,
+                        orderId = orderId
                     )
                 )
 
