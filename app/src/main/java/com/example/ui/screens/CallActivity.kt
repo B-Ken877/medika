@@ -254,6 +254,7 @@ class CallActivity : AppCompatActivity() {
         try {
             com.example.data.api.MedikaNetwork.sendCallEnd(consultationId)
         } catch (_: Throwable) {}
-        try { engine?.leaveChannel(); RtcEngine.destroy() } catch (_: Throwable) {}
+        try { engine?.leaveChannel() } catch (_: Throwable) {}
+        engine = null
     }
 }

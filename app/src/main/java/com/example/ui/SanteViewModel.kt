@@ -1665,7 +1665,9 @@ class SanteViewModel(
     // ─── Outgoing Call ─────────────────────────────────
 
     fun startCall(consultationId: String, peerName: String, peerAvatar: String?, isVideo: Boolean) {
-        if (_activeCall.value != null) return
+        if (_activeCall.value != null) {
+            _activeCall.value = null
+        }
 
         val app = getApplication<Application>()
         if (!hasCallPermissions(app, isVideo)) {
@@ -1948,6 +1950,8 @@ class SanteViewModel(
         _livekitConnected.value = false
 
         val current = _activeCall.value
+        _activeCall.value = null  // Clear immediately so next call works
+
         viewModelScope.launch {
             if (current != null && current.status == CallStatus.ACTIVE) {
                 val formattedTime = String.format("%02d:%02d", current.durationSeconds / 60, current.durationSeconds % 60)
@@ -1958,8 +1962,7 @@ class SanteViewModel(
                     )
                 }
             }
-            delay(500)
-            _activeCall.value = null
+            // _activeCall already cleared below
         }
     }
 
