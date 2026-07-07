@@ -4,17 +4,35 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
   LayoutDashboard, Users, MessageSquare, DollarSign,
-  LogOut, Menu, X, Stethoscope, Tag
+  LogOut, Menu, X, Stethoscope, Tag, Activity,
+  ChevronRight
 } from 'lucide-react';
 
 const navItems = [
   { href: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
-  { href: '/doctors', label: 'Medecins', icon: Stethoscope },
+  { href: '/doctors', label: 'Médecins', icon: Stethoscope },
   { href: '/patients', label: 'Patients', icon: Users },
   { href: '/consultations', label: 'Consultations', icon: MessageSquare },
   { href: '/tarification', label: 'Tarification', icon: Tag },
   { href: '/finance', label: 'Finance', icon: DollarSign },
 ];
+
+function NavLink({ item, isActive, onClick }) {
+  const Icon = item.icon;
+  return (
+    <Link
+      href={item.href}
+      className={`sidebar-link ${isActive ? 'active' : ''}`}
+      onClick={onClick}
+    >
+      <Icon size={16} className="nav-icon" />
+      <span style={{ flex: 1 }}>{item.label}</span>
+      {isActive && (
+        <ChevronRight size={13} style={{ opacity: 0.5 }} />
+      )}
+    </Link>
+  );
+}
 
 export default function AdminLayout({ children }) {
   const router = useRouter();
@@ -37,90 +55,164 @@ export default function AdminLayout({ children }) {
 
   if (!user) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
-        <div className="spinner" />
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        height: '100vh', background: 'var(--bg-app)'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 12,
+            background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#fff', fontWeight: 800, fontSize: 20, margin: '0 auto 16px',
+            boxShadow: '0 0 0 1px rgba(5,150,105,0.3), 0 4px 10px rgba(5,150,105,0.3)'
+          }}>M</div>
+          <div className="spinner" style={{ margin: '0 auto' }} />
+        </div>
       </div>
     );
   }
 
-  const currentPage = navItems.find(n => pathname === n.href || (n.href !== '/dashboard' && pathname.startsWith(n.href)));
+  const currentPage = navItems.find(
+    n => pathname === n.href || (n.href !== '/dashboard' && pathname.startsWith(n.href))
+  );
+
+  const initials = user.name?.split(' ').map(w => w[0]).slice(0, 2).join('') || 'A';
+  const today = new Date().toLocaleDateString('fr-FR', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+  });
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
+
+      {/* Mobile overlay */}
       {sidebarOpen && (
-        <div onClick={() => setSidebarOpen(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 35 }} />
+        <div
+          onClick={() => setSidebarOpen(false)}
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(8,13,24,0.6)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 35,
+            animation: 'fadeIn 150ms ease'
+          }}
+        />
       )}
 
+      {/* Sidebar */}
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
-        <div style={{ padding: '24px 20px', borderBottom: '1px solid #1f2937' }}>
+
+        {/* Logo */}
+        <div className="sidebar-logo-area">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              width: 36, height: 36, borderRadius: 10, background: '#059669',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', fontWeight: 700, fontSize: 16
-            }}>M</div>
+            <div className="sidebar-logo-mark">M</div>
             <div>
-              <div style={{ fontWeight: 700, fontSize: 16, color: '#fff' }}>Medika</div>
-              <div style={{ fontSize: 11, color: '#9ca3af' }}>Administration</div>
+              <div style={{
+                fontWeight: 800, fontSize: 15, color: '#fff',
+                letterSpacing: '-0.03em', lineHeight: 1.2
+              }}>Medika</div>
+              <div style={{
+                fontSize: 10, color: 'rgba(139,151,176,0.7)',
+                fontWeight: 600, letterSpacing: '0.04em',
+                textTransform: 'uppercase', marginTop: 1
+              }}>Administration</div>
             </div>
           </div>
         </div>
 
-        <nav style={{ padding: '12px 0' }}>
+        {/* Navigation */}
+        <nav className="sidebar-nav">
+          <div className="sidebar-section-label">Navigation</div>
           {navItems.map(item => {
-            const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
-            const Icon = item.icon;
+            const isActive = pathname === item.href ||
+              (item.href !== '/dashboard' && pathname.startsWith(item.href));
             return (
-              <Link key={item.href} href={item.href}
-                className={`sidebar-link ${isActive ? 'active' : ''}`}
-                onClick={() => setSidebarOpen(false)}>
-                <Icon size={18} />
-                {item.label}
-              </Link>
+              <NavLink
+                key={item.href}
+                item={item}
+                isActive={isActive}
+                onClick={() => setSidebarOpen(false)}
+              />
             );
           })}
         </nav>
 
-        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '16px', borderTop: '1px solid #1f2937' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: '50%', background: '#374151',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#d1d5db', fontSize: 13, fontWeight: 600
-            }}>{user.name?.charAt(0) || 'A'}</div>
+        {/* Footer */}
+        <div className="sidebar-footer">
+          <div className="sidebar-user">
+            <div className="sidebar-avatar">{initials}</div>
             <div style={{ flex: 1, overflow: 'hidden' }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#e5e7eb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {user.name}
-              </div>
-              <div style={{ fontSize: 11, color: '#6b7280' }}>Administrateur</div>
+              <div style={{
+                fontSize: 12.5, fontWeight: 700, color: '#E2E8F0',
+                letterSpacing: '-0.01em',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+              }}>{user.name}</div>
+              <div style={{
+                fontSize: 11, color: 'rgba(139,151,176,0.6)',
+                marginTop: 1, fontWeight: 500
+              }}>Administrateur</div>
             </div>
+            <div style={{
+              width: 8, height: 8, borderRadius: '50%',
+              background: '#10B981', flexShrink: 0,
+              boxShadow: '0 0 0 2px rgba(16,185,129,0.2)'
+            }} />
           </div>
-          <button className="sidebar-link" onClick={logout} style={{ width: '100%', margin: 0, color: '#ef4444' }}>
-            <LogOut size={18} />
-            Deconnexion
+          <button
+            className="sidebar-link"
+            onClick={logout}
+            style={{ color: '#F87171', margin: 0, width: '100%' }}
+          >
+            <LogOut size={15} className="nav-icon" />
+            <span>Déconnexion</span>
           </button>
         </div>
       </aside>
 
+      {/* Main */}
       <main className="main-content">
-        <header style={{
-          background: '#fff', borderBottom: '1px solid #e5e7eb', padding: '12px 24px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 30
-        }}>
-          <button onClick={() => setSidebarOpen(!sidebarOpen)}
-            style={{ display: 'none', background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}
-            className="mobile-menu-btn">
-            {sidebarOpen ? <X size={22} /> : <Menu size={22} />}
-          </button>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#111827' }}>
-            {currentPage?.label || 'Medika'}
+
+        {/* Top bar */}
+        <header className="topbar">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="mobile-menu-btn btn btn-secondary btn-icon"
+            >
+              {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {currentPage && (
+                <>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Medika</span>
+                  <ChevronRight size={12} color="var(--text-placeholder)" />
+                  <span style={{
+                    fontSize: 14, fontWeight: 700, color: 'var(--text-primary)',
+                    letterSpacing: '-0.02em'
+                  }}>{currentPage.label}</span>
+                </>
+              )}
+            </div>
           </div>
-          <div style={{ fontSize: 13, color: '#6b7280' }}>
-            {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{
+                width: 7, height: 7, borderRadius: '50%',
+                background: '#10B981',
+                boxShadow: '0 0 0 2px rgba(16,185,129,0.15)'
+              }} />
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>
+                {today}
+              </span>
+            </div>
           </div>
         </header>
-        <div style={{ padding: 24 }}>{children}</div>
+
+        <div className="page-content">
+          {children}
+        </div>
       </main>
     </div>
   );

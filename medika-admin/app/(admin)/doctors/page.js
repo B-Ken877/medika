@@ -1,14 +1,14 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch, formatCurrency, formatDate } from '../../../lib/api';
-import { Plus, Search, Edit2, Trash2, Key, Eye, EyeOff, X, Check } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Key, Eye, EyeOff, X, Check, Stethoscope, Filter, AlertTriangle } from 'lucide-react';
 
 const SPECIALTIES = [
-  'Medecine Generale', 'Cardiologie', 'Dermatologie', 'Endocrinologie',
-  'Gastro-enterologie', 'Gynecologie', 'Neurologie', 'Ophtalmologie',
-  'ORL', 'Pediatrie', 'Psychiatrie', 'Pneumologie', 'Radiologie',
-  'Rhumatologie', 'Urologie', 'Chirurgie Generale', 'Orthopedie',
-  'Odontologie', 'Nutrition', 'Medecine Interne'
+  'Médecine Générale', 'Cardiologie', 'Dermatologie', 'Endocrinologie',
+  'Gastro-entérologie', 'Gynécologie', 'Neurologie', 'Ophtalmologie',
+  'ORL', 'Pédiatrie', 'Psychiatrie', 'Pneumologie', 'Radiologie',
+  'Rhumatologie', 'Urologie', 'Chirurgie Générale', 'Orthopédie',
+  'Odontologie', 'Nutrition', 'Médecine Interne'
 ];
 
 const emptyForm = {
@@ -16,6 +16,30 @@ const emptyForm = {
   gender: 'Homme', specialty: '', licenseNumber: '', location: '',
   hospital: '', biography: '', avatarUrl: ''
 };
+
+function DoctorAvatar({ doc, size = 38 }) {
+  if (doc.avatar_url) {
+    return (
+      <img
+        src={doc.avatar_url}
+        alt={doc.name}
+        style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '2px solid var(--border)' }}
+      />
+    );
+  }
+  const initials = doc.name?.split(' ').map(w => w[0]).slice(0, 2).join('') || '?';
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%',
+      background: 'linear-gradient(135deg, #DCFCE7, #A7F3D0)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      color: '#059669', fontWeight: 800, fontSize: size * 0.35, flexShrink: 0,
+      border: '2px solid rgba(5,150,105,0.15)',
+    }}>
+      {initials}
+    </div>
+  );
+}
 
 export default function DoctorsPage() {
   const [doctors, setDoctors] = useState([]);
@@ -59,7 +83,7 @@ export default function DoctorsPage() {
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 3500);
   };
 
   const updateField = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
@@ -98,11 +122,11 @@ export default function DoctorsPage() {
     try {
       if (editing) {
         await apiFetch(`/admin/doctors/${editing.id}`, { method: 'PUT', body: JSON.stringify(form) });
-        showToast(`${form.name} mis a jour`);
+        showToast(`${form.name} mis à jour avec succès`);
       } else {
         if (!form.password) { showToast('Le mot de passe est requis', 'error'); setSubmitting(false); return; }
         await apiFetch('/admin/doctors', { method: 'POST', body: JSON.stringify(form) });
-        showToast(`${form.name} cree avec succes`);
+        showToast(`Dr. ${form.name} créé avec succès`);
       }
       setShowForm(false);
       load();
@@ -113,17 +137,17 @@ export default function DoctorsPage() {
   const handleDelete = async (doc) => {
     try {
       await apiFetch(`/admin/doctors/${doc.id}`, { method: 'DELETE' });
-      showToast(`${doc.name} supprime`);
+      showToast(`${doc.name} supprimé`);
       setConfirmDelete(null);
       load();
     } catch (e) { showToast(e.message, 'error'); }
   };
 
   const handleResetPw = async () => {
-    if (!newPw || newPw.length < 4) { showToast('Minimum 4 caracteres', 'error'); return; }
+    if (!newPw || newPw.length < 4) { showToast('Minimum 4 caractères', 'error'); return; }
     try {
       await apiFetch(`/admin/users/${resetPw.id}/reset-password`, { method: 'PUT', body: JSON.stringify({ newPassword: newPw }) });
-      showToast(`Mot de passe reinitialise pour ${resetPw.name}`);
+      showToast(`Mot de passe réinitialisé pour ${resetPw.name}`);
       setResetPw(null);
       setNewPw('');
     } catch (e) { showToast(e.message, 'error'); }
@@ -133,148 +157,214 @@ export default function DoctorsPage() {
     try {
       const newVal = !doc.is_available;
       await apiFetch(`/admin/doctors/${doc.id}`, { method: 'PUT', body: JSON.stringify({ isAvailable: newVal }) });
-      showToast(`${doc.name} ${newVal ? 'disponible' : 'indisponible'}`);
       load();
     } catch (e) { showToast(e.message, 'error'); }
   };
 
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}><div className="spinner" /></div>;
-
   const usedSpecialties = [...new Set(doctors.map(d => d.specialty).filter(Boolean))];
 
   return (
-    <div>
-      {/* Toolbar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', flex: 1 }}>
-          <div className="search-box" style={{ flex: 1, minWidth: 200 }}>
-            <Search size={16} className="search-icon" />
-            <input className="form-input" placeholder="Rechercher un medecin..." value={search} onChange={e => setSearch(e.target.value)} />
-          </div>
-          <select className="form-input" style={{ width: 'auto', minWidth: 180 }} value={filterSpecialty} onChange={e => setFilterSpecialty(e.target.value)}>
-            <option value="">Toutes les specialites</option>
-            {usedSpecialties.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
+    <div style={{ animation: 'slideUp 200ms ease' }}>
+
+      {/* Header */}
+      <div style={{ marginBottom: 28 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+          Gestion du personnel médical
         </div>
-        <button className="btn btn-primary" onClick={openCreate}><Plus size={16} /> Ajouter un medecin</button>
+        <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.04em' }}>
+          Médecins
+        </h1>
       </div>
 
-      <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 12 }}>{filtered.length} medecin(s) trouve(s)</div>
+      {/* Toolbar */}
+      <div className="toolbar">
+        <div className="toolbar-left">
+          <div className="search-box" style={{ flex: 1, minWidth: 220, maxWidth: 340 }}>
+            <Search size={15} className="search-icon" />
+            <input
+              className="form-input"
+              placeholder="Rechercher un médecin..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <Filter size={14} style={{ position: 'absolute', left: 10, color: 'var(--text-muted)', pointerEvents: 'none' }} />
+            <select
+              className="form-input"
+              style={{ paddingLeft: 30, width: 'auto', minWidth: 180 }}
+              value={filterSpecialty}
+              onChange={e => setFilterSpecialty(e.target.value)}
+            >
+              <option value="">Toutes les spécialités</option>
+              {usedSpecialties.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+        </div>
+        <button className="btn btn-primary" onClick={openCreate}>
+          <Plus size={16} /> Ajouter un médecin
+        </button>
+      </div>
+
+      {/* Count */}
+      {!loading && (
+        <div className="count-label">
+          <span className="count-pill">{filtered.length}</span>
+          médecin{filtered.length !== 1 ? 's' : ''} trouvé{filtered.length !== 1 ? 's' : ''}
+        </div>
+      )}
 
       {/* Table */}
       <div className="card" style={{ overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="data-table">
-            <thead><tr>
-              <th>Medecin</th><th>Specialite</th><th>Contact</th>
-              <th style={{ textAlign: 'center' }}>Statut</th><th style={{ textAlign: 'right' }}>Consult.</th>
-              <th style={{ textAlign: 'right' }}>Gains</th><th style={{ textAlign: 'center' }}>Actions</th>
-            </tr></thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr><td colSpan={7} className="empty-state">Aucun medecin trouve</td></tr>
-              ) : filtered.map(doc => (
-                <tr key={doc.id}>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      {doc.avatar_url ? (
-                        <img src={doc.avatar_url} alt="" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
-                      ) : (
-                        <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669', fontWeight: 700, fontSize: 14 }}>
-                          {doc.name?.charAt(0)}
-                        </div>
-                      )}
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>{doc.name}</div>
-                        <div style={{ fontSize: 12, color: '#6b7280' }}>@{doc.username}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td><span className="badge badge-blue">{doc.specialty || 'N/A'}</span></td>
-                  <td>
-                    <div style={{ fontSize: 13 }}>{doc.email || '-'}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>{doc.phone || '-'}</div>
-                  </td>
-                  <td style={{ textAlign: 'center' }}>
-                    <button onClick={() => toggleAvailability(doc)}
-                      className={`badge ${doc.is_available ? 'badge-green' : 'badge-gray'}`}
-                      style={{ cursor: 'pointer', border: 'none' }}>
-                      {doc.is_available ? 'Disponible' : 'Indisponible'}
-                    </button>
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <div>{doc.consultationCount || 0}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>{doc.completedCount || 0} terminees</div>
-                  </td>
-                  <td style={{ textAlign: 'right', fontWeight: 600, color: '#059669' }}>{formatCurrency(doc.totalEarnings || 0)}</td>
-                  <td style={{ textAlign: 'center' }}>
-                    <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-                      <button className="btn btn-secondary btn-sm" onClick={() => openEdit(doc)} title="Modifier"><Edit2 size={14} /></button>
-                      <button className="btn btn-secondary btn-sm" onClick={() => setResetPw(doc)} title="Reset MDP"><Key size={14} /></button>
-                      <button className="btn btn-danger btn-sm" onClick={() => setConfirmDelete(doc)} title="Supprimer"><Trash2 size={14} /></button>
-                    </div>
-                  </td>
+        {loading ? (
+          <div style={{ padding: 48, display: 'flex', justifyContent: 'center' }}>
+            <div className="spinner" />
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Médecin</th>
+                  <th>Spécialité</th>
+                  <th>Contact</th>
+                  <th style={{ textAlign: 'center' }}>Disponibilité</th>
+                  <th style={{ textAlign: 'right' }}>Consultations</th>
+                  <th style={{ textAlign: 'right' }}>Gains totaux</th>
+                  <th style={{ textAlign: 'center' }}>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={7}>
+                      <div className="empty-state">
+                        <div className="empty-state-icon"><Stethoscope size={22} /></div>
+                        <p>Aucun médecin trouvé</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filtered.map(doc => (
+                  <tr key={doc.id}>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <DoctorAvatar doc={doc} />
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text-primary)' }}>{doc.name}</div>
+                          <div style={{ fontSize: 11.5, color: 'var(--text-muted)', fontFamily: 'monospace' }}>@{doc.username}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span className="badge badge-blue">{doc.specialty || 'N/A'}</span>
+                    </td>
+                    <td>
+                      <div style={{ fontSize: 13, color: 'var(--text-primary)' }}>{doc.email || '—'}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{doc.phone || '—'}</div>
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <button
+                        onClick={() => toggleAvailability(doc)}
+                        className={`avail-btn ${doc.is_available ? 'badge-green' : 'badge-gray'}`}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        {doc.is_available ? '● Disponible' : '○ Indisponible'}
+                      </button>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <div style={{ fontWeight: 700 }}>{doc.consultationCount || 0}</div>
+                      <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                        {doc.completedCount || 0} terminées
+                      </div>
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669' }}>
+                      {formatCurrency(doc.totalEarnings || 0)}
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                        <button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(doc)} title="Modifier">
+                          <Edit2 size={13} />
+                        </button>
+                        <button className="btn btn-secondary btn-sm btn-icon" onClick={() => setResetPw(doc)} title="Réinitialiser MDP">
+                          <Key size={13} />
+                        </button>
+                        <button className="btn btn-danger btn-sm btn-icon" onClick={() => setConfirmDelete(doc)} title="Supprimer">
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Create/Edit Modal */}
       {showForm && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowForm(false); }}>
-          <div className="modal-content">
+          <div className="modal-content" style={{ maxWidth: 680 }}>
             <div className="modal-header">
-              <h2 style={{ fontSize: 16, fontWeight: 700 }}>{editing ? 'Modifier le medecin' : 'Nouveau medecin'}</h2>
-              <button onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
+              <div>
+                <h2 style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
+                  {editing ? 'Modifier le médecin' : 'Nouveau médecin'}
+                </h2>
+                <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 2 }}>
+                  {editing ? `Mise à jour du profil de ${editing.name}` : 'Créer un nouveau compte praticien'}
+                </p>
+              </div>
+              <button className="modal-close-btn" onClick={() => setShowForm(false)}>
+                <X size={16} />
+              </button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="modal-body">
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="form-grid">
                   <div className="form-group">
                     <label className="form-label">Nom complet *</label>
-                    <input className="form-input" value={form.name} onChange={e => updateField('name', e.target.value)} required />
+                    <input className="form-input" value={form.name} onChange={e => updateField('name', e.target.value)} required placeholder="Dr. Jean Dupont" />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Nom d&apos;utilisateur *</label>
-                    <input className="form-input" value={form.username} onChange={e => updateField('username', e.target.value)} required disabled={!!editing} />
+                    <input className="form-input" value={form.username} onChange={e => updateField('username', e.target.value)} required disabled={!!editing} placeholder="jean.dupont" />
                   </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="form-grid">
                   <div className="form-group">
-                    <label className="form-label">Mot de passe {editing ? '(laisser vide pour garder)' : '*'}</label>
+                    <label className="form-label">Mot de passe {editing ? '(laisser vide)' : '*'}</label>
                     <div style={{ position: 'relative' }}>
                       <input className="form-input" type={showPassword ? 'text' : 'password'} value={form.password}
-                        onChange={e => updateField('password', e.target.value)} required={!editing} style={{ paddingRight: 36 }} />
+                        onChange={e => updateField('password', e.target.value)} required={!editing}
+                        style={{ paddingRight: 40 }} placeholder="••••••••" />
                       <button type="button" onClick={() => setShowPassword(!showPassword)}
-                        style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280' }}>
+                        style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
                         {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                       </button>
                     </div>
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Specialite *</label>
+                    <label className="form-label">Spécialité *</label>
                     <select className="form-input" value={form.specialty} onChange={e => updateField('specialty', e.target.value)} required>
-                      <option value="">Choisir...</option>
+                      <option value="">Choisir une spécialité...</option>
                       {SPECIALTIES.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="form-grid">
                   <div className="form-group">
                     <label className="form-label">Email</label>
-                    <input className="form-input" type="email" value={form.email} onChange={e => updateField('email', e.target.value)} />
+                    <input className="form-input" type="email" value={form.email} onChange={e => updateField('email', e.target.value)} placeholder="email@example.com" />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Telephone</label>
-                    <input className="form-input" value={form.phone} onChange={e => updateField('phone', e.target.value)} />
+                    <label className="form-label">Téléphone</label>
+                    <input className="form-input" value={form.phone} onChange={e => updateField('phone', e.target.value)} placeholder="+509 ..." />
                   </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                <div className="form-grid-3">
                   <div className="form-group">
-                    <label className="form-label">Age</label>
-                    <input className="form-input" type="number" value={form.age} onChange={e => updateField('age', e.target.value ? parseInt(e.target.value) : '')} />
+                    <label className="form-label">Âge</label>
+                    <input className="form-input" type="number" value={form.age} onChange={e => updateField('age', e.target.value ? parseInt(e.target.value) : '')} placeholder="45" />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Genre</label>
@@ -284,25 +374,25 @@ export default function DoctorsPage() {
                     </select>
                   </div>
                   <div className="form-group">
-                    <label className="form-label">N. licence</label>
-                    <input className="form-input" value={form.licenseNumber} onChange={e => updateField('licenseNumber', e.target.value)} />
+                    <label className="form-label">N° licence</label>
+                    <input className="form-input" value={form.licenseNumber} onChange={e => updateField('licenseNumber', e.target.value)} placeholder="MSPP-..." />
                   </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="form-grid">
                   <div className="form-group">
                     <label className="form-label">Localisation</label>
-                    <input className="form-input" value={form.location} onChange={e => updateField('location', e.target.value)} />
+                    <input className="form-input" value={form.location} onChange={e => updateField('location', e.target.value)} placeholder="Port-au-Prince, Haiti" />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Hopital</label>
-                    <input className="form-input" value={form.hospital} onChange={e => updateField('hospital', e.target.value)} />
+                    <label className="form-label">Hôpital / Clinique</label>
+                    <input className="form-input" value={form.hospital} onChange={e => updateField('hospital', e.target.value)} placeholder="Clinique..." />
                   </div>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Biographie</label>
-                  <textarea className="form-input" value={form.biography} onChange={e => updateField('biography', e.target.value)} rows={3} />
+                  <textarea className="form-input" value={form.biography} onChange={e => updateField('biography', e.target.value)} rows={3} placeholder="Courte biographie professionnelle..." />
                 </div>
-                <div className="form-group">
+                <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">URL de l&apos;avatar</label>
                   <input className="form-input" value={form.avatarUrl} onChange={e => updateField('avatarUrl', e.target.value)} placeholder="https://..." />
                 </div>
@@ -310,7 +400,13 @@ export default function DoctorsPage() {
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Annuler</button>
                 <button type="submit" className="btn btn-primary" disabled={submitting}>
-                  {submitting ? 'Enregistrement...' : editing ? <><Check size={16} /> Mettre a jour</> : <><Plus size={16} /> Creer</>}
+                  {submitting ? (
+                    <><div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Enregistrement...</>
+                  ) : editing ? (
+                    <><Check size={15} /> Mettre à jour</>
+                  ) : (
+                    <><Plus size={15} /> Créer le médecin</>
+                  )}
                 </button>
               </div>
             </form>
@@ -321,18 +417,29 @@ export default function DoctorsPage() {
       {/* Delete Confirmation */}
       {confirmDelete && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setConfirmDelete(null); }}>
-          <div className="modal-content" style={{ maxWidth: 400 }}>
+          <div className="modal-content" style={{ maxWidth: 420 }}>
             <div className="modal-header">
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#dc2626' }}>Confirmer la suppression</h2>
-              <button onClick={() => setConfirmDelete(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <AlertTriangle size={18} color="#DC2626" />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: 15, fontWeight: 800, color: '#DC2626', letterSpacing: '-0.02em' }}>Confirmer la suppression</h2>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>Cette action est irréversible</p>
+                </div>
+              </div>
+              <button className="modal-close-btn" onClick={() => setConfirmDelete(null)}><X size={16} /></button>
             </div>
             <div className="modal-body">
-              <p>Supprimer <strong>{confirmDelete.name}</strong> ? Cette action est irreversible.</p>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
+                Voulez-vous vraiment supprimer <strong style={{ color: 'var(--text-primary)' }}>{confirmDelete.name}</strong> ?
+                Toutes les données associées seront effacées.
+              </p>
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setConfirmDelete(null)}>Annuler</button>
-              <button className="btn btn-danger" style={{ background: '#dc2626', color: '#fff' }} onClick={() => handleDelete(confirmDelete)}>
-                <Trash2 size={16} /> Supprimer
+              <button className="btn btn-danger" style={{ background: '#DC2626', color: '#fff', border: 'none' }} onClick={() => handleDelete(confirmDelete)}>
+                <Trash2 size={14} /> Supprimer définitivement
               </button>
             </div>
           </div>
@@ -342,27 +449,37 @@ export default function DoctorsPage() {
       {/* Reset Password Modal */}
       {resetPw && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) { setResetPw(null); setNewPw(''); } }}>
-          <div className="modal-content" style={{ maxWidth: 400 }}>
+          <div className="modal-content" style={{ maxWidth: 420 }}>
             <div className="modal-header">
-              <h2 style={{ fontSize: 16, fontWeight: 700 }}>Reinitialiser le mot de passe</h2>
-              <button onClick={() => { setResetPw(null); setNewPw(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
+              <div>
+                <h2 style={{ fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em' }}>Réinitialiser le mot de passe</h2>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>Pour {resetPw.name}</p>
+              </div>
+              <button className="modal-close-btn" onClick={() => { setResetPw(null); setNewPw(''); }}><X size={16} /></button>
             </div>
             <div className="modal-body">
-              <p style={{ color: '#374151', marginBottom: 16 }}>Nouveau mot de passe pour <strong>{resetPw.name}</strong> (@{resetPw.username})</p>
               <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Nouveau mot de passe</label>
                 <input className="form-input" type="text" value={newPw} onChange={e => setNewPw(e.target.value)}
-                  placeholder="Nouveau mot de passe" autoFocus onKeyDown={e => { if (e.key === 'Enter') handleResetPw(); }} />
+                  placeholder="Nouveau mot de passe (min. 4 car.)" autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter') handleResetPw(); }} />
               </div>
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => { setResetPw(null); setNewPw(''); }}>Annuler</button>
-              <button className="btn btn-primary" onClick={handleResetPw}><Key size={16} /> Reinitialiser</button>
+              <button className="btn btn-primary" onClick={handleResetPw}><Key size={14} /> Réinitialiser</button>
             </div>
           </div>
         </div>
       )}
 
-      {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
+      {/* Toast */}
+      {toast && (
+        <div className={`toast toast-${toast.type}`}>
+          {toast.type === 'success' ? <Check size={16} /> : <AlertTriangle size={16} />}
+          {toast.msg}
+        </div>
+      )}
     </div>
   );
 }

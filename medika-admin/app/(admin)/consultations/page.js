@@ -1,7 +1,20 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch, formatDate, statusLabel, statusBadge } from '../../../lib/api';
-import { Search, Trash2, X, MessageSquare } from 'lucide-react';
+import { Search, Trash2, X, MessageSquare, AlertTriangle, Check, Filter, Eye } from 'lucide-react';
+
+const URGENCY_BADGE = {
+  'Urgente': 'badge-red',
+  'Faible': 'badge-green',
+  'Moyenne': 'badge-yellow',
+};
+
+const STATUS_DOT = {
+  'RECHERCHE_MEDECIN': '#F59E0B',
+  'EN_COURS': '#3B82F6',
+  'TERMINE': '#10B981',
+  'REFUSE': '#EF4444',
+};
 
 export default function ConsultationsPage() {
   const [consultations, setConsultations] = useState([]);
@@ -39,7 +52,7 @@ export default function ConsultationsPage() {
     setFiltered(result);
   }, [consultations, search, filterStatus]);
 
-  const showToast = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
+  const showToast = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500); };
 
   const openMessages = async (cons) => {
     setViewMessages(cons);
@@ -54,116 +67,255 @@ export default function ConsultationsPage() {
   const handleDelete = async (c) => {
     try {
       await apiFetch('/admin/consultations/' + c.id, { method: 'DELETE' });
-      showToast('Consultation supprimee');
+      showToast('Consultation supprimée');
       setConfirmDelete(null);
       load();
     } catch (e) { showToast(e.message, 'error'); }
   };
 
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}><div className="spinner" /></div>;
+  // Status summary counts
+  const statusCounts = consultations.reduce((acc, c) => {
+    acc[c.status] = (acc[c.status] || 0) + 1;
+    return acc;
+  }, {});
 
   return (
-    <div>
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
-        <div className="search-box" style={{ flex: 1, minWidth: 200 }}>
-          <Search size={16} className="search-icon" />
-          <input className="form-input" placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} />
+    <div style={{ animation: 'slideUp 200ms ease' }}>
+
+      {/* Header */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+          Suivi médical
         </div>
-        <select className="form-input" style={{ width: 'auto', minWidth: 160 }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-          <option value="">Tous les statuts</option>
-          <option value="RECHERCHE_MEDECIN">En attente</option>
-          <option value="EN_COURS">En cours</option>
-          <option value="TERMINE">Terminee</option>
-          <option value="REFUSE">Refusee</option>
-        </select>
+        <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.04em' }}>
+          Consultations
+        </h1>
       </div>
 
-      <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 12 }}>{filtered.length} consultation(s)</div>
+      {/* Status summary pills */}
+      {!loading && (
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
+          {[
+            { key: '', label: 'Toutes', count: consultations.length },
+            { key: 'RECHERCHE_MEDECIN', label: 'En attente', count: statusCounts['RECHERCHE_MEDECIN'] || 0 },
+            { key: 'EN_COURS', label: 'En cours', count: statusCounts['EN_COURS'] || 0 },
+            { key: 'TERMINE', label: 'Terminées', count: statusCounts['TERMINE'] || 0 },
+            { key: 'REFUSE', label: 'Refusées', count: statusCounts['REFUSE'] || 0 },
+          ].map(s => (
+            <button
+              key={s.key}
+              onClick={() => setFilterStatus(s.key)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 7,
+                padding: '6px 14px',
+                border: `1px solid ${filterStatus === s.key ? 'var(--primary)' : 'var(--border)'}`,
+                borderRadius: 'var(--radius-full)',
+                background: filterStatus === s.key ? 'var(--primary-muted)' : 'var(--bg-surface)',
+                cursor: 'pointer',
+                fontSize: 12.5, fontWeight: filterStatus === s.key ? 700 : 500,
+                color: filterStatus === s.key ? 'var(--primary)' : 'var(--text-secondary)',
+                transition: 'all 120ms ease',
+                fontFamily: 'inherit',
+              }}
+            >
+              {s.key && (
+                <span style={{
+                  width: 7, height: 7, borderRadius: '50%',
+                  background: STATUS_DOT[s.key] || '#94A3B8',
+                  flexShrink: 0,
+                }} />
+              )}
+              {s.label}
+              <span style={{
+                background: filterStatus === s.key ? 'rgba(5,150,105,0.15)' : 'var(--bg-sunken)',
+                color: filterStatus === s.key ? 'var(--primary)' : 'var(--text-muted)',
+                padding: '0 6px', borderRadius: 'var(--radius-full)', fontSize: 11, fontWeight: 700,
+              }}>{s.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
+      {/* Search */}
+      <div className="toolbar">
+        <div className="search-box" style={{ flex: 1, maxWidth: 380 }}>
+          <Search size={15} className="search-icon" />
+          <input
+            className="form-input"
+            placeholder="Patient, médecin, ID..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {!loading && (
+        <div className="count-label">
+          <span className="count-pill">{filtered.length}</span>
+          consultation{filtered.length !== 1 ? 's' : ''}
+        </div>
+      )}
+
+      {/* Table */}
       <div className="card" style={{ overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="data-table">
-            <thead><tr>
-              <th>ID</th><th>Patient</th><th>Medecin</th><th>Specialite</th>
-              <th>Urgence</th><th>Statut</th><th>Date</th>
-              <th style={{ textAlign: 'center' }}>Messages</th><th style={{ textAlign: 'center' }}>Actions</th>
-            </tr></thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr><td colSpan={9} className="empty-state">Aucune consultation</td></tr>
-              ) : filtered.map(c => (
-                <tr key={c.id}>
-                  <td style={{ fontFamily: 'monospace', fontSize: 12, color: '#6b7280' }}>{c.id}</td>
-                  <td>
-                    <div style={{ fontWeight: 600 }}>{c.patient_name}</div>
-                    {c.patient_phone && <div style={{ fontSize: 12, color: '#6b7280' }}>{c.patient_phone}</div>}
-                  </td>
-                  <td>
-                    <div style={{ fontWeight: 600 }}>{c.doctor_name || <span style={{ color: '#9ca3af' }}>Non assigne</span>}</div>
-                  </td>
-                  <td><span className="badge badge-blue">{c.specialty_needed}</span></td>
-                  <td>
-                    <span className={'badge ' + (c.urgency_level === 'Urgente' ? 'badge-red' : c.urgency_level === 'Faible' ? 'badge-green' : 'badge-yellow')}>
-                      {c.urgency_level}
-                    </span>
-                  </td>
-                  <td><span className={'badge ' + statusBadge(c.status)}>{statusLabel(c.status)}</span></td>
-                  <td style={{ fontSize: 13 }}>{formatDate(c.created_at)}</td>
-                  <td style={{ textAlign: 'center' }}>
-                    <button className="btn btn-secondary btn-sm" onClick={() => openMessages(c)}>
-                      <MessageSquare size={14} /> Voir
-                    </button>
-                  </td>
-                  <td style={{ textAlign: 'center' }}>
-                    <button className="btn btn-danger btn-sm" onClick={() => setConfirmDelete(c)}>
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
+        {loading ? (
+          <div style={{ padding: 48, display: 'flex', justifyContent: 'center' }}>
+            <div className="spinner" />
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th style={{ width: 110 }}>ID</th>
+                  <th>Patient</th>
+                  <th>Médecin</th>
+                  <th>Spécialité</th>
+                  <th>Urgence</th>
+                  <th>Statut</th>
+                  <th>Date</th>
+                  <th style={{ textAlign: 'center' }}>Messages</th>
+                  <th style={{ textAlign: 'center' }}>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={9}>
+                      <div className="empty-state">
+                        <div className="empty-state-icon"><MessageSquare size={22} /></div>
+                        <p>Aucune consultation trouvée</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filtered.map(c => (
+                  <tr key={c.id}>
+                    <td>
+                      <span style={{
+                        fontFamily: 'monospace', fontSize: 11.5,
+                        color: 'var(--text-muted)',
+                        background: 'var(--bg-sunken)',
+                        padding: '2px 7px', borderRadius: 5,
+                      }}>
+                        {c.id}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ fontWeight: 600, fontSize: 13.5 }}>{c.patient_name}</div>
+                      {c.patient_phone && (
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{c.patient_phone}</div>
+                      )}
+                    </td>
+                    <td>
+                      {c.doctor_name
+                        ? <div style={{ fontWeight: 600, fontSize: 13.5 }}>{c.doctor_name}</div>
+                        : <span style={{ color: 'var(--text-placeholder)', fontSize: 13 }}>Non assigné</span>
+                      }
+                    </td>
+                    <td>
+                      <span className="badge badge-blue">{c.specialty_needed}</span>
+                    </td>
+                    <td>
+                      <span className={`badge ${URGENCY_BADGE[c.urgency_level] || 'badge-gray'}`}>
+                        {c.urgency_level}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{
+                          width: 7, height: 7, borderRadius: '50%',
+                          background: STATUS_DOT[c.status] || '#94A3B8',
+                          flexShrink: 0,
+                        }} />
+                        <span className={`badge ${statusBadge(c.status)}`}>{statusLabel(c.status)}</span>
+                      </div>
+                    </td>
+                    <td style={{ fontSize: 12.5, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                      {formatDate(c.created_at)}
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <button className="btn btn-secondary btn-sm" onClick={() => openMessages(c)} title="Voir les messages">
+                        <Eye size={13} /> Voir
+                      </button>
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <button className="btn btn-danger btn-sm btn-icon" onClick={() => setConfirmDelete(c)}>
+                        <Trash2 size={13} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
+      {/* Messages Modal */}
       {viewMessages && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setViewMessages(null)}>
-          <div className="modal-content" style={{ maxWidth: 700 }}>
+          <div className="modal-content" style={{ maxWidth: 680 }}>
             <div className="modal-header">
               <div>
-                <h2 style={{ fontSize: 16, fontWeight: 700 }}>Messages - {viewMessages.id}</h2>
-                <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>{viewMessages.patient_name} {viewMessages.doctor_name || ''}</div>
+                <h2 style={{ fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em' }}>
+                  Messagerie de la consultation
+                </h2>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontFamily: 'monospace', background: 'var(--bg-sunken)', padding: '1px 6px', borderRadius: 4 }}>
+                    {viewMessages.id}
+                  </span>
+                  <span>·</span>
+                  <span>{viewMessages.patient_name}</span>
+                  {viewMessages.doctor_name && <><span>→</span><span>{viewMessages.doctor_name}</span></>}
+                </div>
               </div>
-              <button onClick={() => setViewMessages(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
+              <button className="modal-close-btn" onClick={() => setViewMessages(null)}><X size={16} /></button>
             </div>
-            <div className="modal-body" style={{ maxHeight: 400, overflowY: 'auto', padding: 0 }}>
+            <div className="modal-body" style={{ maxHeight: 440, overflowY: 'auto', padding: '12px 16px' }}>
               {loadingMsgs ? (
-                <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}><div className="spinner" /></div>
+                <div style={{ display: 'flex', justifyContent: 'center', padding: 36 }}>
+                  <div className="spinner" />
+                </div>
               ) : messages.length === 0 ? (
-                <div className="empty-state">Aucun message</div>
+                <div className="empty-state" style={{ padding: 40 }}>
+                  <div className="empty-state-icon"><MessageSquare size={20} /></div>
+                  <p>Aucun message dans cette consultation</p>
+                </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {messages.map(m => (
-                    <div key={m.id} style={{
-                      padding: '10px 16px',
-                      background: m.sender_id === 'system' ? '#f9fafb' : '#f0fdf4',
-                      borderLeft: m.sender_id === 'system' ? '3px solid #9ca3af' : '3px solid #059669'
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{ fontWeight: 600, fontSize: 13 }}>{m.sender_name}</span>
-                        <span style={{ fontSize: 11, color: '#9ca3af' }}>{formatDate(m.created_at)}</span>
+                    <div
+                      key={m.id}
+                      className={m.sender_id === 'system' ? 'msg-bubble msg-system' : 'msg-bubble msg-user'}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, alignItems: 'center' }}>
+                        <span style={{
+                          fontWeight: 700, fontSize: 12.5,
+                          color: m.sender_id === 'system' ? 'var(--text-muted)' : 'var(--primary)'
+                        }}>
+                          {m.sender_name}
+                        </span>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{formatDate(m.created_at)}</span>
                       </div>
                       {m.message_type === 'voice' ? (
-                        <div style={{ fontSize: 13, color: '#6b7280', fontStyle: 'italic' }}>
-                          Message vocal ({m.duration}s)
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                          🎙 Message vocal ({m.duration}s)
                         </div>
                       ) : m.message_type === 'image' ? (
                         <div>
-                          {m.text && <div style={{ fontSize: 13 }}>{m.text}</div>}
-                          {m.file_url && <img src={m.file_url} alt="" style={{ maxWidth: 200, borderRadius: 8, marginTop: 4 }} />}
+                          {m.text && <div style={{ fontSize: 13, marginBottom: 6 }}>{m.text}</div>}
+                          {m.file_url && (
+                            <img
+                              src={m.file_url}
+                              alt=""
+                              style={{ maxWidth: 240, borderRadius: 10, display: 'block', boxShadow: 'var(--shadow-sm)' }}
+                            />
+                          )}
                         </div>
                       ) : (
-                        <div style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>{m.text}</div>
+                        <div style={{ fontSize: 13, whiteSpace: 'pre-wrap', color: 'var(--text-primary)', lineHeight: 1.6 }}>
+                          {m.text}
+                        </div>
                       )}
                     </div>
                   ))}
@@ -174,27 +326,43 @@ export default function ConsultationsPage() {
         </div>
       )}
 
+      {/* Delete Confirmation */}
       {confirmDelete && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setConfirmDelete(null)}>
-          <div className="modal-content" style={{ maxWidth: 400 }}>
+          <div className="modal-content" style={{ maxWidth: 420 }}>
             <div className="modal-header">
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#dc2626' }}>Supprimer la consultation</h2>
-              <button onClick={() => setConfirmDelete(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <AlertTriangle size={18} color="#DC2626" />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: 15, fontWeight: 800, color: '#DC2626' }}>Supprimer la consultation</h2>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>Action irréversible</p>
+                </div>
+              </div>
+              <button className="modal-close-btn" onClick={() => setConfirmDelete(null)}><X size={16} /></button>
             </div>
             <div className="modal-body">
-              <p>Supprimer la consultation <strong>{confirmDelete.id}</strong> et tous ses messages ?</p>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
+                Supprimer la consultation <strong style={{ fontFamily: 'monospace', color: 'var(--text-primary)' }}>{confirmDelete.id}</strong> et tous ses messages ?
+              </p>
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setConfirmDelete(null)}>Annuler</button>
-              <button className="btn btn-danger" style={{ background: '#dc2626', color: '#fff' }} onClick={() => handleDelete(confirmDelete)}>
-                <Trash2 size={16} /> Supprimer
+              <button className="btn btn-danger" style={{ background: '#DC2626', color: '#fff', border: 'none' }} onClick={() => handleDelete(confirmDelete)}>
+                <Trash2 size={14} /> Supprimer
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {toast && <div className={'toast toast-' + toast.type}>{toast.msg}</div>}
+      {toast && (
+        <div className={`toast toast-${toast.type}`}>
+          {toast.type === 'success' ? <Check size={16} /> : <AlertTriangle size={16} />}
+          {toast.msg}
+        </div>
+      )}
     </div>
   );
 }

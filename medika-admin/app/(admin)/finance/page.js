@@ -1,7 +1,49 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { apiFetch, formatCurrency, formatDate } from '../../../lib/api';
-import { DollarSign, TrendingUp, Users, Calendar, Wallet } from 'lucide-react';
+import { DollarSign, TrendingUp, Users, Calendar, Wallet, AlertCircle } from 'lucide-react';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  CartesianGrid, Legend
+} from 'recharts';
+
+const CustomTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    return (
+      <div style={{
+        background: '#0F172A',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 10, padding: '10px 14px',
+        boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+      }}>
+        <p style={{ color: '#94A3B8', fontSize: 11, fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          {label}
+        </p>
+        {payload.map(p => (
+          <p key={p.name} style={{ color: p.color, fontSize: 13, fontWeight: 700, marginBottom: 2 }}>
+            {p.name}: {formatCurrency(p.value)}
+          </p>
+        ))}
+      </div>
+    );
+  }
+  return null;
+};
+
+function StatItem({ label, value, sub, icon: Icon, iconBg, iconColor, valueColor }) {
+  return (
+    <div className="stat-card" style={{ '--stat-color': iconColor }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+        <div className="stat-icon" style={{ background: iconBg }}>
+          <Icon size={18} color={iconColor} />
+        </div>
+      </div>
+      <div className="stat-label">{label}</div>
+      <div className="stat-value" style={{ color: valueColor || 'var(--text-primary)' }}>{value}</div>
+      {sub && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>{sub}</div>}
+    </div>
+  );
+}
 
 export default function FinancePage() {
   const [data, setData] = useState(null);
@@ -11,119 +53,180 @@ export default function FinancePage() {
     apiFetch('/admin/finance').then(setData).catch(console.error).finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}><div className="spinner" /></div>;
-  if (!data) return <div className="empty-state"><p>Impossible de charger les donnees financieres</p></div>;
+  if (loading) {
+    return (
+      <div>
+        <div style={{ marginBottom: 28 }}>
+          <div className="skeleton" style={{ width: 120, height: 12, marginBottom: 6 }} />
+          <div className="skeleton" style={{ width: 180, height: 28 }} />
+        </div>
+        <div className="finance-stats">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="stat-card">
+              <div className="skeleton" style={{ width: 42, height: 42, borderRadius: 10, marginBottom: 14 }} />
+              <div className="skeleton" style={{ width: 80, height: 10, marginBottom: 10 }} />
+              <div className="skeleton" style={{ width: 120, height: 26 }} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
-  const maxHistRevenue = Math.max(...data.history.map(h => h.revenue), 1);
+  if (!data) return (
+    <div className="empty-state">
+      <div className="empty-state-icon"><AlertCircle size={22} /></div>
+      <p>Impossible de charger les données financières</p>
+    </div>
+  );
+
+  // Build chart data: combine revenue + doctor earnings + medika earnings
+  const chartData = data.history.map(h => ({
+    name: `${h.month.substring(0, 3)} ${String(h.year).slice(2)}`,
+    revenue: h.revenue,
+  }));
+
+  const currentYear = String(new Date().getFullYear()).slice(2);
 
   return (
-    <div>
-      {/* ── Top Stats ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
-        <div className="stat-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>Revenu du mois</div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: '#059669' }}>{formatCurrency(data.currentMonth.revenue)}</div>
-              <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>{data.currentMonth.consultations} consultation(s) - {data.currentMonth.label}</div>
-            </div>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Calendar size={22} color="#059669" />
-            </div>
-          </div>
-        </div>
+    <div style={{ animation: 'slideUp 200ms ease' }}>
 
-        <div className="stat-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>Gains Medecins (mois)</div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: '#059669' }}>{formatCurrency(data.currentMonth.doctorEarnings || 0)}</div>
-              <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>Versement aux medecins</div>
-            </div>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Wallet size={22} color="#059669" />
-            </div>
-          </div>
+      {/* Header */}
+      <div style={{ marginBottom: 28 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+          Rapports financiers
         </div>
+        <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.04em' }}>
+          Finance
+        </h1>
+      </div>
 
-        <div className="stat-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>Gains Medika (mois)</div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: '#b45309' }}>{formatCurrency(data.currentMonth.medikaEarnings || 0)}</div>
-              <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>Frais de plateforme</div>
-            </div>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <DollarSign size={22} color="#b45309" />
-            </div>
-          </div>
+      {/* Stats */}
+      <div className="finance-stats">
+        <StatItem
+          label="Revenu du mois"
+          value={formatCurrency(data.currentMonth.revenue)}
+          sub={`${data.currentMonth.consultations} consultation(s) · ${data.currentMonth.label}`}
+          icon={Calendar}
+          iconBg="#DCFCE7"
+          iconColor="#059669"
+          valueColor="#059669"
+        />
+        <StatItem
+          label="Gains médecins (mois)"
+          value={formatCurrency(data.currentMonth.doctorEarnings || 0)}
+          sub="Versements aux praticiens"
+          icon={Wallet}
+          iconBg="#DCFCE7"
+          iconColor="#059669"
+        />
+        <StatItem
+          label="Gains Medika (mois)"
+          value={formatCurrency(data.currentMonth.medikaEarnings || 0)}
+          sub="Frais de plateforme"
+          icon={DollarSign}
+          iconBg="#FEF3C7"
+          iconColor="#B45309"
+          valueColor="#B45309"
+        />
+        <StatItem
+          label="Revenu total cumulé"
+          value={formatCurrency(data.total.revenue)}
+          sub={`${data.total.consultations} consultation(s) terminée(s)`}
+          icon={TrendingUp}
+          iconBg="#DBEAFE"
+          iconColor="#2563EB"
+        />
+      </div>
+
+      {/* Revenue chart */}
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-header">
+          <span className="card-title">Historique des revenus — 12 mois</span>
+          <span className="badge badge-green">HTG</span>
         </div>
-
-        <div className="stat-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>Revenu total</div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: '#111827' }}>{formatCurrency(data.total.revenue)}</div>
-              <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>{data.total.consultations} consultation(s) terminee(s)</div>
-            </div>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <TrendingUp size={22} color="#2563eb" />
-            </div>
-          </div>
+        <div style={{ padding: '20px 20px 8px' }}>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={chartData} barSize={28}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(226,232,240,0.5)" vertical={false} />
+              <XAxis
+                dataKey="name"
+                tick={{ fontSize: 10.5, fill: '#94A3B8', fontWeight: 600 }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 10, fill: '#94A3B8' }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}
+                width={38}
+              />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(5,150,105,0.04)', radius: 4 }} />
+              <Bar dataKey="revenue" fill="url(#greenGradFinance)" radius={[6, 6, 0, 0]} name="Revenu" />
+              <defs>
+                <linearGradient id="greenGradFinance" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#059669" />
+                  <stop offset="100%" stopColor="#047857" stopOpacity={0.8} />
+                </linearGradient>
+              </defs>
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
-      {/* ── Revenue History Chart ── */}
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', fontWeight: 600, fontSize: 15 }}>Historique des revenus (12 mois)</div>
-        <div style={{ padding: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 220 }}>
-            {data.history.map((h, i) => {
-              const height = (h.revenue / maxHistRevenue) * 190;
-              const isCurrentMonth = h.label === data.currentMonth.label;
-              return (
-                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, color: h.revenue > 0 ? '#059669' : '#9ca3af', marginBottom: 4, textAlign: 'center' }}>
-                    {h.revenue > 0 ? formatCurrency(h.revenue) : ''}
-                  </div>
-                  <div style={{
-                    width: '100%', maxWidth: 50, height: Math.max(height, 4),
-                    background: isCurrentMonth ? 'linear-gradient(180deg, #059669, #047857)' : h.revenue > 0 ? 'linear-gradient(180deg, #10b981, #059669)' : '#f3f4f6',
-                    borderRadius: '6px 6px 0 0', opacity: isCurrentMonth ? 1 : 0.7
-                  }} />
-                  <div style={{ fontSize: 10, color: isCurrentMonth ? '#059669' : '#6b7280', marginTop: 6, fontWeight: isCurrentMonth ? 700 : 400, textAlign: 'center' }}>
-                    {h.month}<br />{String(h.year).slice(2)}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+      {/* Doctor earnings */}
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-header">
+          <span className="card-title">Gains par médecin</span>
+          <span className="badge badge-blue">Ce mois + total</span>
         </div>
-      </div>
-
-      {/* ── Doctor Earnings Table ── */}
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', fontWeight: 600, fontSize: 15 }}>Gains par medecin</div>
         <div style={{ overflowX: 'auto' }}>
           <table className="data-table">
-            <thead><tr>
-              <th>Medecin</th><th>Specialite</th>
-              <th style={{ textAlign: 'right' }}>Consult. (mois)</th><th style={{ textAlign: 'right' }}>Gains medecin (mois)</th>
-              <th style={{ textAlign: 'right' }}>Consult. (total)</th><th style={{ textAlign: 'right' }}>Gains totaux</th>
-            </tr></thead>
+            <thead>
+              <tr>
+                <th>Médecin</th>
+                <th>Spécialité</th>
+                <th style={{ textAlign: 'right' }}>Consult. (mois)</th>
+                <th style={{ textAlign: 'right' }}>Gains médecin (mois)</th>
+                <th style={{ textAlign: 'right' }}>Consult. (total)</th>
+                <th style={{ textAlign: 'right' }}>Gains totaux</th>
+              </tr>
+            </thead>
             <tbody>
               {data.doctorEarnings.length === 0 ? (
-                <tr><td colSpan={6} className="empty-state">Aucun medecin</td></tr>
+                <tr>
+                  <td colSpan={6}>
+                    <div className="empty-state">
+                      <div className="empty-state-icon"><Users size={22} /></div>
+                      <p>Aucun médecin enregistré</p>
+                    </div>
+                  </td>
+                </tr>
               ) : data.doctorEarnings.map(doc => (
                 <tr key={doc.id}>
-                  <td style={{ fontWeight: 600 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Users size={16} color="#059669" />{doc.name}</div>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{
+                        width: 32, height: 32, borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #DCFCE7, #A7F3D0)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#059669', fontSize: 11, fontWeight: 800, flexShrink: 0,
+                      }}>
+                        {doc.name?.charAt(0)}
+                      </div>
+                      <span style={{ fontWeight: 700, fontSize: 13.5 }}>{doc.name}</span>
+                    </div>
                   </td>
                   <td><span className="badge badge-blue">{doc.specialty}</span></td>
-                  <td style={{ textAlign: 'right' }}>{doc.monthlyConsultations}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669' }}>{formatCurrency(doc.monthlyEarnings)}</td>
-                  <td style={{ textAlign: 'right' }}>{doc.totalConsultations}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatCurrency(doc.totalEarnings)}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{doc.monthlyConsultations}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 800, color: '#059669' }}>
+                    {formatCurrency(doc.monthlyEarnings)}
+                  </td>
+                  <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{doc.totalConsultations}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                    {formatCurrency(doc.totalEarnings)}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -131,29 +234,52 @@ export default function FinancePage() {
         </div>
       </div>
 
-      {/* ── Recent Transactions with Fee Split ── */}
+      {/* Recent transactions */}
       <div className="card">
-        <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', fontWeight: 600, fontSize: 15 }}>Transactions recentes (ce mois)</div>
+        <div className="card-header">
+          <span className="card-title">Transactions récentes</span>
+          <span className="badge badge-gray">Ce mois</span>
+        </div>
         <div style={{ overflowX: 'auto' }}>
           <table className="data-table">
-            <thead><tr>
-              <th>Date</th><th>Patient</th><th>Medecin</th><th>Specialite</th>
-              <th style={{ textAlign: 'right' }}>Montant</th>
-              <th style={{ textAlign: 'right' }}>Gain medecin</th>
-              <th style={{ textAlign: 'right' }}>Gain Medika</th>
-            </tr></thead>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Patient</th>
+                <th>Médecin</th>
+                <th>Spécialité</th>
+                <th style={{ textAlign: 'right' }}>Montant total</th>
+                <th style={{ textAlign: 'right' }}>Part médecin</th>
+                <th style={{ textAlign: 'right' }}>Part Medika</th>
+              </tr>
+            </thead>
             <tbody>
               {data.recentTransactions.length === 0 ? (
-                <tr><td colSpan={7} className="empty-state">Aucune transaction ce mois</td></tr>
+                <tr>
+                  <td colSpan={7}>
+                    <div className="empty-state">
+                      <div className="empty-state-icon"><DollarSign size={22} /></div>
+                      <p>Aucune transaction ce mois</p>
+                    </div>
+                  </td>
+                </tr>
               ) : data.recentTransactions.map(t => (
                 <tr key={t.id}>
-                  <td style={{ fontSize: 13 }}>{formatDate(t.date)}</td>
+                  <td style={{ fontSize: 12.5, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                    {formatDate(t.date)}
+                  </td>
                   <td style={{ fontWeight: 600 }}>{t.patientName}</td>
-                  <td>{t.doctorName}</td>
+                  <td style={{ color: 'var(--text-secondary)' }}>{t.doctorName}</td>
                   <td><span className="badge badge-blue">{t.specialty}</span></td>
-                  <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatCurrency(t.amount)}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600, color: '#059669' }}>{formatCurrency(t.doctorEarning)}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600, color: '#b45309' }}>{formatCurrency(t.medikaEarning)}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 800 }}>
+                    {formatCurrency(t.amount)}
+                  </td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669' }}>
+                    {formatCurrency(t.doctorEarning)}
+                  </td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, color: '#B45309' }}>
+                    {formatCurrency(t.medikaEarning)}
+                  </td>
                 </tr>
               ))}
             </tbody>
