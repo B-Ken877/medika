@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#1B1B1B"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="32dp">
+
+    <!-- Pulsing avatar circle -->
+    <FrameLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="32dp">
+
+        <View
+            android:id="@+id/incomingAvatarPulse"
+            android:layout_width="120dp"
+            android:layout_height="120dp"
+            android:background="@android:color/transparent" />
+
+        <LinearLayout
+            android:layout_width="120dp"
+            android:layout_height="120dp"
+            android:layout_gravity="center"
+            android:background="@drawable/circle_green_bg"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="&#128100;"
+                android:textSize="48sp" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- Caller name -->
+    <TextView
+        android:id="@+id/incomingCallerName"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:text="Inconnu"
+        android:textColor="#FFFFFF"
+        android:textSize="28sp"
+        android:textStyle="bold" />
+
+    <!-- Call type -->
+    <TextView
+        android:id="@+id/incomingCallType"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="64dp"
+        android:text="Appel vocal entrant..."
+        android:textColor="#B0B0B0"
+        android:textSize="16sp" />
+
+    <!-- Accept / Reject buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <!-- Reject -->
+        <LinearLayout
+            android:id="@+id/btnRejectCall"
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:layout_marginEnd="48dp"
+            android:background="@drawable/circle_red_bg"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="&#128308;"
+                android:textSize="32sp" />
+        </LinearLayout>
+
+        <!-- Accept -->
+        <LinearLayout
+            android:id="@+id/btnAcceptCall"
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:layout_marginStart="48dp"
+            android:background="@drawable/circle_green_bg"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="&#128994;"
+                android:textSize="32sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Glisser pour repondre ou raccrocher"
+        android:textColor="#666666"
+        android:textSize="13sp" />
+
+</LinearLayout>

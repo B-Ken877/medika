@@ -468,6 +468,27 @@ object ZegoChatManager {
         val message = ZIMTextMessage(json)
         z.sendMessage(message, toUserId, ZIMConversationType.PEER, ZIMMessageSendConfig(), object : ZIMMessageSentCallback { override fun onMessageAttached(message: ZIMMessage) {} override fun onMessageSent(message: ZIMMessage, error: ZIMError) {} })
     }
+
+    // -- Call Reject Signaling --
+    fun sendCallRejectSignal(toUserId: String, roomId: String) {
+        val z = zim
+        if (z == null) return
+        try {
+            val json = JSONObject().apply {
+                put("type", "call_reject")
+                put("roomId", roomId)
+            }.toString()
+            val message = ZIMTextMessage(json)
+            z.sendMessage(message, toUserId, ZIMConversationType.PEER, ZIMMessageSendConfig(),
+                object : ZIMMessageSentCallback {
+                    override fun onMessageAttached(message: ZIMMessage) {}
+                    override fun onMessageSent(message: ZIMMessage, error: ZIMError) {}
+                })
+            CrashLogger.log("[ZIM] Sent call reject signal to $toUserId for room $roomId")
+        } catch (e: Exception) {
+            CrashLogger.log("[ZIM] sendCallRejectSignal error: ${e.message}")
+        }
+    }
 }
 
 data class ZimIncomingMessage(

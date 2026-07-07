@@ -44,6 +44,12 @@
             </intent-filter>
         </activity>
             <activity
+            android:name=".ui.screens.IncomingCallActivity"
+            android:screenOrientation="portrait"
+            android:exported="false"
+            android:theme="@style/Theme.MyApplication" />
+
+        <activity
             android:name=".ui.screens.CallActivity"
             android:screenOrientation="portrait"
             android:exported="false" />

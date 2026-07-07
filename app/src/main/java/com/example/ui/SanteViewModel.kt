@@ -575,7 +575,7 @@ class SanteViewModel(
                     com.example.CrashLogger.log("[CALL-SIGNAL] Received: roomId=$roomId type=$callType from=${zimMsg.senderId}")
                     // Get application context to start CallActivity
                     val appContext = getApplication<Application>()
-                    onIncomingCallSignal(roomId, callType, callerName, appContext)
+                    onIncomingCallSignal(roomId, callType, callerName, zimMsg.senderId, appContext)
                     return  // Don't insert this as a chat message
                 }
             } catch (e: Exception) {
@@ -1900,23 +1900,58 @@ class SanteViewModel(
      * Called by ZegoChatManager when a call signal ZIM message is received.
      * Opens CallActivity so this user joins the same room.
      */
-    fun onIncomingCallSignal(roomId: String, callType: String, callerName: String, context: android.content.Context) {
+    fun onIncomingCallSignal(roomId: String, callType: String, callerName: String, callerId: String, context: android.content.Context) {
         val myId = currentServerUserId ?: return
         val myName = currentUserName ?: "User"
         val isVideo = callType == "video_call"
 
-        com.example.CrashLogger.log("[CALL] Incoming $callType from $callerName, roomId=$roomId, opening CallActivity")
+        com.example.CrashLogger.log("[CALL] Incoming $callType from $callerName, roomId=$roomId, showing incoming call UI")
 
-        // Show a quick toast
-        android.widget.Toast.makeText(
-            context,
-            if (isVideo) "Appel video de $callerName" else "Appel vocal de $callerName",
-            android.widget.Toast.LENGTH_SHORT
-        ).show()
-
+        // Launch IncomingCallActivity with Accept/Reject buttons instead of auto-answering
         context.startActivity(
-            Intent(context, Class.forName("com.example.ui.screens.CallActivity")).apply { putExtra("ROOM_ID", roomId); putExtra("USER_ID", myId); putExtra("USER_NAME", myName); putExtra("IS_VIDEO", isVideo); putExtra("CONSULTATION_ID", roomId); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP) }
+            Intent(context, com.example.ui.screens.IncomingCallActivity::class.java).apply {
+                putExtra("room_id", roomId)
+                putExtra("caller_id", callerId)
+                putExtra("caller_name", callerName)
+                putExtra("is_video", isVideo)
+                putExtra("consultation_id", roomId)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
         )
+    }
+
+    /**
+     * Called when the user accepts an incoming call from IncomingCallActivity.
+     * Launches CallActivity to join the Agora room.
+     */
+    fun onIncomingCallAccepted(roomId: String, callerName: String, isVideo: Boolean, context: android.content.Context) {
+        val myId = currentServerUserId ?: return
+        val myName = currentUserName ?: "User"
+
+        com.example.CrashLogger.log("[CALL] User ACCEPTED incoming call, joining room=$roomId")
+
+        // Notify server
+        try {
+            MedikaNetwork.sendCallAccept(roomId)
+        } catch (e: Exception) {
+            com.example.CrashLogger.log("[CALL] sendCallAccept error: ${e.message}")
+        }
+
+        // Launch CallActivity
+        try {
+            context.startActivity(
+                Intent(context, Class.forName("com.example.ui.screens.CallActivity")).apply {
+                    putExtra("ROOM_ID", roomId)
+                    putExtra("USER_ID", myId)
+                    putExtra("USER_NAME", myName)
+                    putExtra("IS_VIDEO", isVideo)
+                    putExtra("CONSULTATION_ID", roomId)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                }
+            )
+        } catch (e: Throwable) {
+            com.example.CrashLogger.log("[CALL] Failed to open CallActivity: ${e.message}")
+        }
     }
 
     private suspend fun connectToLiveKitRoom(lkToken: String, lkUrl: String, isVideo: Boolean) {
