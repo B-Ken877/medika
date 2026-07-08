@@ -1263,8 +1263,11 @@ class SanteViewModel(
                 currentUserName = response.user.name
                 MedikaNetwork.authToken = "Bearer ${response.token}"
                 MedikaNetwork.connectWebSocket(response.user.id)
-                // Initialize ZEGOCLOUD call service so this user can send/receive
-                // call invitations. The userID MUST match the server user ID.
+                // Set PIN flags BEFORE handleAuthResponse to avoid race condition
+                if (!isPinSet()) {
+                    _needsPinSetup.value = true
+                }
+
                 // Set auth state and sync FIRST so UI renders immediately
                 handleAuthResponse(response)
                 // Defer heavy ZEGO/ZIM init to background (native .so loading)
@@ -1299,10 +1302,6 @@ class SanteViewModel(
                     }
                 }
                 saveSession(response.token, response.user)
-                // Check if user needs to set up PIN
-                if (!isPinSet()) {
-                    _needsPinSetup.value = true
-                }
             } catch (e: Exception) {
                 _authState.value = AuthState.Unauthenticated
                 _loginError.value = "Nom d'utilisateur ou mot de passe incorrect"
@@ -1310,18 +1309,21 @@ class SanteViewModel(
         }
     }
 
-    // ─── REGISTER ─────────────────────────────────
+    // ─── REGISTER ────────────────────────────
 
     fun registerPatient(username: String, password: String, name: String, email: String, phone: String, age: Int, gender: String) {
         if (username.isBlank() || password.isBlank() || name.isBlank()) {
-            _registerError.value = "Veuillez remplir le nom d'utilisateur, le mot de passe et le nom complet"
+            _registerError.value = "Veuillez remplir le nom d’utilisateur, le mot de passe et le nom complet"
             return
         }
         _authState.value = AuthState.Loading
         _registerError.value = null
+        com.example.CrashLogger.log("[REGISTER] Starting registration for username=" + username)
 
         viewModelScope.launch {
             try {
+                // Step 1: API call (runs on IO thread via Retrofit)
+                com.example.CrashLogger.log("[REGISTER] Step 1: Calling register API...")
                 val response = MedikaNetwork.api.register(
                     RegisterRequest(
                         username = username,
@@ -1333,46 +1335,79 @@ class SanteViewModel(
                         gender = gender
                     )
                 )
-                authToken = "Bearer ${response.token}"
+                com.example.CrashLogger.log("[REGISTER] Step 1 OK: userId=" + response.user.id + " role=" + response.user.role)
+
+                // Step 2: Save auth credentials
+                authToken = "Bearer " + response.token
                 currentServerUserId = response.user.id
                 currentUserName = response.user.name
-                MedikaNetwork.authToken = "Bearer ${response.token}"
-                MedikaNetwork.connectWebSocket(response.user.id)
+                MedikaNetwork.authToken = "Bearer " + response.token
+
+                // Step 3: Connect WebSocket (non-blocking, fire-and-forget)
                 try {
-                    ZegoCallManager.init(getApplication(), response.user.id, response.user.name)
-                    _zegoCallReady.value = ZegoCallManager.isInitialized()
-                    com.example.CrashLogger.log("[REGISTER] ZegoCall ready: ${ZegoCallManager.isInitialized()}")
+                    MedikaNetwork.connectWebSocket(response.user.id)
                 } catch (e: Throwable) {
-                    com.example.CrashLogger.log("[REGISTER] ZegoCall init EXCEPTION: ${e.message}")
-                    _zegoCallReady.value = false
+                    com.example.CrashLogger.log("[REGISTER] Step 3 WARN: WebSocket failed: " + e.message)
                 }
-                com.example.CrashLogger.log("[ORDER] [REGISTER] ZegoCallManager.init() completed, about to init ZegoChatManager")
-                try {
-                    val instanceCreated = ZegoChatManager.init(getApplication(), response.user.id, response.user.name)
-                    com.example.CrashLogger.log("[REGISTER] ZegoChat instance created: $instanceCreated")
-                    ZegoChatManager.onLoginResult = { success, errorCode, errorMsg ->
-                        viewModelScope.launch {
-                            _zegoChatReady.value = success
-                            com.example.CrashLogger.log("[REGISTER] ZegoChat login result: success=$success code=$errorCode msg=$errorMsg")
-                            if (!success) {
-                                _uploadError.value = "Echec chat ZIM ($errorCode): $errorMsg"
-                            }
-                        }
-                    }
-                    _zegoChatReady.value = instanceCreated
-                } catch (e: Throwable) {
-                    com.example.CrashLogger.log("[REGISTER] ZegoChat init EXCEPTION: ${e.message}")
-                    _zegoChatReady.value = false
-                }
-                handleAuthResponse(response)
-                saveSession(response.token, response.user)
-                // Check if user needs to set up PIN
+
+                // Step 4: Set PIN flag BEFORE handleAuthResponse to avoid race condition
                 if (!isPinSet()) {
                     _needsPinSetup.value = true
+                    com.example.CrashLogger.log("[REGISTER] Step 4: PIN setup needed=true")
                 }
-            } catch (e: Exception) {
+
+                // Step 5: Handle auth response (sets authState, syncs consultations)
+                com.example.CrashLogger.log("[REGISTER] Step 5: handleAuthResponse...")
+                handleAuthResponse(response)
+                com.example.CrashLogger.log("[REGISTER] Step 5 OK")
+
+                // Step 6: Save session
+                saveSession(response.token, response.user)
+                com.example.CrashLogger.log("[REGISTER] Step 6: Session saved")
+
+                // Step 7: Defer ZEGO/ZIM init to BACKGROUND thread (native .so loading)
+                // This prevents native crashes from killing the main thread
+                viewModelScope.launch(Dispatchers.Default) {
+                    com.example.CrashLogger.log("[REGISTER] Step 7: Starting ZEGO init on background thread")
+                    try {
+                        ZegoCallManager.init(getApplication(), response.user.id, response.user.name)
+                        _zegoCallReady.value = ZegoCallManager.isInitialized()
+                        com.example.CrashLogger.log("[REGISTER] Step 7a: ZegoCall OK")
+                    } catch (e: Throwable) {
+                        com.example.CrashLogger.log("[REGISTER] Step 7a WARN: " + e.javaClass.simpleName + ": " + e.message)
+                        _zegoCallReady.value = false
+                    }
+                    try {
+                        val instanceCreated = ZegoChatManager.init(getApplication(), response.user.id, response.user.name)
+                        com.example.CrashLogger.log("[REGISTER] Step 7b: ZegoChat created=" + instanceCreated)
+                        ZegoChatManager.onLoginResult = { success, errorCode, errorMsg ->
+                            viewModelScope.launch {
+                                _zegoChatReady.value = success
+                                com.example.CrashLogger.log("[REGISTER] ZegoChat login: ok=" + success + " code=" + errorCode)
+                                if (!success) {
+                                    _uploadError.value = "Echec chat ZIM (" + errorCode + "): " + errorMsg
+                                }
+                            }
+                        }
+                        _zegoChatReady.value = instanceCreated
+                    } catch (e: Throwable) {
+                        com.example.CrashLogger.log("[REGISTER] Step 7b WARN: " + e.javaClass.simpleName + ": " + e.message)
+                        _zegoChatReady.value = false
+                    }
+                }
+
+                com.example.CrashLogger.log("[REGISTER] Registration flow completed successfully")
+
+            } catch (e: Throwable) {
+                com.example.CrashLogger.log("[REGISTER] FATAL: " + e.javaClass.simpleName + ": " + e.message)
+                e.printStackTrace()
                 _authState.value = AuthState.Unauthenticated
-                _registerError.value = "Erreur d'inscription: ${e.localizedMessage}"
+                _registerError.value = when {
+                    e.localizedMessage?.contains("already taken", ignoreCase = true) == true -> "Ce nom d’utilisateur est deja pris"
+                    e.localizedMessage?.contains("deja utilise", ignoreCase = true) == true -> "Cet email est deja utilise"
+                    e.localizedMessage?.contains("4 characters", ignoreCase = true) == true -> "Le mot de passe doit avoir au moins 4 caracteres"
+                    else -> "Erreur d’inscription: " + (e.localizedMessage ?: "Erreur inconnue")
+                }
             }
         }
     }

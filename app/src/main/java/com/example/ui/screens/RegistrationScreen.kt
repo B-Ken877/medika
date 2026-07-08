@@ -484,6 +484,7 @@ fun RegistrationScreen(
                                 else -> null
                             }
                             if (localError == null) {
+                                try {
                                 viewModel.registerPatient(
                                     username = email,
                                     password = password,
@@ -493,6 +494,10 @@ fun RegistrationScreen(
                                     age = ageText.toIntOrNull() ?: 0,
                                     gender = selectedGender
                                 )
+                                } catch (t: Throwable) {
+                                    com.example.CrashLogger.log("[REG_UI] Crash: " + t.javaClass.simpleName + ": " + t.message)
+                                    localError = "Erreur: " + (t.localizedMessage ?: "inconnue")
+                                }
                             }
                         },
                         modifier = Modifier
