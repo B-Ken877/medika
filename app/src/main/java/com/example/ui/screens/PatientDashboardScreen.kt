@@ -236,7 +236,7 @@ fun PatientDashboardScreen(
                             color = TextPrimary,
                         ),
                     )
-                    TextButton(onClick = { onNavigate("notifications") }) {
+                    TextButton(onClick = { onNavigate("consultation_history") }) {
                         Text(
                             text = "Voir tout",
                             color = PrimaryGreen,

@@ -59,6 +59,7 @@ import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.ChatScreen
 import com.example.ui.screens.DoctorDashboardScreen
 import com.example.ui.screens.NotificationsScreen
+import com.example.ui.screens.ConsultationHistoryScreen
 import com.example.ui.screens.PatientDashboardScreen
 import com.example.ui.screens.PinSetupScreen
 import com.example.ui.screens.PinVerifyScreen
@@ -72,7 +73,7 @@ private val PrimaryGreenDark = Color(0xFF0D7A35)
 private val Neutral200 = Color(0xFFE5E7EB)
 private val NavGray = Color(0xFF9E9E9E)
 
-private val screenOrder = listOf("loading", "auth", "register", "pin_setup", "pin_verify", "home", "intake", "chat", "profile", "notifications")
+private val screenOrder = listOf("loading", "auth", "register", "pin_setup", "pin_verify", "home", "intake", "chat", "profile", "notifications", "consultation_history")
 
 // Navigation history for back button support
 private val screenBackMap = mapOf(
@@ -350,6 +351,7 @@ fun SanteApp(
                                 "chat" -> currentScreen = "chat"
                                 "profile" -> currentScreen = "profile"
                                 "notifications" -> currentScreen = "notifications"
+                                "consultation_history" -> currentScreen = "consultation_history"
                             }
                         }
                     )
@@ -399,6 +401,14 @@ fun SanteApp(
                         }
                     },
                     onBack = { currentScreen = "home" }
+                )
+                "consultation_history" -> ConsultationHistoryScreen(
+                    viewModel = viewModel,
+                    onBack = { currentScreen = "home" },
+                    onConsultationClick = { id ->
+                        viewModel.setActiveConsultation(id)
+                        currentScreen = "chat"
+                    }
                 )
             }
         }

@@ -229,6 +229,22 @@ interface MedikaApiService {
     @GET("api/health")
     suspend fun health(): Map<String, String>
 
+    // ─── Admin endpoints ───────────────────────────────
+    @POST("api/admin/auth/login")
+    suspend fun adminLogin(@Body request: LoginRequest): LoginResponse
+
+    @GET("api/admin/doctors")
+    suspend fun adminGetDoctors(@Header("Authorization") token: String): List<Map<String, Any?>>
+
+    @GET("api/admin/consultations")
+    suspend fun adminGetConsultations(@Header("Authorization") token: String): List<Map<String, Any?>>
+
+    @GET("api/admin/patients")
+    suspend fun adminGetPatients(@Header("Authorization") token: String): List<Map<String, Any?>>
+
+    @POST("api/admin/doctors")
+    suspend fun adminCreateDoctorApi(@Header("Authorization") token: String, @Body body: Map<String, Any?>): Map<String, Any?>
+
     // ─── LiveKit Token ────────────────────────────────────────────────────────
 
     @POST("api/call/token")

@@ -1110,7 +1110,13 @@ class SanteViewModel(
                 repository.insertDoctors(listOf(doctor))
                 _authState.value = AuthState.DoctorAuthenticated(doctor, serverUser)
             }
+            "admin" -> {
+                _authState.value = AuthState.AdminAuthenticated
+            }
         }
+
+        // Sync admin data if admin
+        if (role == "admin") syncAdminData()
 
         // ── FAST PATH: auth state is already set above, UI can render now.
         //    Defer all heavy init (WS, ZEGO, ZIM) to background so the user
@@ -1403,10 +1409,17 @@ class SanteViewModel(
                 repository.insertDoctors(listOf(doctor))
                 _authState.value = AuthState.DoctorAuthenticated(doctor, response.user)
             }
+            "admin" -> {
+                _authState.value = AuthState.AdminAuthenticated
+            }
         }
 
         processedMessageIds.clear()
-        syncConsultationsFromServer()
+        if (response.user.role == "admin") {
+            syncAdminData()
+        } else {
+            syncConsultationsFromServer()
+        }
         startSyncPolling()
     }
 
@@ -2696,20 +2709,67 @@ class SanteViewModel(
         }
     }
 
-    // ─── Admin ───────────────────────────────────────
+        // ─── Admin ───────────────────────────────────────
+
+    fun loginAdmin(username: String, password: String) {
+        _authState.value = AuthState.Loading
+        _loginError.value = null
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val response = MedikaNetwork.api.adminLogin(LoginRequest(username, password))
+                authToken = "Bearer " + response.token
+                currentServerUserId = response.user.id
+                currentUserName = response.user.name
+                MedikaNetwork.authToken = "Bearer " + response.token
+                withContext(Dispatchers.Main) { handleAuthResponse(response); saveSession(response.token, response.user) }
+            } catch (e: java.lang.StackOverflowError) {
+                withContext(Dispatchers.Main) { _authState.value = AuthState.Unauthenticated; _loginError.value = "Erreur pile" }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { _authState.value = AuthState.Unauthenticated; _loginError.value = "Identifiants invalides" }
+            }
+        }
+    }
+
+    fun syncAdminData() {
+        val token = authToken ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val docs = MedikaNetwork.api.adminGetDoctors(token)
+                val ents = docs.map { d ->
+                    DoctorEntity(id=(d["id"] as? String) ?: "", name=(d["name"] as? String) ?: "",
+                        specialty=(d["specialty"] as? String) ?: "Medecine Generale", licenseNumber=(d["license_number"] as? String) ?: "",
+                        location=(d["location"] as? String) ?: "", avatarUrl=(d["avatar_url"] as? String) ?: "",
+                        rating=when(val r=d["rating"]){is Number->r.toDouble();else->4.9},
+                        isAvailable=when(val a=d["is_available"]){is Number->a.toInt()==1;else->true},
+                        hospital=(d["hospital"] as? String) ?: "", biography=(d["biography"] as? String) ?: "")
+                }
+                repository.insertDoctors(ents)
+                val cons = MedikaNetwork.api.adminGetConsultations(token)
+                for (sc in cons) {
+                    val e = serverMapToConsultationEntity(sc)
+                    val x = repository.getConsultationById(e.id)
+                    if (x != null) repository.updateConsultation(e) else repository.insertConsultation(e)
+                }
+            } catch (e: Exception) { println("[ADMIN] Sync: " + e.message) }
+        }
+    }
 
     fun adminCreateDoctor(name: String, specialty: String, licenseNumber: String, location: String, hospital: String, biography: String) {
-        viewModelScope.launch {
-            val newDoctor = DoctorEntity(
-                id = "doc_" + UUID.randomUUID().toString().take(8),
-                name = name, specialty = specialty, licenseNumber = licenseNumber,
-                location = location, hospital = hospital, biography = biography,
-                avatarUrl = "", rating = 5.0, isAvailable = true
-            )
-            repository.insertDoctors(listOf(newDoctor))
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val token = authToken ?: return@launch
+                val body = mapOf("name" to name, "specialty" to specialty, "licenseNumber" to licenseNumber,
+                    "location" to location, "hospital" to hospital, "biography" to biography,
+                    "username" to name.lowercase().replace(" ", ".") + "_" + System.currentTimeMillis() % 10000,
+                    "password" to "medika2024")
+                MedikaNetwork.api.adminCreateDoctorApi(token, body)
+                syncAdminData()
+            } catch (e: Exception) { _uploadError.value = "Erreur: " + (e.localizedMessage ?: "inconnue") }
         }
     }
 }
+
+
 
 // ─── ViewModel Factory ───────────────────────────────────
 
