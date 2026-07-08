@@ -18,6 +18,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.SanteViewModel
 import com.example.ui.components.ConsultationCard
 import com.example.ui.theme.*
+import androidx.compose.foundation.background
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
