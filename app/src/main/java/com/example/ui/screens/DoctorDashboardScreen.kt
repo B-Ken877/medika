@@ -79,6 +79,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import androidx.compose.material.icons.filled.AttachMoney
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DoctorDashboardScreen — Professional medical provider dashboard
@@ -92,10 +93,12 @@ fun DoctorDashboardScreen(
     val authState by viewModel.authState.collectAsStateWithLifecycle()
     val allConsultations by viewModel.allConsultations.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
+    val specialtyPrices by viewModel.specialtyPrices.collectAsStateWithLifecycle()
 
     // Sync from server every time dashboard appears
     LaunchedEffect(Unit) {
         viewModel.refreshConsultations()
+        viewModel.fetchSpecialtyPrices()
     }
 
     val doctor = (authState as? com.example.ui.AuthState.DoctorAuthenticated)?.doctor
@@ -157,17 +160,31 @@ fun DoctorDashboardScreen(
         val now = java.util.Calendar.getInstance()
         val currentMonth = now.get(java.util.Calendar.MONTH)
         val currentYear = now.get(java.util.Calendar.YEAR)
-        val monthlyCount = termines.count {
+
+        // Calculate real earnings based on specialty prices (75% to doctor, 25% to Medika)
+        fun calcEarnings(consultations: List<ConsultationEntity>): Pair<Int, Int> {
+            var gross = 0
+            for (c in consultations) {
+                val price = specialtyPrices[c.specialtyNeeded] ?: 0
+                gross += price
+            }
+            val doctorNet = (gross * 0.75).toInt()
+            return Pair(doctorNet, gross)
+        }
+
+        val monthlyTermines = termines.filter {
             val cal = java.util.Calendar.getInstance().apply { timeInMillis = it.timestamp }
             cal.get(java.util.Calendar.MONTH) == currentMonth && cal.get(java.util.Calendar.YEAR) == currentYear
         }
-        val monthlyEarnings = monthlyCount * 750 // TODO: will be dynamic from API in future update
-        val overallEarnings = termines.size * 750 // TODO: will be dynamic from API in future update
+        val (monthlyEarnings, monthlyGross) = calcEarnings(monthlyTermines)
+        val (overallEarnings, overallGross) = calcEarnings(termines)
 
         FinanceCard(
             monthlyEarnings = monthlyEarnings,
-            monthlyCount = monthlyCount,
+            monthlyGross = monthlyGross,
+            monthlyCount = monthlyTermines.size,
             overallEarnings = overallEarnings,
+            overallGross = overallGross,
             overallCount = termines.size
         )
 
@@ -1176,13 +1193,12 @@ private fun formatWaitingTime(timestamp: Long): String {
 @Composable
 private fun FinanceCard(
     monthlyEarnings: Int,
+    monthlyGross: Int,
     monthlyCount: Int,
     overallEarnings: Int,
+    overallGross: Int,
     overallCount: Int,
 ) {
-    val monthName = java.text.SimpleDateFormat("MMMM", java.util.Locale.FRENCH)
-        .format(java.util.Date())
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1191,68 +1207,119 @@ private fun FinanceCard(
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-        ) {
-            // Monthly earnings
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.weight(1f),
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Ce mois",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = TextSecondary,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "$monthlyEarnings HTG",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = PrimaryGreen,
-                    ),
-                )
-                Text(
-                    text = "$monthlyCount consultation${if (monthlyCount != 1) "s" else ""}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextTertiary,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.AttachMoney,
+                        contentDescription = null,
+                        tint = PrimaryGreen,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Revenus",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Green50
+                ) {
+                    Text(
+                        text = "75% pour vous",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Green700,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
 
-            // Divider
-            Box(
-                modifier = Modifier
-                    .width(1.dp)
-                    .height(48.dp)
-                    .background(Color(0xFFE0E0E0))
-            )
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Overall earnings
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.weight(1f),
+            // Two columns: Ce mois / Total
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
-                Text(
-                    text = "Total",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = TextSecondary,
+                // Monthly
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(
+                        text = "Ce mois",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = TextSecondary,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "$monthlyEarnings HTG",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryGreen,
+                        ),
+                    )
+                    Text(
+                        text = "sur $monthlyGross HTG",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary,
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "$monthlyCount consultation${if (monthlyCount != 1) "s" else ""}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary,
+                    )
+                }
+
+                // Divider
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(60.dp)
+                        .background(Color(0xFFE0E0E0))
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "$overallEarnings HTG",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
-                    ),
-                )
-                Text(
-                    text = "$overallCount consultation${if (overallCount != 1) "s" else ""}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextTertiary,
-                )
+
+                // Overall
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(
+                        text = "Total",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = TextSecondary,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "$overallEarnings HTG",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary,
+                        ),
+                    )
+                    Text(
+                        text = "sur $overallGross HTG",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary,
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "$overallCount consultation${if (overallCount != 1) "s" else ""}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary,
+                    )
+                }
             }
         }
     }

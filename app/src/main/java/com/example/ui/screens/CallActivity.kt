@@ -31,6 +31,7 @@ class CallActivity : AppCompatActivity() {
         const val USER_NAME = "USER_NAME"
         const val IS_VIDEO = "IS_VIDEO"
         const val CONSULTATION_ID = "CONSULTATION_ID"
+        const val PEER_NAME = "PEER_NAME"
         const val APP_ID = "854c306723a44d838db956729bedb7f7"
         const val TOKEN_SERVER = "http://167.86.124.101:9999"
     }
@@ -41,6 +42,7 @@ class CallActivity : AppCompatActivity() {
     private var isCameraOn = true
     private var isSpeakerOn = false
     private var consultationId = ""
+    private var callEndReceiver: android.content.BroadcastReceiver? = null
     private var callStartTime = 0L
     private val handler = Handler(Looper.getMainLooper())
     private var timerRunnable: Runnable? = null
@@ -143,6 +145,28 @@ class CallActivity : AppCompatActivity() {
         btnHangup.setOnClickListener { sendCallEndAndFinish() }
 
         findViewById<View>(R.id.btnBack)?.setOnClickListener { sendCallEndAndFinish() }
+
+        // Display peer name
+        val peerName = intent.getStringExtra(PEER_NAME)
+        val remoteUserNameView = findViewById<android.widget.TextView>(R.id.remoteUserName)
+        if (!peerName.isNullOrBlank()) {
+            remoteUserNameView.text = peerName
+            // Set avatar initial
+            val initial = peerName.take(1).uppercase()
+            findViewById<android.widget.TextView>(R.id.avatarInitial)?.text = initial.toString()
+        }
+
+        // Listen for call ended/rejected broadcast from ViewModel
+        callEndReceiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+                val reason = intent?.getStringExtra("reason") ?: "ended"
+                val msg = if (reason == "rejected") "Appel rejeté" else "Appel terminé"
+                statusText.text = msg
+                stopTimer()
+                handler.postDelayed({ finish() }, 1200)
+            }
+        }
+        registerReceiver(callEndReceiver, android.content.IntentFilter("com.example.ACTION_CALL_END"))
 
         val uid = userId.hashCode().toLong() and 0xFFFFFFFFL
         fetchTokenAndJoin(roomId, uid.toInt())
@@ -250,6 +274,8 @@ class CallActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        try { callEndReceiver?.let { unregisterReceiver(it) } } catch (_: Exception) {}
+        callEndReceiver = null
         stopTimer()
         try {
             com.example.data.api.MedikaNetwork.sendCallEnd(consultationId)

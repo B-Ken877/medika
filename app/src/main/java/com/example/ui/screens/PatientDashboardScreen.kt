@@ -61,6 +61,30 @@ import com.example.ui.components.AnimatedButton
 import com.example.ui.components.ConsultationCard
 import com.example.ui.components.DepthCard
 import com.example.ui.components.StatCard
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
+import androidx.compose.material.icons.filled.Elderly
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.Healing
+import androidx.compose.material.icons.filled.SelfImprovement
+import androidx.compose.material.icons.filled.Spa
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.Vaccines
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.example.ui.theme.*
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -244,7 +268,8 @@ fun PatientDashboardScreen(
         Spacer(modifier = Modifier.height(32.dp))
 
         // ══════════════════════════════════════════════════════════════════════
-        // 5. HEALTH TIPS SECTION — Horizontal scroll
+        // ══════════════════════════════════════════════════════════════════════
+        // 5. HEALTH TIPS SECTION — Auto-scrolling carousel
         // ══════════════════════════════════════════════════════════════════════
         AnimatedVisibility(
             visible = true,
@@ -254,30 +279,8 @@ fun PatientDashboardScreen(
                         animationSpec = tween(500, delayMillis = 320),
                     ),
         ) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                Text(
-                    text = "Conseils Santé",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
-                    ),
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    healthTips.forEach { tip ->
-                        HealthTipCard(tip = tip)
-                    }
-                }
-            }
+            HealthTipsCarousel()
         }
-
         // Bottom spacing for navigation bar
         Spacer(modifier = Modifier.height(80.dp))
     }
@@ -400,7 +403,7 @@ private fun QuickActionsRow(onNavigate: (String) -> Unit) {
             label = "Mes\nConsultations",
             icon = Icons.AutoMirrored.Filled.Chat,
             backgroundColor = SanteInfo,
-            onClick = { onNavigate("notifications") },
+            onClick = { onNavigate("chat") },
         )
         QuickActionItem(
             label = "Mon\nProfil",
@@ -498,7 +501,8 @@ private fun EmptyConsultationsState(onNavigate: (String) -> Unit) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// HEALTH TIPS — Data model + cards
+// ═══════════════════════════════════════════════════════════════════════════════
+// HEALTH TIPS — Data model + auto-scrolling carousel + cards
 // ═══════════════════════════════════════════════════════════════════════════════
 
 private data class HealthTip(
@@ -526,12 +530,152 @@ private val healthTips = listOf(
     ),
     HealthTip(
         title = "Activité physique",
-        description = "30 minutes de marche quotidienne renforcent votre cœur et votre esprit.",
+        description = "30 minutes de marche quotidienne renforcent votre coeur et votre esprit.",
         icon = Icons.Default.DirectionsRun,
         accentColor = SanteWarning,
         bgColor = SanteWarningBg,
     ),
+    HealthTip(
+        title = "Nutrition équilibrée",
+        description = "Privilégiez les fruits, légumes et protéines maigres à chaque repas.",
+        icon = Icons.Default.Restaurant,
+        accentColor = Color(0xFF059669),
+        bgColor = Color(0xFFECFDF5),
+    ),
+    HealthTip(
+        title = "Soleil et vitamine D",
+        description = "Exposez-vous au soleil 15 min par jour pour favoriser la vitamine D.",
+        icon = Icons.Default.WbSunny,
+        accentColor = Color(0xFFD97706),
+        bgColor = Color(0xFFFFFBEB),
+    ),
+    HealthTip(
+        title = "Santé mentale",
+        description = "Prenez du temps pour vous: méditation, lecture ou simple respiration profonde.",
+        icon = Icons.Default.SelfImprovement,
+        accentColor = ActionPurple,
+        bgColor = Color(0xFFF5F3FF),
+    ),
+    HealthTip(
+        title = "Vaccination à jour",
+        description = "Vérifiez vos vaccins et faites les rappels recommandés par votre médecin.",
+        icon = Icons.Default.Vaccines,
+        accentColor = Color(0xFF0284C7),
+        bgColor = Color(0xFFF0F9FF),
+    ),
+    HealthTip(
+        title = "Coeur en forme",
+        description = "Surveillez votre tension artérielle régulièrement pour prévenir les risques.",
+        icon = Icons.Default.Favorite,
+        accentColor = Color(0xFFE11D48),
+        bgColor = Color(0xFFFFF1F2),
+    ),
+    HealthTip(
+        title = "Bien-être physique",
+        description = "Le renforcement musculaire 2 fois par semaine maintient votre mobilité.",
+        icon = Icons.Default.FitnessCenter,
+        accentColor = Color(0xFF7C3AED),
+        bgColor = Color(0xFFF5F3FF),
+    ),
+    HealthTip(
+        title = "Soins du corps",
+        description = "Lavez-vous les mains régulièrement et consultez au moindre doute.",
+        icon = Icons.Default.Healing,
+        accentColor = PrimaryGreen,
+        bgColor = Color(0xFFECFDF5),
+    ),
+    HealthTip(
+        title = "Détente et spa",
+        description = "Un bain chaud ou une douche tiède aide à relâcher les tensions.",
+        icon = Icons.Default.Spa,
+        accentColor = Color(0xFF0891B2),
+        bgColor = Color(0xFFECFEFF),
+    ),
+    HealthTip(
+        title = "Santé des aînés",
+        description = "Les personnes âgées doivent faire un bilan de santé au moins 2 fois par an.",
+        icon = Icons.Default.Elderly,
+        accentColor = Color(0xFF92400E),
+        bgColor = Color(0xFFFFF7ED),
+    ),
 )
+
+@Composable
+private fun HealthTipsCarousel() {
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+
+    // Repeat tips 50x for infinite loop, start in the middle
+    val repeatedTips = remember { List(50) { healthTips }.flatten() }
+    val startIndex = remember { healthTips.size * 25 }
+
+    // Current tip index for dot indicator
+    var currentTipIndex by remember { mutableIntStateOf(0) }
+
+    // Auto-scroll every 3.5 seconds
+    LaunchedEffect(Unit) {
+        listState.scrollToItem(startIndex)
+        while (true) {
+            delay(3500L)
+            val next = listState.firstVisibleItemIndex + 1
+            listState.animateScrollToItem(next)
+        }
+    }
+
+    // Track current visible tip for dots
+    LaunchedEffect(listState.firstVisibleItemIndex) {
+        currentTipIndex = listState.firstVisibleItemIndex % healthTips.size
+    }
+
+    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+        Text(
+            text = "Conseils Santé",
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary,
+            ),
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        LazyRow(
+            state = listState,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            items(
+                items = repeatedTips,
+                key = { "${it.title}_${listState.firstVisibleItemIndex}" }
+            ) { tip ->
+                HealthTipCard(tip = tip)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Dot indicators
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            healthTips.forEachIndexed { index, _ ->
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 3.dp)
+                        .size(
+                            width = if (index == currentTipIndex) 18.dp else 6.dp,
+                            height = 6.dp,
+                        )
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(
+                            if (index == currentTipIndex) PrimaryGreen
+                            else Neutral300
+                        ),
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun HealthTipCard(tip: HealthTip) {

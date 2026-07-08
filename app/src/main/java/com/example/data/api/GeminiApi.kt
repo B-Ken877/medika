@@ -166,6 +166,22 @@ data class WsNewConsultation(
 
 // ─── Medika REST API ─────────────────────────────────────────────────────────
 
+
+
+@JsonClass(generateAdapter = true)
+data class SpecialtyPriceItem(
+    val id: String,
+    val name: String,
+    val price: Int
+)
+
+
+@JsonClass(generateAdapter = true)
+data class PriceResponse(
+    val specialty: String,
+    val price: Int
+)
+
 interface MedikaApiService {
 
     @POST("api/auth/login")
@@ -226,6 +242,9 @@ interface MedikaApiService {
         @Query("type") type: String = "media",
         @Query("consultationId") consultationId: String? = null
     ): UploadResponse
+
+    @GET("api/specialties/prices")
+    suspend fun getSpecialtyPrices(@Header("Authorization") token: String): List<SpecialtyPriceItem>
 }
 
 @JsonClass(generateAdapter = true)

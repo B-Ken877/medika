@@ -164,6 +164,24 @@ class SanteViewModel(
     private val _zegoChatReady = MutableStateFlow(false)
     val zegoChatReady: StateFlow<Boolean> = _zegoChatReady.asStateFlow()
 
+    // ─── Specialty Prices (fetched from backend) ──────────────────────
+    private val _specialtyPrices = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val specialtyPrices: StateFlow<Map<String, Int>> = _specialtyPrices.asStateFlow()
+
+    fun fetchSpecialtyPrices() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val token = authToken ?: return@launch
+                val response = com.example.data.api.MedikaNetwork.api.getSpecialtyPrices(token)
+                val priceMap = response.associate { it.name to it.price }
+                _specialtyPrices.value = priceMap
+                println("[PRICES] Fetched ${priceMap.size} specialty prices")
+            } catch (e: Exception) {
+                println("[PRICES] Error fetching: ${e.message}")
+            }
+        }
+    }
+
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
@@ -243,6 +261,13 @@ class SanteViewModel(
 
     // Track processed message IDs to prevent duplicates
     private val processedMessageIds = java.util.concurrent.ConcurrentHashMap<Long, Boolean>()
+
+    // Cache of recently processed call signal room IDs to prevent stale popups on reconnect.
+    // ZIM replays undelivered messages when the user reconnects, which would trigger old
+    // call_signal messages and show the IncomingCallActivity for calls that ended long ago.
+    // Entries auto-expire after 60 seconds.
+    private val processedCallSignals = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val CALL_SIGNAL_MAX_AGE_MS = 45_000L  // 45 seconds
 
     // ─── Local-first media helpers ─────────────────────────────
     //
@@ -466,6 +491,68 @@ class SanteViewModel(
             }
         }
 
+        // ─── Call event callbacks (reject / end / accept via WS) ───
+        MedikaNetwork.onCallRejected = { consultationId ->
+            com.example.CrashLogger.log("[CALL-WS] Call REJECTED for $consultationId")
+            // If the caller is currently in CallActivity, finish it
+            if (_activeCall.value?.consultationId == consultationId) {
+                _activeCall.value = null
+                currentRoomName = null
+                // Send a broadcast to close any open CallActivity
+                val appCtx = getApplication<android.app.Application>()
+                appCtx.sendBroadcast(android.content.Intent("com.example.ACTION_CALL_ENDED").apply {
+                    putExtra("reason", "rejected")
+                    putExtra("consultationId", consultationId)
+                })
+                // Also send ZIM signal for redundancy
+                try {
+                    val peerId = getPeerUserIdForConsultation(consultationId, currentServerUserId ?: "")
+                    if (peerId != null) {
+                        ZegoChatManager.sendCallRejectSignal(peerId, consultationId)
+                    }
+                } catch (_: Exception) {}
+            }
+            // Insert system message
+            viewModelScope.launch {
+                repository.insertMessage(
+                    com.example.data.db.MessageEntity(
+                        consultationId = consultationId,
+                        senderId = "system",
+                        senderName = "Systeme",
+                        text = "Appel rejeté par le destinataire."
+                    )
+                )
+            }
+        }
+
+        MedikaNetwork.onCallEnded = { consultationId ->
+            com.example.CrashLogger.log("[CALL-WS] Call ENDED for $consultationId")
+            if (_activeCall.value?.consultationId == consultationId) {
+                _activeCall.value = null
+                currentRoomName = null
+                val appCtx = getApplication<android.app.Application>()
+                appCtx.sendBroadcast(android.content.Intent("com.example.ACTION_CALL_ENDED").apply {
+                    putExtra("reason", "ended")
+                    putExtra("consultationId", consultationId)
+                })
+            }
+        }
+
+        MedikaNetwork.onCallAccepted = { consultationId, from ->
+            com.example.CrashLogger.log("[CALL-WS] Call ACCEPTED for $consultationId by $from")
+            // Insert system message
+            viewModelScope.launch {
+                repository.insertMessage(
+                    com.example.data.db.MessageEntity(
+                        consultationId = consultationId,
+                        senderId = "system",
+                        senderName = "Systeme",
+                        text = "Appel accepté."
+                    )
+                )
+            }
+        }
+
         // ─── ZIM (ZegoChat) message receiver ─────────────────────────────
         // Replaces the WebSocket for chat. ZIM delivers messages in real time
         // via its own signaling servers. Media files are hosted on Zego's CDN.
@@ -572,6 +659,24 @@ class SanteViewModel(
                     val roomId = json.getString("roomId")
                     val callType = json.getString("callType")
                     val callerName = json.getString("callerName")
+
+                    // ── Stale signal protection ──
+                    // ZIM replays undelivered messages on reconnect. If this call_signal
+                    // is older than 45 seconds, the call is long over — ignore it.
+                    val signalAge = System.currentTimeMillis() - zimMsg.timestamp
+                    if (signalAge > CALL_SIGNAL_MAX_AGE_MS) {
+                        com.example.CrashLogger.log("[CALL-SIGNAL] STALE (age=${signalAge/1000}s, max=${CALL_SIGNAL_MAX_AGE_MS/1000}s) — ignoring call from ${zimMsg.senderId} room=$roomId")
+                        return
+                    }
+                    // Also deduplicate: if we already saw this exact roomId recently, skip
+                    val now = System.currentTimeMillis()
+                    val lastSeen = processedCallSignals[roomId]
+                    if (lastSeen != null && (now - lastSeen) < 60_000L) {
+                        com.example.CrashLogger.log("[CALL-SIGNAL] DUPLICATE (last seen ${(now - lastSeen)/1000}s ago) — ignoring call room=$roomId")
+                        return
+                    }
+                    processedCallSignals[roomId] = now
+
                     com.example.CrashLogger.log("[CALL-SIGNAL] Received: roomId=$roomId type=$callType from=${zimMsg.senderId}")
                     // Get application context to start CallActivity
                     val appContext = getApplication<Application>()
@@ -580,6 +685,37 @@ class SanteViewModel(
                 }
             } catch (e: Exception) {
                 // Not valid JSON or not a call signal — fall through to normal message handling
+            }
+
+            // ─── Call reject signal detection ─────────
+            if (zimMsg.text.contains("call_reject")) {
+                try {
+                    val json = org.json.JSONObject(zimMsg.text)
+                    if (json.optString("type") == "call_reject") {
+                        val roomId = json.getString("roomId")
+                        com.example.CrashLogger.log("[CALL-SIGNAL] Received call_reject for room=$roomId from=${zimMsg.senderId}")
+                        // Close any open CallActivity for this room
+                        if (_activeCall.value?.consultationId == roomId) {
+                            _activeCall.value = null
+                            currentRoomName = null
+                            val appCtx = getApplication<android.app.Application>()
+                            appCtx.sendBroadcast(android.content.Intent("com.example.ACTION_CALL_ENDED").apply {
+                                putExtra("reason", "rejected")
+                                putExtra("consultationId", roomId)
+                            })
+                        }
+                        // Insert system message
+                        repository.insertMessage(
+                            com.example.data.db.MessageEntity(
+                                consultationId = roomId,
+                                senderId = "system",
+                                senderName = "Systeme",
+                                text = "Appel rejeté."
+                            )
+                        )
+                        return  // Don't process as chat message
+                    }
+                } catch (_: Exception) {}
             }
         }
 
@@ -1944,6 +2080,7 @@ class SanteViewModel(
                     putExtra("ROOM_ID", roomId)
                     putExtra("USER_ID", myId)
                     putExtra("USER_NAME", myName)
+                    putExtra("PEER_NAME", callerName)
                     putExtra("IS_VIDEO", isVideo)
                     putExtra("CONSULTATION_ID", roomId)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)

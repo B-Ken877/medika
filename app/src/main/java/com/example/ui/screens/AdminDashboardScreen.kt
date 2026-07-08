@@ -32,6 +32,12 @@ import com.example.data.db.DoctorEntity
 import com.example.ui.SanteViewModel
 import com.example.ui.components.*
 import com.example.ui.theme.*
+import androidx.compose.foundation.layout.fillMaxHeight
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.AttachMoney
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,7 +47,35 @@ fun AdminDashboardScreen(
 ) {
     val doctors by viewModel.allDoctors.collectAsStateWithLifecycle()
     val consultations by viewModel.allConsultations.collectAsStateWithLifecycle()
+    val specialtyPrices by viewModel.specialtyPrices.collectAsStateWithLifecycle()
     var selectedFilter by remember { mutableStateOf(0) }
+
+    // Fetch specialty prices for finance calculations
+    LaunchedEffect(Unit) {
+        viewModel.fetchSpecialtyPrices()
+    }
+
+    // ── Admin Finance Calculations ──
+    val completedConsultations = consultations.filter { it.status == "TERMINE" }
+    val now = java.util.Calendar.getInstance()
+    val currentMonth = now.get(java.util.Calendar.MONTH)
+    val currentYear = now.get(java.util.Calendar.YEAR)
+    val monthlyCompleted = completedConsultations.filter {
+        val cal = java.util.Calendar.getInstance().apply { timeInMillis = it.timestamp }
+        cal.get(java.util.Calendar.MONTH) == currentMonth && cal.get(java.util.Calendar.YEAR) == currentYear
+    }
+
+    fun calcRevenue(consList: List<com.example.data.db.ConsultationEntity>): Triple<Int, Int, Int> {
+        var gross = 0
+        for (c in consList) {
+            val price = specialtyPrices[c.specialtyNeeded] ?: 0
+            gross += price
+        }
+        return Triple(gross, (gross * 0.75).toInt(), (gross * 0.25).toInt())
+    }
+
+    val (totalGross, totalDoctor, totalMedika) = calcRevenue(completedConsultations)
+    val (monthlyGross, monthlyDoctor, monthlyMedika) = calcRevenue(monthlyCompleted)
     var showCreateDoctorDialog by remember { mutableStateOf(false) }
 
     val scrollState = rememberScrollState()
@@ -176,6 +210,41 @@ fun AdminDashboardScreen(
                             tint = Green500
                         )
                     }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            // ── FINANCE SECTION — Revenue breakdown ──
+            AnimatedVisibility(
+                visible = true,
+                enter = fadeIn(animationSpec = androidx.compose.animation.core.tween(500, delayMillis = 150)) +
+                        slideInVertically(
+                            initialOffsetY = { 30 },
+                            animationSpec = androidx.compose.animation.core.tween(500, delayMillis = 150)
+                        )
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    Text(
+                        text = "Finances",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    AdminFinanceCard(
+                        monthlyGross = monthlyGross,
+                        monthlyMedika = monthlyMedika,
+                        monthlyDoctor = monthlyDoctor,
+                        monthlyCount = monthlyCompleted.size,
+                        totalGross = totalGross,
+                        totalMedika = totalMedika,
+                        totalDoctor = totalDoctor,
+                        totalCount = completedConsultations.size
+                    )
                 }
             }
 
@@ -338,6 +407,124 @@ fun AdminDashboardScreen(
         }
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// AdminFinanceCard — Shows Medika 25% commission and doctor 75% earnings
+// ═══════════════════════════════════════════════════════════════════════════════
+
+@Composable
+private fun AdminFinanceCard(
+    monthlyGross: Int,
+    monthlyMedika: Int,
+    monthlyDoctor: Int,
+    monthlyCount: Int,
+    totalGross: Int,
+    totalMedika: Int,
+    totalDoctor: Int,
+    totalCount: Int,
+) {
+    DepthCard(modifier = Modifier.fillMaxWidth(), elevationLevel = 1) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.AttachMoney,
+                        contentDescription = null,
+                        tint = PrimaryGreen,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Revenus de la Plateforme",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFFFFF7ED)
+                ) {
+                    Text(
+                        text = "25% Medika",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF92400E),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("Ce mois", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("$monthlyGross HTG", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = TextPrimary))
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFFECFDF5)) {
+                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Medika (25%)", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                            Text("$monthlyMedika HTG", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = PrimaryGreen))
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Surface(shape = RoundedCornerShape(8.dp), color = Neutral100) {
+                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Medecins (75%)", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                            Text("$monthlyDoctor HTG", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = TextPrimary))
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("$monthlyCount consultation${if (monthlyCount != 1) "s" else ""}", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+                }
+
+                Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Color(0xFFE0E0E0)))
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("Total", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("$totalGross HTG", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = TextPrimary))
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFFECFDF5)) {
+                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Medika (25%)", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                            Text("$totalMedika HTG", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = PrimaryGreen))
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Surface(shape = RoundedCornerShape(8.dp), color = Neutral100) {
+                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Medecins (75%)", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                            Text("$totalDoctor HTG", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = TextPrimary))
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("$totalCount consultation${if (totalCount != 1) "s" else ""}", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+                }
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AdminDoctorCard
+// ═══════════════════════════════════════════════════════════════════════════════
 
 @Composable
 private fun AdminDoctorCard(

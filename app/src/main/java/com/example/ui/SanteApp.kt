@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.automirrored.filled.Chat
@@ -357,6 +358,7 @@ fun SanteApp(
                         onNavigate = { route ->
                             when (route) {
                                 "chat" -> currentScreen = "chat"
+                                "notifications" -> currentScreen = "notifications"
                             }
                         }
                     )
@@ -485,7 +487,7 @@ private fun BottomNavBar(
                     contentAlignment = Alignment.Center
                 ) {
                     NavBarItem(
-                        icon = Icons.Default.Settings,
+                        icon = Icons.Default.Notifications,
                         label = "Alertes",
                         selected = selectedRoute == "notifications",
                         onClick = { onSelect("notifications") }

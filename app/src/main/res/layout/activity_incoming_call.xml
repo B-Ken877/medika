@@ -106,7 +106,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="Glisser pour repondre ou raccrocher"
+        android:text="Appuyez pour repondre ou raccrocher"
         android:textColor="#666666"
         android:textSize="13sp" />
 
