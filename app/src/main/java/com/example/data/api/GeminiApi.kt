@@ -262,20 +262,9 @@ object MedikaNetwork {
 
     const val BASE_URL = "http://167.86.124.101:3000/"
 
-    /** Proper factory for null/empty-string → null Int? handling.
-     *  Using a JsonAdapter.Factory avoids the recursive adapter resolution
-     *  bug that an untyped @FromJson class causes with KotlinJsonAdapterFactory. */
-    private val safeIntFactory = object : com.squareup.moshi.JsonAdapter.Factory {
-        override fun create(type: java.lang.reflect.Type, annotations: Set<out kotlin.Annotation>, moshi: com.squareup.moshi.Moshi): com.squareup.moshi.JsonAdapter<*>? {
-            if (type != Int::class.javaObjectType && type != Int::class.java) return null
-            return com.squareup.moshi.JsonAdapter { value, writer ->
-                if (value == null) writer.nullValue() else writer.value(value)
-            }.nullSafe()
-        }
-    }
-
+    // KotlinJsonAdapterFactory handles Int? nullables natively.
+    // Removed SafeIntJsonAdapter to prevent recursive adapter resolution bug.
     private val moshi = Moshi.Builder()
-        .add(safeIntFactory)
         .addLast(KotlinJsonAdapterFactory())
         .build()
 
