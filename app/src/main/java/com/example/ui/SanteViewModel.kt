@@ -1318,102 +1318,59 @@ class SanteViewModel(
                 // CRITICAL FIX: Dispatchers.IO gives a fresh, shallow stack.
         // Default Dispatchers.Main.immediate continues on the deep Compose
         // composition stack — Moshi reflection on top overflows 8MB stack.
-        viewModelScope.launch(Dispatchers.IO) {
+                // v3: Raw Thread guarantees a completely fresh 512KB stack.
+        // Even Dispatchers.IO can inherit deep coroutine continuation stacks.
+        _registerError.value = null
+        Thread({
             try {
-                // Step 1: API call + Moshi JSON parsing on IO thread (shallow stack)
-                com.example.CrashLogger.log("[REGISTER] Step 1: API call on IO thread...")
-                val response = MedikaNetwork.api.register(
-                    RegisterRequest(
-                        username = username,
-                        password = password,
-                        name = name,
-                        email = email,
-                        phone = phone,
-                        age = age,
-                        gender = gender
-                    )
-                )
-                com.example.CrashLogger.log("[REGISTER] Step 1 OK: userId=" + response.user.id)
-
-                // Step 2: Save auth credentials
+                com.example.CrashLogger.log("[REGISTER-v3] Starting on raw thread")
+                val response = kotlinx.coroutines.runBlocking {
+                    MedikaNetwork.api.register(
+                        RegisterRequest(username=username, password=password,
+                            name=name, email=email, phone=phone, age=age, gender=gender))
+                }
+                com.example.CrashLogger.log("[REGISTER-v3] API OK: " + response.user.id)
                 authToken = "Bearer " + response.token
                 currentServerUserId = response.user.id
                 currentUserName = response.user.name
                 MedikaNetwork.authToken = "Bearer " + response.token
+                try { MedikaNetwork.connectWebSocket(response.user.id) } catch (_: Throwable) {}
 
-                // Step 3: Connect WebSocket (non-blocking, fire-and-forget)
-                try {
-                    MedikaNetwork.connectWebSocket(response.user.id)
-                } catch (_: Throwable) {
-                    com.example.CrashLogger.log("[REGISTER] Step 3 WARN: WS failed")
-                }
-
-                // Steps 4-6: UI state updates MUST run on Main thread
-                withContext(Dispatchers.Main) {
-                    // Step 4: Set PIN flag BEFORE handleAuthResponse
-                    if (!isPinSet()) {
-                        _needsPinSetup.value = true
-                        com.example.CrashLogger.log("[REGISTER] Step 4: PIN needed=true")
+                // Post UI updates to Main thread
+                val handler = android.os.Handler(android.os.Looper.getMainLooper())
+                handler.post({
+                    if (!isPinSet()) _needsPinSetup.value = true
+                    viewModelScope.launch {
+                        handleAuthResponse(response)
+                        saveSession(response.token, response.user)
                     }
-
-                    // Step 5: Handle auth response
-                    com.example.CrashLogger.log("[REGISTER] Step 5: handleAuthResponse...")
-                    handleAuthResponse(response)
-                    com.example.CrashLogger.log("[REGISTER] Step 5 OK")
-
-                    // Step 6: Save session
-                    saveSession(response.token, response.user)
-                    com.example.CrashLogger.log("[REGISTER] Step 6: Session saved")
-                }
-
-                // Step 7: ZEGO/ZIM init on separate background thread
-                viewModelScope.launch(Dispatchers.Default) {
-                    com.example.CrashLogger.log("[REGISTER] Step 7: ZEGO init")
-                    try {
-                        ZegoCallManager.init(getApplication(), response.user.id, response.user.name)
-                        _zegoCallReady.value = ZegoCallManager.isInitialized()
-                    } catch (e: Throwable) {
-                        com.example.CrashLogger.log("[REGISTER] Step 7a WARN: " + e.message)
-                        _zegoCallReady.value = false
+                    viewModelScope.launch(Dispatchers.Default) {
+                        try { ZegoCallManager.init(getApplication(), response.user.id, response.user.name)
+                            _zegoCallReady.value = ZegoCallManager.isInitialized()
+                        } catch (_: Throwable) { _zegoCallReady.value = false }
+                        try { val ok = ZegoChatManager.init(getApplication(), response.user.id, response.user.name)
+                            ZegoChatManager.onLoginResult = { s, c, m ->
+                                viewModelScope.launch { _zegoCallReady.value = s
+                                    if (!s) _uploadError.value = "Echec ZIM ($c): $m" } }
+                            _zegoChatReady.value = ok
+                        } catch (_: Throwable) { _zegoCallReady.value = false }
                     }
-                    try {
-                        val ok = ZegoChatManager.init(getApplication(), response.user.id, response.user.name)
-                        ZegoChatManager.onLoginResult = { success, code, msg ->
-                            viewModelScope.launch {
-                                _zegoChatReady.value = success
-                                if (!success) _uploadError.value = "Echec ZIM ($code): $msg"
-                            }
-                        }
-                        _zegoChatReady.value = ok
-                    } catch (e: Throwable) {
-                        com.example.CrashLogger.log("[REGISTER] Step 7b WARN: " + e.message)
-                        _zegoChatReady.value = false
-                    }
-                }
-                com.example.CrashLogger.log("[REGISTER] completed OK")
-
+                })
             } catch (e: java.lang.StackOverflowError) {
-                com.example.CrashLogger.log("[REGISTER] STACK_OVERFLOW: " + e.message)
-                withContext(Dispatchers.Main) {
+                com.example.CrashLogger.log("[REGISTER-v3] STACK_OVERFLOW: " + e.message)
+                android.os.Handler(android.os.Looper.getMainLooper()).post({
                     _authState.value = AuthState.Unauthenticated
-                    _registerError.value = "Erreur de pile memoire. Veuillez reessayer."
-                }
+                    _registerError.value = "[v3] Erreur de pile. Reessayez."
+                })
             } catch (e: Throwable) {
-                com.example.CrashLogger.log("[REGISTER] ERROR: " + e.javaClass.simpleName + ": " + e.message)
-                withContext(Dispatchers.Main) {
+                com.example.CrashLogger.log("[REGISTER-v3] " + e.javaClass.simpleName + ": " + e.message)
+                android.os.Handler(android.os.Looper.getMainLooper()).post({
                     _authState.value = AuthState.Unauthenticated
-                    _registerError.value = when {
-                        e.localizedMessage?.contains("already taken", ignoreCase = true) == true ->
-                            "Ce nom d'utilisateur est deja pris"
-                        e.localizedMessage?.contains("deja utilise", ignoreCase = true) == true ->
-                            "Cet email est deja utilise"
-                        e.localizedMessage?.contains("4 characters", ignoreCase = true) == true ->
-                            "Le mot de passe doit avoir au moins 4 caracteres"
-                        else -> "Erreur d'inscription: " + (e.localizedMessage ?: "Erreur inconnue")
-                    }
-                }
+                    _registerError.value = "[v3] Erreur: " + (e.localizedMessage ?: "inconnue")
+                })
             }
-        }
+        }, "RegisterThread").start()
+
     }
 
     private suspend fun handleAuthResponse(response: LoginResponse) {
