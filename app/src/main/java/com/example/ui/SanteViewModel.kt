@@ -2770,6 +2770,91 @@ class SanteViewModel(
 }
 
 
+    // ─── Support Tickets ──────────────────────────────────
+    private val _tickets = MutableStateFlow<List<Map<String, Any?>>>(emptyList())
+    val tickets: StateFlow<List<Map<String, Any?>>> = _tickets.asStateFlow()
+
+    private val _currentTicketMessages = MutableStateFlow<List<Map<String, Any?>>>(emptyList())
+    val currentTicketMessages: StateFlow<List<Map<String, Any?>>> = _currentTicketMessages.asStateFlow()
+
+    private val _currentTicket = MutableStateFlow<Map<String, Any?>?>(null)
+    val currentTicket: StateFlow<Map<String, Any?>?> = _currentTicket.asStateFlow()
+
+    private val _ticketLoading = MutableStateFlow(false)
+    val ticketLoading: StateFlow<Boolean> = _ticketLoading.asStateFlow()
+
+    private var activeTicketId: String? = null
+
+    fun fetchTickets() {
+        val token = authToken ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val result = MedikaNetwork.api.getTickets(token)
+                _tickets.value = result
+            } catch (e: Exception) { println("[TICKET] Error fetching: ${e.message}") }
+        }
+    }
+
+    fun createTicket(subject: String, onResult: (Boolean, String?) -> Unit) {
+        val token = authToken ?: return
+        _ticketLoading.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val ticket = MedikaNetwork.api.createTicket(token, mapOf("subject" to subject))
+                _tickets.value = listOf(ticket) + _tickets.value
+                withContext(Dispatchers.Main) { onResult(true, ticket["id"] as? String) }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { onResult(false, e.localizedMessage) }
+            }
+            _ticketLoading.value = false
+        }
+    }
+
+    fun openTicket(ticketId: String) {
+        activeTicketId = ticketId
+        val token = authToken ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val result = MedikaNetwork.api.getTicket(token, ticketId)
+                _currentTicket.value = result
+                @Suppress("UNCHECKED_CAST")
+                _currentTicketMessages.value = (result["messages"] as? List<Map<String, Any?>>) ?: emptyList()
+            } catch (e: Exception) { println("[TICKET] Error opening: ${e.message}") }
+        }
+    }
+
+    fun sendTicketMessage(text: String, fileUrl: String? = null, fileType: String? = null, fileSize: Long? = null) {
+        val token = authToken ?: return
+        val tid = activeTicketId ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val body = mutableMapOf<String, Any>("content" to text)
+                if (fileUrl != null) { body["file_url"] = fileUrl; body["file_type"] = fileType ?: ""; body["file_size"] = fileSize ?: 0 }
+                val msg = MedikaNetwork.api.sendTicketMessage(token, tid, body)
+                _currentTicketMessages.value = _currentTicketMessages.value + msg
+            } catch (e: Exception) { println("[TICKET] Error sending: ${e.message}") }
+        }
+    }
+
+    fun uploadTicketFile(uri: android.net.Uri, context: android.content.Context, onUploaded: (String?, String?, Long?) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val file = copyUriToCache(uri, context) ?: return@launch
+                val reqBody = file.asRequestBody("multipart/form-data".toMediaTypeOrNull())
+                val part = okhttp3.MultipartBody.Part.createFormData("file", file.name, reqBody)
+                val token = authToken ?: return@launch
+                val resp = MedikaNetwork.api.uploadTicketFile(token, part)
+                onUploaded(resp.url, resp.mimetype, resp.size)
+            } catch (e: Exception) { println("[TICKET] Upload error: ${e.message}"); onUploaded(null, null, null) }
+        }
+    }
+
+    fun refreshCurrentTicket() {
+        val tid = activeTicketId ?: return
+        openTicket(tid)
+    }
+
+
 
 // ─── ViewModel Factory ───────────────────────────────────
 

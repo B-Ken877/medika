@@ -59,6 +59,8 @@ import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.ChatScreen
 import com.example.ui.screens.DoctorDashboardScreen
 import com.example.ui.screens.NotificationsScreen
+import com.example.ui.screens.TicketListScreen
+import com.example.ui.screens.TicketChatScreen
 import com.example.ui.screens.ConsultationHistoryScreen
 import com.example.ui.screens.PatientDashboardScreen
 import com.example.ui.screens.PinSetupScreen
@@ -73,7 +75,7 @@ private val PrimaryGreenDark = Color(0xFF0D7A35)
 private val Neutral200 = Color(0xFFE5E7EB)
 private val NavGray = Color(0xFF9E9E9E)
 
-private val screenOrder = listOf("loading", "auth", "register", "pin_setup", "pin_verify", "home", "intake", "chat", "profile", "notifications", "consultation_history")
+private val screenOrder = listOf("loading", "auth", "register", "pin_setup", "pin_verify", "home", "intake", "chat", "profile", "notifications", "consultation_history", "ticket_list", "ticket_chat")
 
 // Navigation history for back button support
 private val screenBackMap = mapOf(
@@ -83,7 +85,9 @@ private val screenBackMap = mapOf(
     "intake" to "home",
     "chat" to "home",
     "profile" to "home",
-    "notifications" to "home"
+    "notifications" to "home",
+    "ticket_list" to "home",
+    "ticket_chat" to "ticket_list"
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -352,6 +356,7 @@ fun SanteApp(
                                 "profile" -> currentScreen = "profile"
                                 "notifications" -> currentScreen = "notifications"
                                 "consultation_history" -> currentScreen = "consultation_history"
+                                "ticket_list" -> currentScreen = "ticket_list"
                             }
                         }
                     )
@@ -401,6 +406,16 @@ fun SanteApp(
                         }
                     },
                     onBack = { currentScreen = "home" }
+                )
+
+                "ticket_list" -> TicketListScreen(
+                    viewModel = viewModel,
+                    onNavigate = { route -> currentScreen = route },
+                    onBack = { currentScreen = "home" }
+                )
+                "ticket_chat" -> TicketChatScreen(
+                    viewModel = viewModel,
+                    onBack = { currentScreen = "ticket_list" }
                 )
                 "consultation_history" -> ConsultationHistoryScreen(
                     viewModel = viewModel,

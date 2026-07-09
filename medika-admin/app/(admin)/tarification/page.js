@@ -122,9 +122,9 @@ export default function TarificationPage() {
               </div>
               {spec.price > 0 && (
                 <div style={{ marginTop: 10, padding: '8px 12px', background: '#f0fdf4', borderRadius: 6, fontSize: 12, color: '#374151' }}>
-                  <span style={{ color: '#059669', fontWeight: 600 }}>Medecin: {formatCurrency(spec.price - 250)}</span>
+                  <span style={{ color: '#059669', fontWeight: 600 }}>Medecin: {formatCurrency(Math.round(spec.price * 0.75))}</span>
                   {' | '}
-                  <span style={{ color: '#b45309', fontWeight: 600 }}>Medika: {formatCurrency(250)}</span>
+                  <span style={{ color: '#b45309', fontWeight: 600 }}>Medika: {formatCurrency(Math.round(spec.price * 0.25))}</span>
                 </div>
               )}
             </div>

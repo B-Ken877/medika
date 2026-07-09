@@ -36,7 +36,8 @@ import com.example.ui.theme.*
 @Composable
 fun ProfileScreen(
     viewModel: SanteViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onNavigate: (String) -> Unit = {}
 ) {
     val authState by viewModel.authState.collectAsStateWithLifecycle()
     val profile by viewModel.patientProfile.collectAsStateWithLifecycle()
@@ -302,6 +303,36 @@ fun ProfileScreen(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+
+
+            // ── Customer Care ─────────────────────────────────
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = Color.White,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .clickable { onNavigate("ticket_list") }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(shape = CircleShape, color = Color(0xFFDBEAFE)) {
+                        Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.HeadsetMic, modifier = Modifier.size(20.dp), tint = Color(0xFF2563EB))
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Service Client", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                        Text("Obtenez de l\'aide et support", fontSize = 12.sp, color = TextSecondary)
+                    }
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, modifier = Modifier.size(20.dp), tint = Neutral400)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             // ── Logout Button ────────────────────────────────────
             OutlinedButton(

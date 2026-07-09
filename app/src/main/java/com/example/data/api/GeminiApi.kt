@@ -259,6 +259,25 @@ interface MedikaApiService {
         @Query("consultationId") consultationId: String? = null
     ): UploadResponse
 
+    // ─── Support Tickets ──────────────────────────────────────────────
+    @GET("api/tickets")
+    suspend fun getTickets(@Header("Authorization") token: String): List<Map<String, Any?>>
+
+    @POST("api/tickets")
+    suspend fun createTicket(@Header("Authorization") token: String, @Body body: Map<String, Any?>): Map<String, Any?>
+
+    @GET("api/tickets/{id}")
+    suspend fun getTicket(@Header("Authorization") token: String, @Path("id") id: String): Map<String, Any?>
+
+    @POST("api/tickets/{id}/messages")
+    suspend fun sendTicketMessage(@Header("Authorization") token: String, @Path("id") id: String, @Body body: Map<String, Any?>): Map<String, Any?>
+
+    @POST("api/upload")
+    suspend fun uploadTicketFile(
+        @Header("Authorization") token: String,
+        @Part file: okhttp3.MultipartBody.Part,
+        @Query("type") type: String = "media"
+    ): UploadResponse
     @GET("api/specialties/prices")
     suspend fun getSpecialtyPrices(@Header("Authorization") token: String): List<SpecialtyPriceItem>
 }
