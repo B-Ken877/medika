@@ -19,9 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.VerifiedUser
-import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -54,11 +52,9 @@ import com.example.ui.theme.PrimaryGreen
 import com.example.ui.theme.PrimaryGreenDark
 import com.example.ui.theme.SanteSuccess
 import com.example.ui.theme.SanteSuccessBg
-import com.example.ui.theme.SanteWarning
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.TextTertiary
-import java.util.Locale
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 
@@ -77,10 +73,6 @@ fun DoctorProfileCard(
             .take(2)
             .joinToString("") { it.first().uppercase() }
     }
-
-    val ratingValue = doctor.rating.coerceIn(0.0, 5.0)
-    val fullStars = ratingValue.toInt()
-    val hasHalf = (ratingValue - fullStars) >= 0.3
 
     val resolvedAvatarUrl = remember(doctor.avatarUrl) {
         if (doctor.avatarUrl.isBlank()) null
@@ -226,39 +218,6 @@ fun DoctorProfileCard(
                 )
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Star Rating
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = SanteWarning.copy(alpha = 0.06f),
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    repeat(5) { index ->
-                        Icon(
-                            imageVector = if (index < fullStars) Icons.Filled.Star
-                                         else if (index == fullStars && hasHalf) Icons.Filled.Star
-                                         else Icons.Outlined.Star,
-                            contentDescription = null,
-                            tint = if (index < fullStars) SanteWarning
-                                   else if (index == fullStars && hasHalf) SanteWarning.copy(alpha = 0.5f)
-                                   else Neutral300,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = String.format(Locale.getDefault(), "%.1f", ratingValue),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = TextSecondary,
-                    )
-                }
-            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
