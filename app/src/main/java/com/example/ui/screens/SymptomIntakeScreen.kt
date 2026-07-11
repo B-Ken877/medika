@@ -74,6 +74,7 @@ import com.example.ui.IntakeState
 import com.example.ui.SanteViewModel
 import com.example.ui.components.AnimatedButton
 import com.example.ui.components.DoctorCard
+import com.example.ui.components.DoctorProfileCard
 import com.example.ui.components.ShimmerBox
 import com.example.ui.theme.Green100
 import com.example.ui.theme.Green50
@@ -427,7 +428,7 @@ private fun LoadingContent() {
             ShimmerBox(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(96.dp)
+                    .height(420.dp)
                     .padding(vertical = 6.dp)
             )
         }
@@ -493,12 +494,12 @@ private fun DoctorsListContent(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Doctors list - vertical for better mobile UX
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Doctor profile cards - premium shopping-cart style
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 doctors.forEach { doctor ->
-                    DoctorCard(
+                    DoctorProfileCard(
                         doctor = doctor,
-                        onClick = { onSelectDoctor(doctor) }
+                        onConsult = { onSelectDoctor(doctor) }
                     )
                 }
             }
