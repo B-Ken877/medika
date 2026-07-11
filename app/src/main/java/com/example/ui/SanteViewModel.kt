@@ -1027,7 +1027,7 @@ class SanteViewModel(
             .putString("user_username", user.username)
             .putString("user_email", user.email ?: "")
             .putString("user_phone", user.phone ?: "")
-            .putInt("user_age", user.age ?: 0)
+            .putInt("user_age", (user.age?.toString()?.toIntOrNull()) ?: 0)
             .putString("user_gender", user.gender ?: "")
             .putString("user_specialty", user.specialty ?: "")
             .putString("user_license_number", user.license_number ?: "")
@@ -1398,7 +1398,7 @@ class SanteViewModel(
                     name = response.user.name,
                     email = response.user.email ?: "",
                     phone = response.user.phone ?: "",
-                    age = response.user.age ?: 0,
+                    age = (response.user.age?.toString()?.toIntOrNull()) ?: 0,
                     gender = response.user.gender ?: "Homme"
                 )
                 repository.savePatientProfile(profile)

@@ -35,7 +35,7 @@ data class RegisterRequest(
     val name: String,
     val email: String = "",
     val phone: String = "",
-    val age: Int? = null,
+    val age: Any? = null,
     val gender: String = "Homme"
 )
 
@@ -53,7 +53,7 @@ data class UserDto(
     val name: String,
     val email: String? = null,
     val phone: String? = null,
-    val age: Int? = null,
+    val age: Any? = null,
     val gender: String? = null,
     val specialty: String? = null,
     val license_number: String? = null,
@@ -287,7 +287,7 @@ data class UpdateProfileRequest(
     val name: String? = null,
     val email: String? = null,
     val phone: String? = null,
-    val age: Int? = null,
+    val age: Any? = null,
     val gender: String? = null,
     val specialty: String? = null,
     val licenseNumber: String? = null,
