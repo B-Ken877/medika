@@ -2938,6 +2938,9 @@ class SanteViewModel(
                 // Get fresh profile to update auth state
                 val freshUser = MedikaNetwork.api.getProfile(token)
 
+                // Persist to SharedPreferences so avatar survives app restart
+                saveSession(authToken!!.removePrefix("Bearer "), freshUser)
+
                 withContext(Dispatchers.Main) {
                     val currentAuth = _authState.value
                     when (currentAuth) {
