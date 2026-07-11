@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Healing
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Surface
@@ -88,6 +89,8 @@ import com.example.ui.theme.SanteDanger
 import com.example.ui.theme.SanteWarning
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.TextTertiary
+import com.example.ui.theme.Neutral400
 
 private data class DoctorCategory(
     val key: String,
@@ -445,6 +448,20 @@ private fun DoctorsListContent(
     onSelectDoctor: (DoctorEntity) -> Unit,
     onReset: () -> Unit
 ) {
+    var searchQuery by remember { mutableStateOf("") }
+
+    val filteredDoctors = remember(doctors, searchQuery) {
+        if (searchQuery.isBlank()) doctors
+        else {
+            val q = searchQuery.lowercase().trim()
+            doctors.filter {
+                it.name.lowercase().contains(q) ||
+                it.specialty.lowercase().contains(q) ||
+                it.hospital.lowercase().contains(q)
+            }
+        }
+    }
+
     AnimatedVisibility(
         visible = true,
         enter = slideInVertically(initialOffsetY = { it / 3 }) + fadeIn(),
@@ -458,12 +475,12 @@ private fun DoctorsListContent(
                 color = Neutral100
             ) {
                 Row(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(42.dp)
+                            .size(38.dp)
                             .background(PrimaryGreen, RoundedCornerShape(10.dp)),
                         contentAlignment = Alignment.Center
                     ) {
@@ -471,20 +488,20 @@ private fun DoctorsListContent(
                             imageVector = Icons.Default.People,
                             contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(14.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = category,
-                            fontSize = 17.sp,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary
                         )
                         Text(
-                            text = "${doctors.size} docteur${if (doctors.size > 1) "s" else ""} disponible${if (doctors.size > 1) "s" else ""}",
-                            fontSize = 13.sp,
+                            text = "${filteredDoctors.size} docteur${if (filteredDoctors.size > 1) "s" else ""} trouve${if (filteredDoctors.size > 1) "s" else ""}",
+                            fontSize = 12.5.sp,
                             color = Green700,
                             fontWeight = FontWeight.Medium
                         )
@@ -492,19 +509,75 @@ private fun DoctorsListContent(
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Doctor profile cards - premium shopping-cart style
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                doctors.forEach { doctor ->
-                    DoctorProfileCard(
-                        doctor = doctor,
-                        onConsult = { onSelectDoctor(doctor) }
-                    )
+            // Search bar
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Rechercher par nom, specialite...", fontSize = 13.sp, color = TextTertiary) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                leadingIcon = {
+                    Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = Neutral400, modifier = Modifier.size(18.dp))
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotBlank()) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Effacer",
+                            tint = Neutral400,
+                            modifier = Modifier.size(18.dp).clickable { searchQuery = "" }
+                        )
+                    }
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = PrimaryGreen,
+                    unfocusedBorderColor = Neutral200,
+                    unfocusedContainerColor = Color.White,
+                    focusedContainerColor = Color.White,
+                    cursorColor = PrimaryGreen,
+                ),
+                shape = RoundedCornerShape(12.dp),
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            if (filteredDoctors.isEmpty()) {
+                // No results for search
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Aucun resultat pour " + searchQuery, fontSize = 14.sp, color = TextTertiary)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Essayez un autre terme de recherche", fontSize = 12.5.sp, color = TextTertiary)
+                    }
+                }
+            } else {
+                // Doctor profile cards
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    filteredDoctors.forEachIndexed { index, doctor ->
+                        DoctorProfileCard(
+                            doctor = doctor,
+                            onConsult = { onSelectDoctor(doctor) }
+                        )
+                        // Scroll hint after first card if there are multiple
+                        if (index == 0 && filteredDoctors.size > 1) {
+                            Text(
+                                text = "Balayez pour voir plus de docteurs  ↓",
+                                fontSize = 11.5.sp,
+                                color = TextTertiary,
+                                modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 2.dp),
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             TextButton(
                 onClick = onReset,
@@ -513,7 +586,7 @@ private fun DoctorsListContent(
                 Text("Retour", color = PrimaryGreen, fontWeight = FontWeight.Medium)
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
         }
     }
 }

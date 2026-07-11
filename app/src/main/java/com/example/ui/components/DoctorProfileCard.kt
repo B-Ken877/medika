@@ -20,6 +20,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,8 +57,6 @@ import com.example.ui.theme.SanteSuccessBg
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.TextTertiary
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 
 @Composable
 fun DoctorProfileCard(
@@ -67,10 +67,7 @@ fun DoctorProfileCard(
     val context = LocalContext.current
 
     val initials = remember(doctor.name) {
-        doctor.name
-            .split(" ")
-            .filter { it.isNotBlank() }
-            .take(2)
+        doctor.name.split(" ").filter { it.isNotBlank() }.take(2)
             .joinToString("") { it.first().uppercase() }
     }
 
@@ -81,12 +78,11 @@ fun DoctorProfileCard(
     }
 
     Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .shadow(6.dp, RoundedCornerShape(20.dp), ambientColor = Color(0x0D000000), spotColor = Color(0x1A000000)),
-        shape = RoundedCornerShape(20.dp),
+        modifier = modifier.fillMaxWidth()
+            .shadow(4.dp, RoundedCornerShape(18.dp), ambientColor = Color(0x0D000000), spotColor = Color(0x14000000)),
+        shape = RoundedCornerShape(18.dp),
         color = Color.White,
-        border = BorderStroke(0.5.dp, Neutral200.copy(alpha = 0.6f)),
+        border = BorderStroke(0.5.dp, Neutral200.copy(alpha = 0.5f)),
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -94,290 +90,149 @@ fun DoctorProfileCard(
         ) {
             // Top accent bar
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(4.dp)
-                    .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(
-                                PrimaryGreen.copy(alpha = 0.6f),
-                                AccentGreen,
-                                PrimaryGreen.copy(alpha = 0.6f),
-                            )
-                        )
-                    )
+                modifier = Modifier.fillMaxWidth().height(3.dp)
+                    .background(Brush.horizontalGradient(listOf(PrimaryGreen.copy(alpha = 0.5f), AccentGreen, PrimaryGreen.copy(alpha = 0.5f))))
             )
 
-            // Avatar section
-            Box(
-                modifier = Modifier.padding(top = 24.dp, bottom = 16.dp),
-                contentAlignment = Alignment.Center,
+            // Avatar + Name row (horizontal layout to save vertical space)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Outer glow ring
-                Box(
-                    modifier = Modifier
-                        .size(116.dp)
-                        .background(
-                            if (doctor.isAvailable) SanteSuccess.copy(alpha = 0.12f)
-                            else Neutral200.copy(alpha = 0.5f),
-                            CircleShape
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    // Avatar
+                // Avatar - compact
+                Box(contentAlignment = Alignment.Center) {
                     Box(
-                        modifier = Modifier
-                            .size(104.dp)
-                            .clip(CircleShape)
-                            .border(
-                                3.dp,
-                                if (doctor.isAvailable) PrimaryGreen.copy(alpha = 0.3f) else Neutral200,
+                        modifier = Modifier.size(72.dp)
+                            .background(
+                                if (doctor.isAvailable) SanteSuccess.copy(alpha = 0.1f) else Neutral200.copy(alpha = 0.4f),
                                 CircleShape
                             ),
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (resolvedAvatarUrl != null) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(context)
-                                    .data(resolvedAvatarUrl)
-                                    .crossfade(true)
-                                    .build(),
-                                contentDescription = doctor.name,
-                                modifier = Modifier
-                                    .size(104.dp)
-                                    .clip(CircleShape),
-                                contentScale = ContentScale.Crop,
-                            )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(104.dp)
-                                    .background(
-                                        Brush.verticalGradient(
-                                            colors = listOf(PrimaryGreen, PrimaryGreenDark)
-                                        ),
-                                        CircleShape
-                                    ),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = initials,
-                                    color = Color.White,
-                                    fontSize = 32.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Center,
+                        Box(
+                            modifier = Modifier.size(64.dp).clip(CircleShape)
+                                .border(2.5.dp, if (doctor.isAvailable) PrimaryGreen.copy(alpha = 0.25f) else Neutral200, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (resolvedAvatarUrl != null) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(context).data(resolvedAvatarUrl).crossfade(true).build(),
+                                    contentDescription = doctor.name,
+                                    modifier = Modifier.size(64.dp).clip(CircleShape),
+                                    contentScale = ContentScale.Crop,
                                 )
+                            } else {
+                                Box(
+                                    modifier = Modifier.size(64.dp)
+                                        .background(Brush.verticalGradient(listOf(PrimaryGreen, PrimaryGreenDark)), CircleShape),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(text = initials, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                                }
                             }
                         }
-                    }
-
-                    // Online indicator dot
-                    if (doctor.isAvailable) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(end = 2.dp, bottom = 4.dp)
-                                .size(18.dp)
-                                .background(Color.White, CircleShape)
-                                .padding(3.dp)
-                                .background(SanteSuccess, CircleShape)
-                                .border(2.dp, Color.White, CircleShape),
-                        )
+                        if (doctor.isAvailable) {
+                            Box(modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 2.dp).size(14.dp)
+                                .background(Color.White, CircleShape).padding(2.5.dp)
+                                .background(SanteSuccess, CircleShape).border(1.5.dp, Color.White, CircleShape))
+                        }
                     }
                 }
-            }
 
-            // Doctor Name
-            Text(
-                text = doctor.name,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 20.dp),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+                Spacer(modifier = Modifier.width(14.dp))
 
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Specialty Badge
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = PrimaryGreen.copy(alpha = 0.08f),
-                border = BorderStroke(0.5.dp, PrimaryGreen.copy(alpha = 0.2f)),
-            ) {
-                Text(
-                    text = doctor.specialty,
-                    fontSize = 12.5.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Green700,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Info rows: Hospital, Location, License
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                if (doctor.hospital.isNotBlank()) {
-                    InfoRow(
-                        icon = Icons.Default.Business,
-                        text = doctor.hospital.trim(),
-                        iconTint = PrimaryGreen,
-                    )
-                }
-
-                if (doctor.location.isNotBlank()) {
-                    InfoRow(
-                        icon = Icons.Default.LocationOn,
-                        text = doctor.location.trim(),
-                        iconTint = Neutral400,
-                    )
-                }
-
-                if (doctor.licenseNumber.isNotBlank()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(start = 4.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.VerifiedUser,
-                            contentDescription = null,
-                            tint = SanteSuccess,
-                            modifier = Modifier.size(15.dp),
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+                // Name + Specialty + Availability - right of avatar
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "Licence: ${doctor.licenseNumber.trim()}",
-                            fontSize = 11.5.sp,
-                            color = TextTertiary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            text = doctor.name, style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
                         )
+                        if (doctor.isAvailable) {
+                            Box(modifier = Modifier.size(7.dp).background(SanteSuccess, CircleShape))
+                        }
                     }
-                }
-            }
-
-            // Biography
-            if (doctor.biography.isNotBlank()) {
-                Spacer(modifier = Modifier.height(14.dp))
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    color = Neutral100,
-                ) {
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = PrimaryGreen.copy(alpha = 0.08f),
+                    ) {
+                        Text(text = doctor.specialty, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = Green700,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "\"${doctor.biography.trim()}\"",
-                        fontSize = 13.sp,
-                        color = TextSecondary,
-                        lineHeight = 19.sp,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        fontStyle = FontStyle.Italic,
-                    )
-                }
-            }
-
-            // Availability badge
-            Spacer(modifier = Modifier.height(14.dp))
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = if (doctor.isAvailable) SanteSuccessBg else Neutral100,
-                border = BorderStroke(
-                    0.5.dp,
-                    if (doctor.isAvailable) SanteSuccess.copy(alpha = 0.3f) else Neutral200
-                ),
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(7.dp)
-                            .background(
-                                if (doctor.isAvailable) SanteSuccess else Neutral400,
-                                CircleShape
-                            )
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (doctor.isAvailable) "Disponible maintenant"
-                               else "Indisponible",
-                        fontSize = 12.5.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        text = if (doctor.isAvailable) "Disponible maintenant" else "Indisponible",
+                        fontSize = 11.5.sp, fontWeight = FontWeight.Medium,
                         color = if (doctor.isAvailable) Green700 else TextTertiary,
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            // Info rows: Hospital, Location, License - compact single section
+            val hasInfo = doctor.hospital.isNotBlank() || doctor.location.isNotBlank() || doctor.licenseNumber.isNotBlank()
+            if (hasInfo) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    if (doctor.hospital.isNotBlank()) {
+                        InfoRowCompact(icon = Icons.Default.Business, text = doctor.hospital.trim(), iconTint = PrimaryGreen)
+                    }
+                    if (doctor.location.isNotBlank()) {
+                        InfoRowCompact(icon = Icons.Default.LocationOn, text = doctor.location.trim(), iconTint = Neutral400)
+                    }
+                    if (doctor.licenseNumber.isNotBlank()) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 2.dp)) {
+                            Icon(imageVector = Icons.Default.VerifiedUser, contentDescription = null, tint = SanteSuccess, modifier = Modifier.size(13.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(text = "Licence: ${doctor.licenseNumber.trim()}", fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+
+            // Biography - compact
+            if (doctor.biography.isNotBlank()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "\u201C${doctor.biography.trim()}\u201D",
+                    fontSize = 12.sp, color = TextSecondary, lineHeight = 17.sp,
+                    modifier = Modifier.padding(horizontal = 22.dp), maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    fontStyle = FontStyle.Italic,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Consulter Button
             Surface(
                 onClick = onConsult,
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(12.dp),
                 color = if (doctor.isAvailable) PrimaryGreen else Neutral300,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .height(50.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp).height(44.dp),
             ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        text = "Consulter",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        letterSpacing = 0.5.sp,
-                    )
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = "Consulter", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White, letterSpacing = 0.5.sp)
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
 
 @Composable
-private fun InfoRow(
+private fun InfoRowCompact(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     text: String,
     iconTint: Color = Neutral400,
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(start = 4.dp),
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = iconTint,
-            modifier = Modifier.size(15.dp),
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = text,
-            fontSize = 12.5.sp,
-            color = TextSecondary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 2.dp)) {
+        Icon(imageVector = icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(13.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(text = text, fontSize = 11.5.sp, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
