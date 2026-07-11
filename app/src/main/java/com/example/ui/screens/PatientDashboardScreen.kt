@@ -88,6 +88,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.example.ui.theme.*
 import coil.compose.AsyncImage
+import com.example.data.api.MedikaNetwork
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
 
@@ -331,7 +332,7 @@ private fun GradientHeaderBar(
                 if (avatarUrl != null) {
                     AsyncImage(
                         model = ImageRequest.Builder(context)
-                            .data(avatarUrl)
+                            .data(if (avatarUrl.startsWith("http")) avatarUrl else "${MedikaNetwork.BASE_URL}$avatarUrl")
                             .crossfade(true)
                             .build(),
                         contentDescription = "Avatar",

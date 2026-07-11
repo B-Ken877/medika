@@ -448,8 +448,9 @@ fun SanteApp(
         var isUploadingAvatar by remember { mutableStateOf(false) }
 
         // Show prompt once when home screen is reached without avatar
-        LaunchedEffect(currentScreen, hasNoAvatar) {
+        LaunchedEffect(currentScreen, hasNoAvatar, authState) {
             if (currentScreen == "home" && hasNoAvatar && !avatarPromptShown) {
+                kotlinx.coroutines.delay(800) // small delay so home screen renders first
                 showAvatarPrompt = true
                 avatarPromptShown = true
             }

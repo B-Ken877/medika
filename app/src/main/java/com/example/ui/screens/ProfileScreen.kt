@@ -35,6 +35,7 @@ import com.example.ui.AuthState
 import com.example.ui.SanteViewModel
 import com.example.ui.theme.*
 import coil.compose.AsyncImage
+import com.example.data.api.MedikaNetwork
 import coil.request.ImageRequest
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -166,7 +167,7 @@ fun ProfileScreen(
                         if (avatarUrl != null) {
                             AsyncImage(
                                 model = ImageRequest.Builder(context)
-                                    .data(avatarUrl)
+                                    .data(if (avatarUrl.startsWith("http")) avatarUrl else "${MedikaNetwork.BASE_URL}$avatarUrl")
                                     .crossfade(true)
                                     .build(),
                                 contentDescription = "Photo de profil",
