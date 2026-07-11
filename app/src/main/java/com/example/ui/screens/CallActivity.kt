@@ -33,7 +33,7 @@ class CallActivity : AppCompatActivity() {
         const val CONSULTATION_ID = "CONSULTATION_ID"
         const val PEER_NAME = "PEER_NAME"
         const val APP_ID = "854c306723a44d838db956729bedb7f7"
-        const val TOKEN_SERVER = "http://167.86.124.101:9999"
+        const val TOKEN_SERVER = "https://medikahaiti.site"
     }
 
     private var engine: RtcEngine? = null

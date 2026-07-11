@@ -143,7 +143,7 @@ fun TicketChatScreen(
                                         color = if (isMe) Color(0xCCFFFFFF) else Color.White,
                                         modifier = Modifier.padding(top = 6.dp).clickable {
                                             // Open file in browser
-                                            android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("http://167.86.124.101:3000$fileUrl")).also {
+                                            android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://medikahaiti.site$fileUrl")).also {
                                                 context.startActivity(it)
                                             }
                                         }

@@ -306,7 +306,7 @@ class SanteViewModel(
         try {
             val target = localFileForReceivedMessage(consultationId, fileUrl) ?: return@withContext null
             if (target.exists() && target.length() > 0) return@withContext target
-            val fullUrl = "http://167.86.124.101:3000$fileUrl"
+            val fullUrl = "https://medikahaiti.site$fileUrl"
             println("[MEDIA-DL] Downloading $fullUrl -> ${target.absolutePath}")
             java.net.URL(fullUrl).openStream().use { input ->
                 target.outputStream().use { output -> input.copyTo(output) }
@@ -2405,7 +2405,7 @@ class SanteViewModel(
         if (target.exists() && target.length() > 0) return@withContext target
 
         // Build the full download URL
-        val fullUrl = if (fileUrl.startsWith("http")) fileUrl else "http://167.86.124.101:3000$fileUrl"
+        val fullUrl = if (fileUrl.startsWith("http")) fileUrl else "https://medikahaiti.site$fileUrl"
 
         try {
             println("[PLAYBACK-DL] Downloading $fullUrl -> ${target.absolutePath}")
