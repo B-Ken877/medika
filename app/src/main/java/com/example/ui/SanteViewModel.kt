@@ -27,6 +27,8 @@ import android.media.MediaRecorder
 import android.os.Build
 import java.io.File
 import java.io.FileOutputStream
+import retrofit2.HttpException
+import org.json.JSONObject
 import java.net.URL
 import android.content.Intent
 import kotlin.concurrent.thread
@@ -2784,6 +2786,11 @@ class SanteViewModel(
     private val _ticketLoading = MutableStateFlow(false)
     val ticketLoading: StateFlow<Boolean> = _ticketLoading.asStateFlow()
 
+    private val _ticketError = MutableStateFlow<String?>(null)
+    val ticketError: StateFlow<String?> = _ticketError.asStateFlow()
+
+    fun clearTicketError() { _ticketError.value = null }
+
     private var activeTicketId: String? = null
 
     fun fetchTickets() {
@@ -2820,7 +2827,10 @@ class SanteViewModel(
                 _currentTicket.value = result
                 @Suppress("UNCHECKED_CAST")
                 _currentTicketMessages.value = (result["messages"] as? List<Map<String, Any?>>) ?: emptyList()
-            } catch (e: Exception) { println("[TICKET] Error opening: ${e.message}") }
+            } catch (e: Exception) {
+                println("[TICKET] Error opening: ${e.message}")
+                _ticketError.value = "Impossible de charger le ticket: ${e.localizedMessage ?: "erreur reseau"}"
+            }
         }
     }
 
@@ -2832,20 +2842,49 @@ class SanteViewModel(
                 val body = SendMessageRequest(content = text, file_url = fileUrl, file_type = fileType, file_size = fileSize)
                 val msg = MedikaNetwork.api.sendTicketMessage(token, tid, body)
                 _currentTicketMessages.value = _currentTicketMessages.value + msg
-            } catch (e: Exception) { println("[TICKET] Error sending: ${e.message}") }
+            } catch (e: Exception) {
+                println("[TICKET] Error sending: ${e.message}")
+                val httpCode = (e as? HttpException)?.code()
+                val msgBody = (e as? HttpException)?.response()?.errorBody()?.string()
+                val errorMsg = when {
+                    httpCode == 403 -> "Ce ticket est ferme. Vous ne pouvez plus envoyer de messages."
+                    httpCode == 404 -> "Ticket introuvable."
+                    msgBody != null -> { try { 
+                        val jsonObj = org.json.JSONObject(msgBody)
+                        jsonObj.optString("error", "Erreur inconnue")
+                    } catch (_: Exception) { "Erreur du serveur" } }
+                    else -> "Erreur de connexion: ${e.localizedMessage ?: "inconnue"}"
+                }
+                _ticketError.value = errorMsg
+            }
         }
     }
 
     fun uploadTicketFile(uri: android.net.Uri, context: android.content.Context, onUploaded: (String?, String?, Long?) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val file = copyUriToCache(uri, context) ?: return@launch
+                val file = copyUriToCache(uri, context)
+                if (file == null) {
+                    println("[TICKET] Upload: could not read file from URI")
+                    _ticketError.value = "Impossible de lire le fichier"
+                    withContext(Dispatchers.Main) { onUploaded(null, null, null) }
+                    return@launch
+                }
                 val reqBody = file.asRequestBody("multipart/form-data".toMediaTypeOrNull())
                 val part = okhttp3.MultipartBody.Part.createFormData("file", file.name, reqBody)
                 val token = authToken ?: return@launch
                 val resp = MedikaNetwork.api.uploadTicketFile(token, part)
-                onUploaded(resp.url, resp.mimetype, resp.size)
-            } catch (e: Exception) { println("[TICKET] Upload error: ${e.message}"); onUploaded(null, null, null) }
+                withContext(Dispatchers.Main) { onUploaded(resp.url, resp.mimetype, resp.size) }
+            } catch (e: Exception) {
+                println("[TICKET] Upload error: ${e.message}")
+                val msgBody = (e as? retrofit2.HttpException)?.response()?.errorBody()?.string()
+                val errorMsg = when {
+                    msgBody != null -> { try { org.json.JSONObject(msgBody).optString("error", "Erreur upload") } catch (_: Exception) { "Erreur upload" } }
+                    else -> "Erreur upload: ${e.localizedMessage ?: "inconnue"}"
+                }
+                _ticketError.value = errorMsg
+                withContext(Dispatchers.Main) { onUploaded(null, null, null) }
+            }
         }
     }
 

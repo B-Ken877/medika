@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -52,6 +53,15 @@ fun TicketChatScreen(
         }
     }
 
+    // Show ticket errors as Toast
+    val ticketError by viewModel.ticketError.collectAsStateWithLifecycle()
+    LaunchedEffect(ticketError) {
+        ticketError?.let { msg ->
+            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+            viewModel.clearTicketError()
+        }
+    }
+
     // Refresh every 5 seconds
     LaunchedEffect(Unit) {
         while (true) {
@@ -67,6 +77,8 @@ fun TicketChatScreen(
             viewModel.uploadTicketFile(uri, context) { url, type, size ->
                 if (url != null) {
                     viewModel.sendTicketMessage("", url, type, size)
+                } else {
+                    Toast.makeText(context, "Echec de l'envoi du fichier", Toast.LENGTH_SHORT).show()
                 }
                 isSending = false
             }
