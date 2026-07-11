@@ -3,35 +3,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch, formatDate } from '../../../lib/api';
 import { Search, Trash2, X } from 'lucide-react';
 
-function PatientAvatar({ patient }) {
-  const [imgError, setImgError] = useState(false);
-  const avatarUrl = patient.avatar_url;
-
-  if (!avatarUrl || imgError) {
-    return (
-      <div style={{
-        width: 36, height: 36, borderRadius: '50%', background: '#dbeafe',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: '#2563eb', fontWeight: 700, fontSize: 14, flexShrink: 0
-      }}>
-        {patient.name?.charAt(0)?.toUpperCase() || '?'}
-      </div>
-    );
-  }
-
-  return (
-    <img
-      src={avatarUrl}
-      alt={patient.name}
-      onError={() => setImgError(true)}
-      style={{
-        width: 36, height: 36, borderRadius: '50%', objectFit: 'cover',
-        flexShrink: 0, background: '#dbeafe'
-      }}
-    />
-  );
-}
-
 export default function PatientsPage() {
   const [patients, setPatients] = useState([]);
   const [filtered, setFiltered] = useState([]);
@@ -110,7 +81,13 @@ export default function PatientsPage() {
                 <tr key={p.id}>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <PatientAvatar patient={p} />
+                      <div style={{
+                        width: 36, height: 36, borderRadius: '50%', background: '#dbeafe',
+                        backgroundImage: p.avatar_url ? 'url(' + p.avatar_url + ')' : 'none',
+                        backgroundSize: 'cover', backgroundPosition: 'center',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: p.avatar_url ? 'transparent' : '#2563eb', fontWeight: 700, fontSize: 14
+                      }}>{p.name?.charAt(0)}</div>
                       <div>
                         <div style={{ fontWeight: 600 }}>{p.name}</div>
                         <div style={{ fontSize: 12, color: '#6b7280' }}>@{p.username}</div>
