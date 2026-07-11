@@ -81,19 +81,13 @@ export default function PatientsPage() {
                 <tr key={p.id}>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      {p.avatar_url ? (
-                        <img
-                          src={p.avatar_url.startsWith('http') ? p.avatar_url : `https://medikahaiti.site${p.avatar_url}`}
-                          alt={p.name}
-                          style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', border: '2px solid #e5e7eb' }}
-                          onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
-                        />
-                      ) : null}
                       <div style={{
-                        width: 36, height: 36, borderRadius: '50%', background: '#dbeafe',
-                        display: p.avatar_url ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: '#2563eb', fontWeight: 700, fontSize: 14
-                      }}>{p.name?.charAt(0)}</div>
+                        width: 36, height: 36, borderRadius: '50%',
+                        background: p.avatar_url ? `url(${p.avatar_url.startsWith('http') ? p.avatar_url : 'https://medikahaiti.site' + p.avatar_url}) center/cover no-repeat` : '#dbeafe',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#2563eb', fontWeight: 700, fontSize: 14,
+                        border: p.avatar_url ? '2px solid #e5e7eb' : 'none'
+                      }}>{p.avatar_url ? '' : p.name?.charAt(0)}</div>
                       <div>
                         <div style={{ fontWeight: 600 }}>{p.name}</div>
                         <div style={{ fontSize: 12, color: '#6b7280' }}>@{p.username}</div>
