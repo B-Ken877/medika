@@ -446,11 +446,12 @@ fun SanteApp(
         var showAvatarPrompt by remember { mutableStateOf(false) }
         var isUploadingAvatar by remember { mutableStateOf(false) }
 
-        // Show avatar prompt whenever user reaches home without an avatar
-        LaunchedEffect(currentScreen, hasNoAvatar) {
-            if (currentScreen == "home" && hasNoAvatar) {
-                kotlinx.coroutines.delay(1200)
+        // Show avatar prompt when ViewModel signals no avatar on auth
+        LaunchedEffect(currentScreen, viewModel.shouldPromptAvatar) {
+            if (currentScreen == "home" && viewModel.shouldPromptAvatar) {
+                kotlinx.coroutines.delay(1000)
                 showAvatarPrompt = true
+                viewModel.shouldPromptAvatar = false
             }
         }
 

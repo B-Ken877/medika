@@ -89,6 +89,8 @@ class SanteViewModel(
 
     private var authToken: String? = null
     private var currentServerUserId: String? = null
+    /** Set to true when user authenticates without an avatar (for first-login prompt). */
+    var shouldPromptAvatar = false
     private var currentUserName: String? = null
 
 
@@ -1080,6 +1082,9 @@ class SanteViewModel(
             is_available = userIsAvailable
         )
 
+        // Flag for first-login avatar prompt
+        shouldPromptAvatar = userAvatarUrl.isBlank()
+
         // Restore in-memory state
         authToken = "Bearer $token"
         currentServerUserId = userId
@@ -1419,6 +1424,9 @@ class SanteViewModel(
                 _authState.value = AuthState.AdminAuthenticated
             }
         }
+
+        // Flag for first-login avatar prompt
+        shouldPromptAvatar = response.user.avatar_url == null
 
         processedMessageIds.clear()
         if (response.user.role == "admin") {
