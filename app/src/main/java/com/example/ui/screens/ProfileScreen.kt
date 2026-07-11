@@ -167,7 +167,7 @@ fun ProfileScreen(
                         if (avatarUrl != null) {
                             AsyncImage(
                                 model = ImageRequest.Builder(context)
-                                    .data(if (avatarUrl.startsWith("http")) avatarUrl else "${MedikaNetwork.BASE_URL}$avatarUrl")
+                                    .data(if (avatarUrl.startsWith("http")) avatarUrl else MedikaNetwork.BASE_URL.removeSuffix("/") + avatarUrl)
                                     .crossfade(true)
                                     .build(),
                                 contentDescription = "Photo de profil",
