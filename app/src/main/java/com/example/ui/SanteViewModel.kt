@@ -2807,7 +2807,10 @@ class SanteViewModel(
             try {
                 val result = MedikaNetwork.api.getTickets(token)
                 _tickets.value = result
-            } catch (e: Exception) { println("[TICKET] Error fetching: ${e.message}") }
+            } catch (e: Exception) {
+                println("[TICKET] Error fetching: ${e.message}")
+                _ticketError.value = "Erreur de chargement des tickets: ${e.localizedMessage ?: "reseau"}"
+            }
         }
     }
 

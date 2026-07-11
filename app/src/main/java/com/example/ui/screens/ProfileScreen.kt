@@ -208,7 +208,8 @@ fun ProfileScreen(
                         text = if (avatarUrl != null) "Modifier la photo" else "Ajouter une photo",
                         color = PrimaryGreen,
                         fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.clickable { galleryLauncher.launch("image/*") }
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
