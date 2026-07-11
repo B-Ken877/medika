@@ -32,6 +32,10 @@ import android.content.Intent
 import kotlin.concurrent.thread
 import android.content.SharedPreferences
 import java.security.MessageDigest
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import android.provider.OpenableColumns
 
 // ─── Auth States ─────────────────────────────────────────────
 
@@ -1427,8 +1431,7 @@ class SanteViewModel(
         viewModelScope.launch {
             try {
                 val token = authToken ?: return@launch
-                val body = mapOf("name" to name, "email" to email, "phone" to phone)
-                MedikaNetwork.api.updateProfile(token, body)
+                MedikaNetwork.api.updateProfile(token, UpdateProfileRequest(name = name, email = email, phone = phone))
                 com.example.CrashLogger.log("[PROFILE] Doctor profile updated")
             } catch (e: Exception) {
                 com.example.CrashLogger.log("[PROFILE] Update failed: \${e.message}")
@@ -1785,7 +1788,7 @@ class SanteViewModel(
         viewModelScope.launch {
             try {
                 val token = authToken ?: return@launch
-                MedikaNetwork.api.updateProfile(token, mapOf("name" to name, "email" to email, "phone" to phone, "age" to age, "gender" to gender))
+                MedikaNetwork.api.updateProfile(token, UpdateProfileRequest(name = name, email = email, phone = phone, age = age, gender = gender))
             } catch (_: Exception) {}
             val updated = PatientProfileEntity(name = name, email = email, phone = phone, age = age, gender = gender, allergies = allergies, medications = medications, history = history)
             repository.savePatientProfile(updated)
@@ -2767,8 +2770,6 @@ class SanteViewModel(
             } catch (e: Exception) { _uploadError.value = "Erreur: " + (e.localizedMessage ?: "inconnue") }
         }
     }
-}
-
 
     // ─── Support Tickets ──────────────────────────────────
     private val _tickets = MutableStateFlow<List<Map<String, Any?>>>(emptyList())
@@ -2800,7 +2801,7 @@ class SanteViewModel(
         _ticketLoading.value = true
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val ticket = MedikaNetwork.api.createTicket(token, mapOf("subject" to subject))
+                val ticket = MedikaNetwork.api.createTicket(token, CreateTicketRequest(subject = subject))
                 _tickets.value = listOf(ticket) + _tickets.value
                 withContext(Dispatchers.Main) { onResult(true, ticket["id"] as? String) }
             } catch (e: Exception) {
@@ -2828,8 +2829,7 @@ class SanteViewModel(
         val tid = activeTicketId ?: return
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val body = mutableMapOf<String, Any>("content" to text)
-                if (fileUrl != null) { body["file_url"] = fileUrl; body["file_type"] = fileType ?: ""; body["file_size"] = fileSize ?: 0 }
+                val body = SendMessageRequest(content = text, file_url = fileUrl, file_type = fileType, file_size = fileSize)
                 val msg = MedikaNetwork.api.sendTicketMessage(token, tid, body)
                 _currentTicketMessages.value = _currentTicketMessages.value + msg
             } catch (e: Exception) { println("[TICKET] Error sending: ${e.message}") }
@@ -2854,7 +2854,79 @@ class SanteViewModel(
         openTicket(tid)
     }
 
+    // ─── Avatar Upload ──────────────────────────────────
 
+    private fun copyUriToCache(uri: android.net.Uri, context: Context): File? {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(uri) ?: return null
+            val fileName = "avatar_${System.currentTimeMillis()}.jpg"
+            val cacheFile = File(context.cacheDir, fileName)
+            FileOutputStream(cacheFile).use { out ->
+                inputStream.copyTo(out)
+            }
+            inputStream.close()
+            cacheFile
+        } catch (e: Exception) {
+            println("[AVATAR] Error copying URI: ${e.message}")
+            null
+        }
+    }
+
+    fun uploadProfilePicture(uri: android.net.Uri, context: Context, onResult: (Boolean, String?) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val file = copyUriToCache(uri, context) ?: run {
+                    withContext(Dispatchers.Main) { onResult(false, "Impossible de lire le fichier") }
+                    return@launch
+                }
+
+                val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
+                val reqBody = file.asRequestBody(mimeType.toMediaTypeOrNull())
+                val part = MultipartBody.Part.createFormData("file", file.name, reqBody)
+
+                val token = authToken ?: run {
+                    withContext(Dispatchers.Main) { onResult(false, "Non authentifie") }
+                    return@launch
+                }
+
+                // Upload file to server
+                val uploadResp = MedikaNetwork.api.uploadFile(token, part, "avatar")
+                val avatarUrl = uploadResp.url
+
+                // Update profile with new avatar URL
+                MedikaNetwork.api.updateProfile(token, UpdateProfileRequest(avatarUrl = avatarUrl))
+
+                // Get fresh profile to update auth state
+                val freshUser = MedikaNetwork.api.getProfile(token)
+
+                withContext(Dispatchers.Main) {
+                    val currentAuth = _authState.value
+                    when (currentAuth) {
+                        is AuthState.PatientAuthenticated -> {
+                            _authState.value = AuthState.PatientAuthenticated(
+                                currentAuth.profile, freshUser
+                            )
+                        }
+                        is AuthState.DoctorAuthenticated -> {
+                            _authState.value = AuthState.DoctorAuthenticated(
+                                currentAuth.doctor, freshUser
+                            )
+                        }
+                        else -> {}
+                    }
+                    onResult(true, null)
+                }
+
+                // Clean up temp file
+                file.delete()
+            } catch (e: Exception) {
+                println("[AVATAR] Upload error: ${e.message}")
+                withContext(Dispatchers.Main) { onResult(false, e.localizedMessage) }
+            }
+        }
+    }
+
+}  // end SanteViewModel
 
 // ─── ViewModel Factory ───────────────────────────────────
 

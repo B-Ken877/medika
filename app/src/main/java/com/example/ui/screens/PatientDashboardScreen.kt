@@ -5,6 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -86,6 +87,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.example.ui.theme.*
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PatientDashboardScreen — Professional medical home screen (MyChart quality)
@@ -97,8 +101,12 @@ fun PatientDashboardScreen(
     onNavigate: (String) -> Unit,
 ) {
     val profile by viewModel.patientProfile.collectAsStateWithLifecycle()
+    val authState by viewModel.authState.collectAsStateWithLifecycle()
     val consultations by viewModel.allConsultations.collectAsStateWithLifecycle()
     val wsConnected by viewModel.wsConnected.collectAsStateWithLifecycle()
+
+    val serverUser = (authState as? com.example.ui.AuthState.PatientAuthenticated)?.serverUser
+    val avatarUrl = serverUser?.avatar_url
 
     // Sync from server every time dashboard appears
     LaunchedEffect(Unit) {
@@ -145,6 +153,7 @@ fun PatientDashboardScreen(
                 firstName = firstName,
                 hasUnread = hasUnread,
                 wsConnected = wsConnected,
+                avatarUrl = avatarUrl,
                 onNotificationClick = { onNavigate("notifications") },
             )
         }
@@ -295,8 +304,10 @@ private fun GradientHeaderBar(
     firstName: String,
     hasUnread: Boolean,
     wsConnected: Boolean,
+    avatarUrl: String? = null,
     onNotificationClick: () -> Unit,
 ) {
+    val context = LocalContext.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -315,14 +326,29 @@ private fun GradientHeaderBar(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
 
-            // ── Left: Logo + Greeting ──
+            // ── Left: Avatar/Logo + Greeting ──
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    painter = painterResource(R.drawable.medika_logo_header),
-                    contentDescription = "Medika",
-                    modifier = Modifier.size(64.dp),
-                    tint = Color.Unspecified,
-                )
+                if (avatarUrl != null) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(avatarUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = "Avatar",
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .border(2.dp, Color.White, CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        painter = painterResource(R.drawable.medika_logo_header),
+                        contentDescription = "Medika",
+                        modifier = Modifier.size(64.dp),
+                        tint = Color.Unspecified,
+                    )
+                }
                 Spacer(modifier = Modifier.width(14.dp))
                 Column {
                     Text(

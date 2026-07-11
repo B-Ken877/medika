@@ -149,7 +149,7 @@ fun TicketChatScreen(
                                         }
                                     ) {
                                         Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Default.AttachFile, modifier = Modifier.size(14.dp), tint = if (isMe) PrimaryGreen else Color(0xFF3B82F6))
+                                            Icon(Icons.Default.AttachFile, contentDescription = null, modifier = Modifier.size(14.dp), tint = if (isMe) PrimaryGreen else Color(0xFF3B82F6))
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text("Voir le fichier", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if (isMe) PrimaryGreen else Color(0xFF3B82F6))
                                         }

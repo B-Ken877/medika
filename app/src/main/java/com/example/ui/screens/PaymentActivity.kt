@@ -23,8 +23,8 @@ import java.util.UUID
 class PaymentActivity : AppCompatActivity() {
 
     companion object {
-        const val PAYMENT_SERVER = "http://167.86.124.101:9998"
-        const val API_BASE = "http://167.86.124.101:3000/api"
+        const val PAYMENT_SERVER = "https://medikahaiti.site/payment"
+        const val API_BASE = "https://medikahaiti.site/api"
         const val EXTRA_DOCTOR_NAME = "doctor_name"
         const val EXTRA_ORDER_ID = "order_id"
         const val EXTRA_PAYMENT_SUCCESS = "payment_success"
@@ -240,7 +240,7 @@ class PaymentActivity : AppCompatActivity() {
                     return true
                 }
 
-                if (host.isNotEmpty() && !host.contains("moncash") && !host.contains("digicel") && !host.contains("sandbox") && !host.contains("167.86.124.101")) {
+                if (host.isNotEmpty() && !host.contains("moncash") && !host.contains("digicel") && !host.contains("sandbox") && !host.contains("medikahaiti")) {
                     CrashLogger.log("[MONCASH] External redirect detected, verifying payment")
                     verifyPayment()
                     return true

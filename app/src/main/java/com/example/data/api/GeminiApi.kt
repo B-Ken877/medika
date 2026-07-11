@@ -215,7 +215,7 @@ interface MedikaApiService {
     suspend fun getProfile(@Header("Authorization") token: String): UserDto
 
     @PUT("api/profile")
-    suspend fun updateProfile(@Header("Authorization") token: String, @Body body: Map<String, Any?>): UserDto
+    suspend fun updateProfile(@Header("Authorization") token: String, @Body body: UpdateProfileRequest): UserDto
 
     @PUT("api/doctor/availability")
     suspend fun updateAvailability(@Header("Authorization") token: String, @Body body: Map<String, Any>): Map<String, Any>
@@ -264,13 +264,13 @@ interface MedikaApiService {
     suspend fun getTickets(@Header("Authorization") token: String): List<Map<String, Any?>>
 
     @POST("api/tickets")
-    suspend fun createTicket(@Header("Authorization") token: String, @Body body: Map<String, Any?>): Map<String, Any?>
+    suspend fun createTicket(@Header("Authorization") token: String, @Body body: CreateTicketRequest): Map<String, Any?>
 
     @GET("api/tickets/{id}")
     suspend fun getTicket(@Header("Authorization") token: String, @Path("id") id: String): Map<String, Any?>
 
     @POST("api/tickets/{id}/messages")
-    suspend fun sendTicketMessage(@Header("Authorization") token: String, @Path("id") id: String, @Body body: Map<String, Any?>): Map<String, Any?>
+    suspend fun sendTicketMessage(@Header("Authorization") token: String, @Path("id") id: String, @Body body: SendMessageRequest): Map<String, Any?>
 
     @POST("api/upload")
     suspend fun uploadTicketFile(
@@ -281,6 +281,34 @@ interface MedikaApiService {
     @GET("api/specialties/prices")
     suspend fun getSpecialtyPrices(@Header("Authorization") token: String): List<SpecialtyPriceItem>
 }
+
+@JsonClass(generateAdapter = true)
+data class UpdateProfileRequest(
+    val name: String? = null,
+    val email: String? = null,
+    val phone: String? = null,
+    val age: Int? = null,
+    val gender: String? = null,
+    val specialty: String? = null,
+    val licenseNumber: String? = null,
+    val hospital: String? = null,
+    val biography: String? = null,
+    val location: String? = null,
+    val avatarUrl: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class CreateTicketRequest(
+    val subject: String
+)
+
+@JsonClass(generateAdapter = true)
+data class SendMessageRequest(
+    val content: String,
+    val file_url: String? = null,
+    val file_type: String? = null,
+    val file_size: Long? = null
+)
 
 @JsonClass(generateAdapter = true)
 data class UploadResponse(
@@ -295,7 +323,7 @@ data class UploadResponse(
 
 object MedikaNetwork {
 
-    const val BASE_URL = "http://167.86.124.101:3000/"
+    const val BASE_URL = "https://medikahaiti.site/"
 
     // KotlinJsonAdapterFactory handles Int? nullables natively.
     // Removed SafeIntJsonAdapter to prevent recursive adapter resolution bug.

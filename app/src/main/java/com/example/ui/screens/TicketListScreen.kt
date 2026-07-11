@@ -72,7 +72,7 @@ fun TicketListScreen(
             } else if (tickets.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.HeadsetMic, modifier = Modifier.size(64.dp), tint = Neutral300)
+                        Icon(Icons.Default.HeadsetMic, contentDescription = null, modifier = Modifier.size(64.dp), tint = Neutral300)
                         Spacer(modifier = Modifier.height(16.dp))
                         Text("Aucun ticket", style = MaterialTheme.typography.bodyLarge, color = TextSecondary)
                         Text("Touchez + pour ouvrir un ticket", style = MaterialTheme.typography.bodyMedium, color = Neutral400)
@@ -111,6 +111,7 @@ fun TicketListScreen(
                                     Box(modifier = Modifier.size(44.dp), contentAlignment = Alignment.Center) {
                                         Icon(
                                             Icons.Default.MarkChatUnread,
+                                            contentDescription = null,
                                             modifier = Modifier.size(22.dp),
                                             tint = if (status == "open") PrimaryGreen else Neutral400
                                         )

@@ -2,6 +2,9 @@ package com.example.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
@@ -31,6 +34,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.AuthState
 import com.example.ui.SanteViewModel
 import com.example.ui.theme.*
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,6 +54,7 @@ fun ProfileScreen(
     // Edit profile dialog state
     var showEditDialog by remember { mutableStateOf(false) }
     var showPasswordDialog by remember { mutableStateOf(false) }
+    var isUploadingAvatar by remember { mutableStateOf(false) }
 
     // Edit fields
     var editName by remember { mutableStateOf("") }
@@ -71,6 +77,7 @@ fun ProfileScreen(
     val displayName = if (isDoctor) doctorProfile?.name else profile?.name
     val displayEmail = serverUser?.email
     val displayPhone = if (isDoctor) serverUser?.phone else profile?.phone
+    val avatarUrl = serverUser?.avatar_url
 
     Box(
         modifier = Modifier
@@ -128,24 +135,80 @@ fun ProfileScreen(
                         .padding(vertical = 28.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    // Photo picker launcher
+                    val galleryLauncher = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.GetContent()
+                    ) { uri: Uri? ->
+                        if (uri != null) {
+                            isUploadingAvatar = true
+                            viewModel.uploadProfilePicture(uri, context) { success, error ->
+                                isUploadingAvatar = false
+                                if (success) {
+                                    Toast.makeText(context, "Photo de profil mise \u00e0 jour!", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "Erreur: ${error ?: "inconnue"}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                    }
+
                     Box(
                         modifier = Modifier
-                            .size(80.dp)
+                            .size(90.dp)
                             .clip(CircleShape)
-                            .background(Green50),
+                            .background(Green50)
+                            .then(
+                                if (!isUploadingAvatar) Modifier.clickable { galleryLauncher.launch("image/*") }
+                                else Modifier
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
-                        val initial = displayName
-                            ?.takeIf { it.isNotBlank() }
-                            ?.firstOrNull()
-                            ?.uppercaseChar() ?: "?"
-                        Text(
-                            text = initial.toString(),
-                            color = PrimaryGreen,
-                            fontSize = 32.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        if (avatarUrl != null) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(context)
+                                    .data(avatarUrl)
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = "Photo de profil",
+                                modifier = Modifier.size(90.dp)
+                            )
+                        } else {
+                            val initial = displayName
+                                ?.takeIf { it.isNotBlank() }
+                                ?.firstOrNull()
+                                ?.uppercaseChar() ?: "?"
+                            Text(
+                                text = initial.toString(),
+                                color = PrimaryGreen,
+                                fontSize = 32.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        if (isUploadingAvatar) {
+                            Box(
+                                modifier = Modifier
+                                    .size(90.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.4f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(32.dp),
+                                    color = Color.White,
+                                    strokeWidth = 3.dp
+                                )
+                            }
+                        }
                     }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = if (avatarUrl != null) "Modifier la photo" else "Ajouter une photo",
+                        color = PrimaryGreen,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
 
                     Spacer(modifier = Modifier.height(12.dp))
 
@@ -320,7 +383,7 @@ fun ProfileScreen(
                 ) {
                     Surface(shape = CircleShape, color = Color(0xFFDBEAFE)) {
                         Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.HeadsetMic, modifier = Modifier.size(20.dp), tint = Color(0xFF2563EB))
+                            Icon(Icons.Default.HeadsetMic, contentDescription = null, modifier = Modifier.size(20.dp), tint = Color(0xFF2563EB))
                         }
                     }
                     Spacer(modifier = Modifier.width(14.dp))
@@ -328,7 +391,7 @@ fun ProfileScreen(
                         Text("Service Client", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
                         Text("Obtenez de l\'aide et support", fontSize = 12.sp, color = TextSecondary)
                     }
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, modifier = Modifier.size(20.dp), tint = Neutral400)
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(20.dp), tint = Neutral400)
                 }
             }
 

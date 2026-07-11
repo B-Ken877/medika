@@ -70,6 +70,13 @@ import com.example.ui.screens.RegistrationScreen
 import com.example.ui.screens.SymptomIntakeScreen
 import com.example.R
 import com.example.ui.theme.*
+import android.widget.Toast
+import android.net.Uri
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.draw.clip
 
 private val PrimaryGreenDark = Color(0xFF0D7A35)
 private val Neutral200 = Color(0xFFE5E7EB)
@@ -426,6 +433,66 @@ fun SanteApp(
                     }
                 )
             }
+        }
+
+        // ─── First-time login avatar prompt ────────────────────
+        val serverUser = when (val auth = authState) {
+            is AuthState.PatientAuthenticated -> auth.serverUser
+            is AuthState.DoctorAuthenticated -> auth.serverUser
+            else -> null
+        }
+        val hasNoAvatar = serverUser?.avatar_url == null
+        val context = LocalContext.current
+        var showAvatarPrompt by remember { mutableStateOf(false) }
+        var avatarPromptShown by remember { mutableStateOf(false) }
+        var isUploadingAvatar by remember { mutableStateOf(false) }
+
+        // Show prompt once when home screen is reached without avatar
+        LaunchedEffect(currentScreen, hasNoAvatar) {
+            if (currentScreen == "home" && hasNoAvatar && !avatarPromptShown) {
+                showAvatarPrompt = true
+                avatarPromptShown = true
+            }
+        }
+
+        val avatarLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.GetContent()
+        ) { uri: Uri? ->
+            showAvatarPrompt = false
+            if (uri != null) {
+                isUploadingAvatar = true
+                viewModel.uploadProfilePicture(uri, context) { success, error ->
+                    isUploadingAvatar = false
+                    if (success) {
+                        Toast.makeText(context, "Photo ajout\u00e9e!", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "Erreur: ${error ?: "inconnue"}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+
+        if (showAvatarPrompt) {
+            AlertDialog(
+                onDismissRequest = { showAvatarPrompt = false },
+                title = {
+                    Text("Ajoutez votre photo de profil", fontWeight = FontWeight.Bold)
+                },
+                text = {
+                    Text("Personnalisez votre profil en ajoutant une photo. Cela aidera les m\u00e9decins \u00e0 vous identifier.")
+                },
+                confirmButton = {
+                    TextButton(onClick = { avatarLauncher.launch("image/*") }) {
+                        Text("Choisir une photo", color = PrimaryGreen, fontWeight = FontWeight.SemiBold)
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(onClick = { showAvatarPrompt = false }) {
+                        Text("Plus tard", color = Color.Gray)
+                    }
+                },
+                shape = RoundedCornerShape(16.dp)
+            )
         }
 
         // ─── Bottom Navigation Bar ────────────────────────────
