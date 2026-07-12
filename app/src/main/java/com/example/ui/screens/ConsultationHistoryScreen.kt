@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -27,6 +28,7 @@ fun ConsultationHistoryScreen(
     onBack: () -> Unit = {},
     onConsultationClick: (String) -> Unit = {}
 ) {
+    BackHandler { onBack() }
     val consultations by viewModel.allConsultations.collectAsStateWithLifecycle()
     val sorted = consultations.sortedByDescending { it.timestamp }
 

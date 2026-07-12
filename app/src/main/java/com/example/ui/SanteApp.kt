@@ -94,7 +94,8 @@ private val screenBackMap = mapOf(
     "profile" to "home",
     "notifications" to "home",
     "ticket_list" to "home",
-    "ticket_chat" to "ticket_list"
+    "ticket_chat" to "ticket_list",
+    "consultation_history" to "home"
 )
 
 @OptIn(ExperimentalMaterial3Api::class)

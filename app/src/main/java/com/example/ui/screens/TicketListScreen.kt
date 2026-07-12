@@ -88,7 +88,7 @@ fun TicketListScreen(
                         val status = ticket["status"] as? String ?: "open"
                         val subject = ticket["subject"] as? String ?: ""
                         val userName = ticket["user_name"] as? String ?: ""
-                        val lastMsg = ticket["last_message"] as? Map<*, *>
+                        val lastMsg = ticket["last_message"] as? String
                         val unread = ticket["unread_count"] as? Int ?: 0
                         val updatedAt = (ticket["updated_at"] as? Number)?.toLong() ?: 0
 
@@ -143,7 +143,7 @@ fun TicketListScreen(
                                     Spacer(modifier = Modifier.height(4.dp))
                                     if (lastMsg != null) {
                                         Text(
-                                            text = lastMsg["text"] as? String ?: "",
+                                            text = lastMsg,
                                             style = MaterialTheme.typography.bodySmall,
                                             color = TextSecondary,
                                             maxLines = 1, overflow = TextOverflow.Ellipsis

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { apiFetch, formatDate } from '../../../../lib/api';
-import { ArrowLeft, Send, Paperclip, Lock, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Send, Paperclip, Lock, RotateCcw, MessageSquare, Headphones } from 'lucide-react';
 
 export default function TicketChatPage() {
   const router = useRouter();
@@ -21,28 +21,14 @@ export default function TicketChatPage() {
       const data = await apiFetch(`/admin/tickets/${id}`);
       setTicket(data.ticket || data);
       setMessages(data.messages || []);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
   }, [id]);
 
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { const i = setInterval(load, 3000); return () => clearInterval(i); }, [load]);
   useEffect(() => {
-    load();
-  }, [load]);
-
-  // Polling every 3s
-  useEffect(() => {
-    const interval = setInterval(load, 3000);
-    return () => clearInterval(interval);
-  }, [load]);
-
-  // Auto-scroll to bottom
-  useEffect(() => {
-    if (messages.length > 0) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
+    if (messages.length > 0) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const sendMessage = async () => {
@@ -57,23 +43,16 @@ export default function TicketChatPage() {
       setContent('');
       if (textareaRef.current) textareaRef.current.style.height = 'auto';
       load();
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSending(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setSending(false); }
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
 
   const handleTextareaChange = (e) => {
     setContent(e.target.value);
-    // Auto-resize
     const el = e.target;
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 120) + 'px';
@@ -81,145 +60,121 @@ export default function TicketChatPage() {
 
   const closeTicket = async () => {
     setClosing(true);
-    try {
-      await apiFetch(`/admin/tickets/${id}/close`, { method: 'PUT' });
-      load();
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setClosing(false);
-    }
+    try { await apiFetch(`/admin/tickets/${id}/close`, { method: 'PUT' }); load(); }
+    catch (e) { console.error(e); }
+    finally { setClosing(false); }
   };
 
   const reopenTicket = async () => {
     setClosing(true);
-    try {
-      await apiFetch(`/admin/tickets/${id}/reopen`, { method: 'PUT' });
-      load();
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setClosing(false);
-    }
+    try { await apiFetch(`/admin/tickets/${id}/reopen`, { method: 'PUT' }); load(); }
+    catch (e) { console.error(e); }
+    finally { setClosing(false); }
+  };
+
+  const formatTime = (ts) => {
+    if (!ts) return '';
+    return new Date(ts * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   };
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
-        <div className="spinner" />
+      <div className="cc-chat-page">
+        <div className="cc-loading"><div className="spinner" /></div>
       </div>
     );
   }
 
   if (!ticket) {
     return (
-      <div className="card" style={{ padding: 48, textAlign: 'center', color: '#6b7280' }}>
-        <div style={{ fontSize: 16, fontWeight: 600 }}>Ticket introuvable</div>
-        <button className="btn btn-secondary" style={{ marginTop: 16 }} onClick={() => router.push('/customer-care')}>
-          <ArrowLeft size={16} /> Retour
-        </button>
+      <div className="cc-chat-page">
+        <div className="cc-loading" style={{ flexDirection: 'column', gap: 16 }}>
+          <MessageSquare size={40} style={{ opacity: 0.2 }} />
+          <div style={{ color: '#6b7280', fontSize: 15, fontWeight: 600 }}>Ticket introuvable</div>
+          <button className="btn btn-secondary" onClick={() => router.push('/customer-care')}>
+            <ArrowLeft size={16} /> Retour aux tickets
+          </button>
+        </div>
       </div>
     );
   }
 
   const isClosed = ticket.status === 'closed';
-  const userName = ticket.user_name || ticket.user?.name || 'Utilisateur';
+  const userName = ticket.user_name || 'Utilisateur';
+  const initials = userName.charAt(0).toUpperCase();
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', maxHeight: 'calc(100vh - 120px)' }}>
+    <div className="cc-chat-page">
       {/* Header */}
-      <div style={{
-        background: '#fff', borderBottom: '1px solid #e5e7eb', borderRadius: 12,
-        padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        flexWrap: 'wrap', gap: 12, marginBottom: 16
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => router.push('/customer-care')}>
+      <div className="cc-chat-header">
+        <div className="cc-chat-header-left">
+          <button className="btn btn-secondary btn-sm" onClick={() => router.push('/customer-care')} style={{ borderRadius: 10 }}>
             <ArrowLeft size={16} />
           </button>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 17, fontWeight: 700, color: '#111827' }}>
-                {ticket.subject || 'Sans sujet'}
-              </span>
-              <span className={`badge ${isClosed ? 'badge-red' : 'badge-green'}`} style={{ fontSize: 11 }}>
+          <div className="cc-chat-header-info">
+            <h2>
+              {ticket.subject || 'Sans sujet'}
+              <span className={`badge ${isClosed ? 'badge-gray' : 'badge-green'}`} style={{ marginLeft: 10, fontSize: 11, verticalAlign: 'middle' }}>
                 {isClosed ? 'Ferm\u00e9' : 'Ouvert'}
               </span>
-            </div>
-            <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>{userName}</div>
+            </h2>
+            <p><Headphones size={13} style={{ verticalAlign: -2, marginRight: 4, opacity: 0.5 }} />{userName}</p>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="cc-chat-header-actions">
           {isClosed ? (
-            <button className="btn btn-secondary btn-sm" onClick={reopenTicket} disabled={closing}>
-              <RotateCcw size={14} /> {closing ? '...' : 'Rouvrir'}
+            <button className="btn btn-primary btn-sm" onClick={reopenTicket} disabled={closing} style={{ borderRadius: 10 }}>
+              <RotateCcw size={14} /> {closing ? '...' : 'R\u00e9ouvrir'}
             </button>
           ) : (
-            <button className="btn btn-danger btn-sm" onClick={closeTicket} disabled={closing}>
+            <button className="btn btn-danger btn-sm" onClick={closeTicket} disabled={closing} style={{ borderRadius: 10 }}>
               <Lock size={14} /> {closing ? '...' : 'Fermer'}
             </button>
           )}
         </div>
       </div>
 
-      {/* Messages Area */}
-      <div className="card" style={{
-        flex: 1, overflowY: 'auto', padding: 20, display: 'flex',
-        flexDirection: 'column', gap: 12, marginBottom: 16
-      }}>
+      {/* Closed banner */}
+      {isClosed && (
+        <div className="cc-chat-status-bar">
+          <Lock size={14} />
+          Ce ticket est ferm\u00e9. Vous ne pouvez plus envoyer de messages.
+        </div>
+      )}
+
+      {/* Messages */}
+      <div className="cc-chat-messages">
         {messages.length === 0 ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: 14 }}>
-            Aucun message pour le moment
+          <div className="cc-empty">
+            <MessageSquare size={36} />
+            <div>Aucun message pour le moment</div>
+            <div style={{ fontSize: 12, color: '#b0b0b0' }}>Commencez la conversation</div>
           </div>
         ) : messages.map((msg, idx) => {
           const isAdmin = msg.sender_role === 'admin';
           return (
-            <div key={msg.id || idx} style={{
-              display: 'flex',
-              justifyContent: isAdmin ? 'flex-end' : 'flex-start',
-              gap: 8,
-              maxWidth: '80%',
-            }}>
-              {!isAdmin && (
-                <div style={{
-                  width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
-                  background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#6b7280', fontWeight: 600, fontSize: 13, marginTop: 4
-                }}>
-                  {(msg.sender_name || userName).charAt(0).toUpperCase()}
-                </div>
-              )}
+            <div key={msg.id || idx} className={`cc-msg ${isAdmin ? 'cc-msg-admin' : 'cc-msg-user'}`}>
+              <div className={`cc-msg-avatar ${isAdmin ? 'admin-av' : 'user-av'}`}>
+                {isAdmin ? 'M' : initials}
+              </div>
               <div>
-                <div style={{
-                  background: isAdmin ? '#059669' : '#f3f4f6',
-                  color: isAdmin ? '#fff' : '#111827',
-                  padding: '10px 14px',
-                  borderRadius: isAdmin ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-                  fontSize: 14,
-                  lineHeight: 1.5,
-                  wordBreak: 'break-word',
-                  whiteSpace: 'pre-wrap',
-                }}>
+                <div className="cc-msg-bubble">
                   {msg.content}
+                  {msg.file_url && (
+                    <a
+                      href={msg.file_url.startsWith('http') ? msg.file_url : `https://medikahaiti.site${msg.file_url}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="cc-msg-attachment"
+                    >
+                      <Paperclip size={13} />
+                      {msg.file_type || 'Fichier'}
+                    </a>
+                  )}
                 </div>
-                {msg.file_url && (
-                  <a href={msg.file_url} target="_blank" rel="noopener noreferrer" style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 4,
-                    fontSize: 12, color: '#059669', marginTop: 4, textDecoration: 'none',
-                    padding: '4px 8px', background: '#f0fdf4', borderRadius: 6
-                  }}>
-                    <Paperclip size={12} />
-                    {msg.file_type || 'Fichier'}
-                    {msg.file_size && <span style={{ color: '#9ca3af' }}>({msg.file_size})</span>}
-                  </a>
-                )}
-                <div style={{
-                  fontSize: 11, color: '#9ca3af', marginTop: 4,
-                  textAlign: isAdmin ? 'right' : 'left',
-                  display: 'flex', alignItems: 'center', gap: 6, justifyContent: isAdmin ? 'flex-end' : 'flex-start'
-                }}>
-                  <span style={{ fontWeight: 500, color: '#6b7280' }}>{msg.sender_name || (isAdmin ? 'Admin' : userName)}</span>
-                  <span>{formatDate(msg.created_at)}</span>
+                <div className="cc-msg-footer">
+                  <span style={{ fontWeight: 500, color: '#6b7280' }}>{msg.sender_name || (isAdmin ? 'Support Medika' : userName)}</span>
+                  <span>{formatTime(msg.created_at)}</span>
                 </div>
               </div>
             </div>
@@ -228,30 +183,27 @@ export default function TicketChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Message Input */}
-      <div className="card" style={{ padding: 16, display: 'flex', gap: 12, alignItems: 'flex-end' }}>
-        <textarea
-          ref={textareaRef}
-          className="form-input"
-          value={content}
-          onChange={handleTextareaChange}
-          onKeyDown={handleKeyDown}
-          placeholder={isClosed ? 'Ce ticket est ferm\u00e9' : 'Ecrire un message... (Entr\u00e9e pour envoyer, Shift+Entr\u00e9e pour un saut de ligne)'}
-          disabled={isClosed || sending}
-          rows={1}
-          style={{
-            flex: 1, resize: 'none', maxHeight: 120,
-            opacity: isClosed ? 0.5 : 1,
-          }}
-        />
-        <button
-          className="btn btn-primary"
-          onClick={sendMessage}
-          disabled={isClosed || sending || !content.trim()}
-          style={{ height: 40, padding: '0 16px', flexShrink: 0 }}
-        >
-          <Send size={16} />
-        </button>
+      {/* Input */}
+      <div className="cc-chat-input-area">
+        <div className="cc-chat-input-row">
+          <textarea
+            ref={textareaRef}
+            value={content}
+            onChange={handleTextareaChange}
+            onKeyDown={handleKeyDown}
+            placeholder={isClosed ? 'Ce ticket est ferm\u00e9' : '\u00c9crire un message... (Entr\u00e9e pour envoyer)'}
+            disabled={isClosed || sending}
+            rows={1}
+          />
+          <button
+            className="cc-send-btn"
+            onClick={sendMessage}
+            disabled={isClosed || sending || !content.trim()}
+            title="Envoyer"
+          >
+            <Send size={18} />
+          </button>
+        </div>
       </div>
     </div>
   );
