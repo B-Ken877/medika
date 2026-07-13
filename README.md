@@ -278,3 +278,39 @@ Remote: `git@github.com:B-Ken877/medika.git`
 - Profile picture upload
 - Customer care ticket system (initial build)
 - Domain setup: medikahaiti.site with SSL
+---
+
+## 📋 Medical History & Consultation Notes (Added 2026-07-13)
+
+### Feature Overview
+Patients have a medical dossier that auto-builds from doctor consultation notes.
+
+### Backend API Endpoints (added to server.js)
+
+| Method | Route | Purpose |
+|--------|-------|---------|
+| `GET` | `/api/consultations/:id/notes` | Get doctor notes for a consultation |
+| `PUT` | `/api/consultations/:id/notes` | Save/update notes (doctor only) |
+| `GET` | `/api/medical-history/:patientId` | Full patient medical history |
+| `GET` | `/api/medical-history/:patientId/snapshot` | Lightweight snapshot for doctor view |
+| `PUT` | `/api/medical-history/:patientId` | Patient updates own history |
+
+### Auto-Update Logic
+When a doctor saves consultation notes:
+1. **Prescriptions** → auto-added to patient current_medications (deduplicated)
+2. **Diagnosis keywords** (hypertension, diabete, asthme, etc.) → auto-added as chronic conditions
+3. **Consultation summary** → appended to consultation_timeline
+
+### Data Files (JSON in container /app/data/)
+- `consultation-notes.json` — Doctor notes per consultation
+- `medical-histories.json` — Patient medical histories
+
+### Android Screens
+- **MedicalHistoryScreen** — Patient views full dossier (allergies, conditions, meds, timeline)
+- **DoctorNoteScreen** — Doctor fills diagnosis, symptoms, notes, prescriptions
+- **Dashboard card** — "Mon Dossier Medical" card on patient home screen with allergy alert banner
+- **Chat note button** — Doctor sees a notes icon in ChatScreen top bar
+
+### Navigation
+- `"medical_history"` → MedicalHistoryScreen (back to "home")
+- `"doctor_notes"` → DoctorNoteScreen (back to "chat")
