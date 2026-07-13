@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -63,6 +64,8 @@ import com.example.ui.screens.TicketListScreen
 import com.example.ui.screens.TicketChatScreen
 import com.example.ui.screens.ConsultationHistoryScreen
 import com.example.ui.screens.PatientDashboardScreen
+import com.example.ui.screens.MedicalHistoryScreen
+import com.example.ui.screens.DoctorNoteScreen
 import com.example.ui.screens.PinSetupScreen
 import com.example.ui.screens.PinVerifyScreen
 import com.example.ui.screens.ProfileScreen
@@ -82,7 +85,7 @@ private val PrimaryGreenDark = Color(0xFF0D7A35)
 private val Neutral200 = Color(0xFFE5E7EB)
 private val NavGray = Color(0xFF9E9E9E)
 
-private val screenOrder = listOf("loading", "auth", "register", "pin_setup", "pin_verify", "home", "intake", "chat", "profile", "notifications", "consultation_history", "ticket_list", "ticket_chat")
+private val screenOrder = listOf("loading", "auth", "register", "pin_setup", "pin_verify", "home", "intake", "chat", "profile", "notifications", "consultation_history", "ticket_list", "ticket_chat", "medical_history", "doctor_notes")
 
 // Navigation history for back button support
 private val screenBackMap = mapOf(
@@ -95,7 +98,9 @@ private val screenBackMap = mapOf(
     "notifications" to "home",
     "ticket_list" to "home",
     "ticket_chat" to "ticket_list",
-    "consultation_history" to "home"
+    "consultation_history" to "home",
+    "medical_history" to "home",
+    "doctor_notes" to "chat"
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -278,7 +283,7 @@ fun SanteApp(
     // Determine if bottom nav should be visible
     val showBottomNav = authState !is AuthState.Unauthenticated &&
             authState !is AuthState.Loading &&
-            currentScreen !in listOf("auth", "chat", "register", "pin_setup", "pin_verify", "loading")
+            currentScreen !in listOf("auth", "chat", "register", "pin_setup", "pin_verify", "loading", "medical_history", "doctor_notes")
 
     Box(
         modifier = modifier
@@ -364,6 +369,7 @@ fun SanteApp(
                                 "profile" -> currentScreen = "profile"
                                 "notifications" -> currentScreen = "notifications"
                                 "consultation_history" -> currentScreen = "consultation_history"
+                                "medical_history" -> currentScreen = "medical_history"
                                 "ticket_list" -> currentScreen = "ticket_list"
                             }
                         }
@@ -374,6 +380,7 @@ fun SanteApp(
                             when (route) {
                                 "chat" -> currentScreen = "chat"
                                 "notifications" -> currentScreen = "notifications"
+                                "doctor_notes" -> currentScreen = "doctor_notes"
                             }
                         }
                     )

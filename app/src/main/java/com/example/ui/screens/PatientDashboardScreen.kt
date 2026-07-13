@@ -91,6 +91,8 @@ import coil.compose.AsyncImage
 import com.example.data.api.MedikaNetwork
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
+import com.example.data.api.MedicalHistory
+import com.example.data.api.MedikaNetwork
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PatientDashboardScreen — Professional medical home screen (MyChart quality)
@@ -180,7 +182,27 @@ fun PatientDashboardScreen(
         // ══════════════════════════════════════════════════════════════════════
         // 3. STATS ROW — 3 stat cards
         // ══════════════════════════════════════════════════════════════════════
+        
+        // ══════════════════════════════════════════════════════════
+        // 3.5 MEDICAL HISTORY CARD — On dashboard
+        // ══════════════════════════════════════════════════════════
         AnimatedVisibility(
+            visible = true,
+            enter = fadeIn(animationSpec = tween(500, delayMillis = 200)) +
+                    slideInVertically(
+                        initialOffsetY = { 30 },
+                        animationSpec = tween(500, delayMillis = 200),
+                    ),
+        ) {
+            MedicalHistoryDashboardCard(
+                viewModel = viewModel,
+                onNavigate = onNavigate
+            )
+        }
+
+        Spacer(modifier = Modifier.height(28.dp))
+
+AnimatedVisibility(
             visible = true,
             enter = fadeIn(animationSpec = tween(500, delayMillis = 160)) +
                     slideInVertically(

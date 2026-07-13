@@ -182,6 +182,144 @@ data class PriceResponse(
     val price: Int
 )
 
+
+
+// ─── Medical History & Consultation Notes ────────────────────────────────────
+
+@JsonClass(generateAdapter = true)
+data class ConsultationNote(
+    val consultation_id: String = "",
+    val patient_id: String = "",
+    val doctor_id: String = "",
+    val doctor_name: String? = null,
+    val diagnosis: String = "",
+    val symptoms: String = "",
+    val notes: String = "",
+    val prescriptions: List<PrescriptionItem> = emptyList(),
+    val follow_up: String = "",
+    val flag_allergy: Boolean = false,
+    val created_at: Long? = null,
+    val updated_at: Long? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class PrescriptionItem(
+    val medication: String = "",
+    val dosage: String = "",
+    val duration: String = ""
+)
+
+data class SaveConsultationNoteRequest(
+    val diagnosis: String = "",
+    val symptoms: String = "",
+    val notes: String = "",
+    val prescriptions: List<PrescriptionItem> = emptyList(),
+    val followUp: String = "",
+    val flagAllergy: Boolean = false
+)
+
+@JsonClass(generateAdapter = true)
+data class MedicalHistory(
+    val patient_id: String = "",
+    val patient_name: String? = null,
+    val created_at: Long? = null,
+    val last_updated: Long? = null,
+    val basic_info: BasicInfo? = null,
+    val allergies: List<AllergyItem> = emptyList(),
+    val chronic_conditions: List<ChronicConditionItem> = emptyList(),
+    val current_medications: List<MedicationItem> = emptyList(),
+    val vaccinations: List<VaccinationItem> = emptyList(),
+    val emergency_contact: EmergencyContactItem? = null,
+    val surgical_history: List<SurgicalHistoryItem> = emptyList(),
+    val consultation_timeline: List<ConsultationTimelineItem> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class BasicInfo(
+    val bloodType: String? = null,
+    val weight: Double? = null,
+    val height: Double? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class AllergyItem(
+    val name: String = "",
+    val severity: String = "",
+    val reaction: String = "",
+    val notedAt: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class ChronicConditionItem(
+    val name: String = "",
+    val diagnosed_at: String? = null,
+    val status: String = "",
+    val notes: String = "",
+    val source: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class MedicationItem(
+    val name: String = "",
+    val dosage: String = "",
+    val since: String? = null,
+    val prescribed_by: String? = null,
+    val source: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class VaccinationItem(
+    val name: String = "",
+    val date: String? = null,
+    val doseNumber: Int? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class EmergencyContactItem(
+    val name: String = "",
+    val relationship: String = "",
+    val phone: String = ""
+)
+
+@JsonClass(generateAdapter = true)
+data class SurgicalHistoryItem(
+    val procedure: String = "",
+    val date: String? = null,
+    val hospital: String = ""
+)
+
+@JsonClass(generateAdapter = true)
+data class ConsultationTimelineItem(
+    val consultation_id: String = "",
+    val date: String? = null,
+    val doctor_name: String = "",
+    val specialty: String = "",
+    val diagnosis: String = "",
+    val summary: String = "",
+    val prescriptions: List<String> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class MedicalHistorySnapshot(
+    val patient_id: String = "",
+    val patient_name: String? = null,
+    val has_allergies: Boolean = false,
+    val allergies: List<AllergyItem> = emptyList(),
+    val chronic_conditions: List<ChronicConditionItem> = emptyList(),
+    val current_medications: List<MedicationItem> = emptyList(),
+    val recent_consultations: Int = 0
+)
+
+data class UpdateMedicalHistoryRequest(
+    val basicInfo: BasicInfo? = null,
+    val allergies: List<AllergyItem>? = null,
+    val chronicConditions: List<ChronicConditionItem>? = null,
+    val currentMedications: List<MedicationItem>? = null,
+    val vaccinations: List<VaccinationItem>? = null,
+    val emergencyContact: EmergencyContactItem? = null,
+    val surgicalHistory: List<SurgicalHistoryItem>? = null
+)
+
 interface MedikaApiService {
 
     @POST("api/auth/login")
@@ -281,6 +419,24 @@ interface MedikaApiService {
     @GET("api/specialties/prices")
     suspend fun getSpecialtyPrices(@Header("Authorization") token: String): List<SpecialtyPriceItem>
 }
+
+    // ─── Medical History & Consultation Notes ─────────────────────────
+    @GET("api/consultations/{id}/notes")
+    suspend fun getConsultationNotes(@Header("Authorization") token: String, @Path("id") consultationId: String): ConsultationNote?
+
+    @PUT("api/consultations/{id}/notes")
+    suspend fun saveConsultationNotes(@Header("Authorization") token: String, @Path("id") consultationId: String, @Body body: SaveConsultationNoteRequest): ConsultationNote
+
+    @GET("api/medical-history/{patientId}")
+    suspend fun getMedicalHistory(@Header("Authorization") token: String, @Path("patientId") patientId: String): MedicalHistory
+
+    @GET("api/medical-history/{patientId}/snapshot")
+    suspend fun getMedicalHistorySnapshot(@Header("Authorization") token: String, @Path("patientId") patientId: String): MedicalHistorySnapshot
+
+    @PUT("api/medical-history/{patientId}")
+    suspend fun updateMedicalHistory(@Header("Authorization") token: String, @Path("patientId") patientId: String, @Body body: UpdateMedicalHistoryRequest): MedicalHistory
+
+
 
 @JsonClass(generateAdapter = true)
 data class UpdateProfileRequest(

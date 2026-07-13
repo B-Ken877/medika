@@ -2994,4 +2994,75 @@ class SanteViewModelFactory(
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
+
+
+
+    // ─── Medical History State ──────────────────────────────────────
+    private val _medicalHistory = MutableStateFlow<MedicalHistory?>(null)
+    val medicalHistory: StateFlow<MedicalHistory?> = _medicalHistory.asStateFlow()
+
+    private val _medicalHistoryLoading = MutableStateFlow(false)
+    val medicalHistoryLoading: StateFlow<Boolean> = _medicalHistoryLoading.asStateFlow()
+
+    private val _medicalHistorySnapshot = MutableStateFlow<MedicalHistorySnapshot?>(null)
+    val medicalHistorySnapshot: StateFlow<MedicalHistorySnapshot?> = _medicalHistorySnapshot.asStateFlow()
+
+    fun loadMedicalHistory() {
+        viewModelScope.launch {
+            val token = authToken ?: return@launch
+            val patientId = currentServerUserId ?: return@launch
+            _medicalHistoryLoading.value = true
+            try {
+                val history = MedikaNetwork.api.getMedicalHistory("Bearer $token", patientId)
+                _medicalHistory.value = history
+            } catch (e: Exception) {
+                println("[MEDICAL-HISTORY] Error loading: ${e.message}")
+            } finally {
+                _medicalHistoryLoading.value = false
+            }
+        }
+    }
+
+    fun loadMedicalHistorySnapshot(patientId: String) {
+        viewModelScope.launch {
+            val token = authToken ?: return@launch
+            try {
+                val snapshot = MedikaNetwork.api.getMedicalHistorySnapshot("Bearer $token", patientId)
+                _medicalHistorySnapshot.value = snapshot
+            } catch (e: Exception) {
+                println("[MEDICAL-HISTORY] Error loading snapshot: ${e.message}")
+            }
+        }
+    }
+
+    fun saveConsultationNote(request: SaveConsultationNoteRequest, callback: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            val token = authToken ?: return@launch
+            val consId = _activeConsultationId.value ?: return@launch
+            try {
+                MedikaNetwork.api.saveConsultationNotes("Bearer $token", consId, request)
+                callback(true, null)
+            } catch (e: Exception) {
+                val msg = if (e is retrofit2.HttpException) "Erreur serveur ${e.code()}" else e.message
+                println("[NOTES] Error saving: $msg")
+                callback(false, msg)
+            }
+        }
+    }
+
+    fun loadConsultationNotes(consultationId: String) {
+        viewModelScope.launch {
+            val token = authToken ?: return@launch
+            try {
+                val note = MedikaNetwork.api.getConsultationNotes("Bearer $token", consultationId)
+                if (note != null) {
+                    // Pre-fill doctor note screen if needed
+                    println("[NOTES] Loaded notes for $consultationId: diagnosis=${note.diagnosis}")
+                }
+            } catch (e: Exception) {
+                println("[NOTES] Error loading notes: ${e.message}")
+            }
+        }
+    }
+
 }

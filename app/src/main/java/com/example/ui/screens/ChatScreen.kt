@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -182,6 +183,8 @@ fun ChatScreen(
                 isOnline = wsConnected,
                 isTyping = isTyping,
                 onBack = onBack,
+                isDoctor = authState is AuthState.DoctorAuthenticated,
+                onNotesClick = { onNavigate("doctor_notes") },
                 onVideoCall = {
                     if (peerUserId != null) {
                         viewModel.startCall(activeConsultation?.id ?: "", peerName, null, true)
@@ -276,6 +279,8 @@ private fun ChatTopBar(
     isOnline: Boolean,
     isTyping: Boolean,
     onBack: () -> Unit,
+    isDoctor: Boolean = false,
+    onNotesClick: () -> Unit = {},
     onVideoCall: () -> Unit,
     onVoiceCall: () -> Unit,
 ) {
@@ -335,6 +340,15 @@ private fun ChatTopBar(
             }
         },
         actions = {
+            if (isDoctor) {
+                IconButton(onClick = onNotesClick) {
+                    Icon(
+                        imageVector = Icons.Default.Description,
+                        contentDescription = "Notes de consultation",
+                        tint = Color.White,
+                    )
+                }
+            }
             IconButton(onClick = onVoiceCall) {
                 Icon(
                     imageVector = Icons.Default.Call,
