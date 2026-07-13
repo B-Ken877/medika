@@ -127,7 +127,7 @@ fun MedicalHistoryScreen(
                     items = medicalHistory?.vaccinations?.map { v ->
                         buildString {
                             append(v.name)
-                            if (v.date != null) append(" (${v.date})"
+                            if (v.date != null) append(" (${v.date})")
                         }
                     } ?: emptyList(),
                     emptyText = "Aucun vaccin enregistre"

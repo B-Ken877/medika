@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bedtime
@@ -36,7 +37,10 @@ import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Card
 import androidx.compose.material3.Text
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -79,6 +83,7 @@ import androidx.compose.material.icons.filled.Healing
 import androidx.compose.material.icons.filled.SelfImprovement
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Vaccines
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -92,7 +97,6 @@ import com.example.data.api.MedikaNetwork
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
 import com.example.data.api.MedicalHistory
-import com.example.data.api.MedikaNetwork
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PatientDashboardScreen — Professional medical home screen (MyChart quality)
@@ -762,6 +766,130 @@ private fun HealthTipCard(tip: HealthTip) {
                 color = TextSecondary,
                 lineHeight = 18.sp,
             )
+        }
+    }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MEDICAL HISTORY DASHBOARD CARD
+// ═══════════════════════════════════════════════════════════════════════════════
+
+@Composable
+private fun MedicalHistoryDashboardCard(
+    viewModel: SanteViewModel,
+    onNavigate: (String) -> Unit
+) {
+    val medicalHistory by viewModel.medicalHistory.collectAsStateWithLifecycle()
+    val isLoading by viewModel.medicalHistoryLoading.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        viewModel.loadMedicalHistory()
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clickable { onNavigate("medical_history") },
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            color = PrimaryGreen.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.LocalHospital,
+                        contentDescription = null,
+                        tint = PrimaryGreen,
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(14.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Mon Dossier Medical",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary,
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    if (isLoading) {
+                        Text(
+                            text = "Chargement...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextTertiary
+                        )
+                    } else if (medicalHistory != null) {
+                        val parts = mutableListOf<String>()
+                        val allergies = medicalHistory!!.allergies?.size ?: 0
+                        val conditions = medicalHistory!!.chronic_conditions?.size ?: 0
+                        val meds = medicalHistory!!.current_medications?.size ?: 0
+                        if (allergies > 0) parts.add("$allergies allergie${if (allergies > 1) "s" else ""}")
+                        if (conditions > 0) parts.add("$conditions condition${if (conditions > 1) "s" else ""}")
+                        if (meds > 0) parts.add("$meds medicament${if (meds > 1) "s" else ""}")
+                        Text(
+                            text = if (parts.isEmpty()) "Commencez a remplir votre dossier" else parts.joinToString(" . "),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (parts.isEmpty()) TextTertiary else TextSecondary
+                        )
+                    } else {
+                        Text(
+                            text = "Aucune donnee medicale",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextTertiary
+                        )
+                    }
+                }
+
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = "Voir",
+                    tint = Neutral300,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            if (medicalHistory != null && (medicalHistory!!.allergies?.isNotEmpty() == true)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(SanteDanger.copy(alpha = 0.08f))
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = SanteDanger,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = medicalHistory?.allergies?.mapNotNull { it.name }?.joinToString(", ") ?: "",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SanteDanger,
+                        maxLines = 1
+                    )
+                }
+            }
         }
     }
 }

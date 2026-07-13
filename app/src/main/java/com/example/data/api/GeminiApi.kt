@@ -183,7 +183,6 @@ data class PriceResponse(
 )
 
 
-
 // ─── Medical History & Consultation Notes ────────────────────────────────────
 
 @JsonClass(generateAdapter = true)
@@ -209,6 +208,7 @@ data class PrescriptionItem(
     val duration: String = ""
 )
 
+@JsonClass(generateAdapter = true)
 data class SaveConsultationNoteRequest(
     val diagnosis: String = "",
     val symptoms: String = "",
@@ -310,6 +310,7 @@ data class MedicalHistorySnapshot(
     val recent_consultations: Int = 0
 )
 
+@JsonClass(generateAdapter = true)
 data class UpdateMedicalHistoryRequest(
     val basicInfo: BasicInfo? = null,
     val allergies: List<AllergyItem>? = null,
@@ -319,6 +320,7 @@ data class UpdateMedicalHistoryRequest(
     val emergencyContact: EmergencyContactItem? = null,
     val surgicalHistory: List<SurgicalHistoryItem>? = null
 )
+
 
 interface MedikaApiService {
 
@@ -418,7 +420,6 @@ interface MedikaApiService {
     ): UploadResponse
     @GET("api/specialties/prices")
     suspend fun getSpecialtyPrices(@Header("Authorization") token: String): List<SpecialtyPriceItem>
-}
 
     // ─── Medical History & Consultation Notes ─────────────────────────
     @GET("api/consultations/{id}/notes")
@@ -436,7 +437,7 @@ interface MedikaApiService {
     @PUT("api/medical-history/{patientId}")
     suspend fun updateMedicalHistory(@Header("Authorization") token: String, @Path("patientId") patientId: String, @Body body: UpdateMedicalHistoryRequest): MedicalHistory
 
-
+}
 
 @JsonClass(generateAdapter = true)
 data class UpdateProfileRequest(
