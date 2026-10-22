@@ -1,0 +1,141 @@
+"use client";
+
+/**
+ * Registers the service worker and renders the install prompt + offline
+ * banner. Mounted once from the root layout.
+ *
+ * The install banner is deliberately hidden on chat/call screens — it would
+ * cover the message composer — and auto-dismisses after 15 s elsewhere.
+ */
+import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
+import { Download, WifiOff, X } from "lucide-react";
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
+
+const INSTALL_DISMISS_KEY = "medika_install_dismissed";
+
+function isFullScreenInteractionPage(pathname: string | null): boolean {
+  if (!pathname) return false;
+  // Chat conversations and calls: the composer must never be covered.
+  return /^\/app\/consultations\/[^/]+$/.test(pathname) || /^\/app\/tickets\/[^/]+$/.test(pathname);
+}
+
+export function PwaBootstrap() {
+  const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
+  const [showInstall, setShowInstall] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    // Service worker registration — production only (no SW over plain HTTP
+    // on localhost IPs, and Next.js dev server hot-reload conflicts with it).
+    if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
+      const onLoad = () => {
+        navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
+          // SW registration failure is non-fatal; the app still works online.
+        });
+      };
+      if (document.readyState === "complete") onLoad();
+      else window.addEventListener("load", onLoad);
+      return () => window.removeEventListener("load", onLoad);
+    }
+  }, []);
+
+  useEffect(() => {
+    const onPrompt = (e: Event) => {
+      e.preventDefault();
+      setInstallEvent(e as BeforeInstallPromptEvent);
+      let dismissed = "0";
+      try {
+        dismissed = window.localStorage.getItem(INSTALL_DISMISS_KEY) ?? "0";
+      } catch {
+        dismissed = "0";
+      }
+      if (dismissed !== "1") setShowInstall(true);
+    };
+    const onInstalled = () => setShowInstall(false);
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+
+  useEffect(() => {
+    const update = () => setOffline(!navigator.onLine);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
+
+  const install = async () => {
+    if (!installEvent) return;
+    await installEvent.prompt();
+    await installEvent.userChoice;
+    setShowInstall(false);
+  };
+
+  // Keep the banner from covering interactive content at the page bottom,
+  // and hide it entirely on full-screen interaction pages (chats).
+  const bannerVisible = showInstall && !isFullScreenInteractionPage(pathname);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.body.classList.toggle("has-install-banner", bannerVisible);
+    return () => document.body.classList.remove("has-install-banner");
+  }, [bannerVisible]);
+
+  // Auto-dismiss the banner so it never lingers over content.
+  useEffect(() => {
+    if (!bannerVisible) return;
+    const t = setTimeout(() => setShowInstall(false), 15_000);
+    return () => clearTimeout(t);
+  }, [bannerVisible]);
+
+  const dismissInstall = () => {
+    setShowInstall(false);
+    try {
+      window.localStorage.setItem(INSTALL_DISMISS_KEY, "1");
+    } catch {
+      // ignore
+    }
+  };
+
+  return (
+    <>
+      {offline && (
+        <div role="status" aria-live="polite" className="toast-stack">
+          <div className="toast">
+            <WifiOff size={18} aria-hidden />
+            <span>Vous êtes hors ligne. Certaines pages peuvent ne pas se charger.</span>
+          </div>
+        </div>
+      )}
+      {bannerVisible && (
+        <div className="install-banner" role="dialog" aria-label="Installer l'application Medika">
+          <span className="brand-mark" aria-hidden>
+            <Download size={17} />
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <strong>Installer Medika</strong>
+            <div className="tiny muted">Accédez à vos consultations depuis votre écran d&apos;accueil.</div>
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={install}>
+            Installer
+          </button>
+          <button className="icon-btn" onClick={dismissInstall} aria-label="Fermer la suggestion d'installation">
+            <X size={17} />
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
