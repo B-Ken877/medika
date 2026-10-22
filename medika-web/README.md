@@ -138,3 +138,24 @@ npm run build       # production build
 4. **Doctor credential fields** (specialty, license, hospital, biography) are
    read-only on the web, matching the backend's authorization model (admin
    manages doctors).
+
+---
+
+## Deploying to Vercel
+
+The PWA deploys as its own Vercel project (Root Directory = `medika-web`),
+with the backend deployed separately from the repository root (see
+`../docs/DEPLOYMENT.md` for the full runbook).
+
+Build-time environment variables:
+
+| Variable | Purpose |
+|---|---|
+| `API_ORIGIN` | e.g. `https://medika-api.<team>.vercel.app` — `next.config.mjs` proxies `/api`, `/payment`, `/uploads` through this app so the browser stays same-origin |
+| `NEXT_PUBLIC_WS_URL` | e.g. `wss://medika-api.<team>.vercel.app/ws` — WebSocket upgrades cannot be proxied by Next.js rewrites, so clients connect to the API origin directly |
+| `NEXT_PUBLIC_API_BASE_URL` | keep empty (same-origin via the proxy) |
+| `NEXT_PUBLIC_PAYMENT_BASE_URL` | keep empty (`/payment` is proxied) |
+
+Authentication note: the backend now issues **JWT bearer tokens** (the legacy
+token was the raw user id — see `../docs/VERCEL_MIGRATION_AUDIT.md`). The WS
+auth frame sends `{ type: "auth", token }`.

@@ -42,3 +42,23 @@ Thumbs.db
 # Environment files with secrets
 .env
 app/.env
+medika-web/.env
+medika-web/.env*.local
+medika-admin/.env
+medika-admin/.env*.local
+
+# ─── Backend (Node) ───────────────────────────────────────────────────────────
+node_modules/
+coverage/
+.vitest/
+*.log
+.vercel/
+
+# Runtime data — NEVER commit patient data, uploads or local databases
+data/
+uploads/
+.pgdata/
+*.sqlite
+
+# Kotlin build noise
+.kotlin/
