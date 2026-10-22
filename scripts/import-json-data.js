@@ -70,6 +70,9 @@ async function main() {
 
   const stats = {};
   const record = (k, n) => { stats[k] = { imported: n, source: n }; };
+  const recordSkips = (k, imported, skipped, source) => {
+    stats[k] = { imported, skipped, source };
+  };
 
   async function insert(sql, params) {
     if (dryRun) return;
@@ -141,21 +144,42 @@ async function main() {
 
   // ─── messages ──────────────────────────────────────────────────────────────
   if (messages) {
+    // messages have no natural PRIMARY KEY (BIGSERIAL id only), so ON CONFLICT
+    // cannot apply. Idempotency is enforced with an existence check on the
+    // message's natural identity (consultation, sender, text, instant): a
+    // re-run after a partial failure — or a grown source file — imports each
+    // legacy message exactly once. Genuinely identical duplicate frames in the
+    // legacy export collapse to a single row (they are indistinguishable
+    // anyway). See tests/import-idempotency.test.js.
     let n = 0;
+    let skipped = 0;
     for (const m of messages) {
       if (!m.consultation_id) continue;
+      const createdAt = toDate(m.created_at);
+      const senderId = m.sender_id || 'unknown';
+      const text = m.text || '';
+      if (!dryRun) {
+        const { rows } = await pool.query(
+          `SELECT 1 FROM messages
+            WHERE consultation_id = $1 AND sender_id = $2 AND text = $3
+              AND created_at IS NOT DISTINCT FROM $4
+            LIMIT 1`,
+          [m.consultation_id, senderId, text, createdAt]
+        );
+        if (rows.length) { skipped++; continue; }
+      }
       await insert(
         `INSERT INTO messages (consultation_id, sender_id, sender_name, text, message_type, file_url, duration, file_size, created_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [m.consultation_id, m.sender_id || 'unknown', m.sender_name || '',
-         m.text || '', m.message_type || 'text', m.file_url ?? null,
+        [m.consultation_id, senderId, m.sender_name || '',
+         text, m.message_type || 'text', m.file_url ?? null,
          m.duration === undefined || m.duration === null ? null : parseInt(m.duration, 10) || null,
          m.file_size === undefined || m.file_size === null ? null : parseInt(m.file_size, 10) || null,
-         toDate(m.created_at)]
+         createdAt]
       );
       n++;
     }
-    record('messages', n);
+    recordSkips('messages', n, skipped, n + skipped);
   }
 
   // ─── tickets + ticket_messages (legacy production files) ──────────────────
@@ -176,21 +200,39 @@ async function main() {
     record('tickets', n);
   }
   if (ticketMessages) {
+    // ticket_messages: same keyless-table idempotency strategy as messages
+    // (existence check on natural identity; see the messages block above).
     let n = 0;
+    let skipped = 0;
     for (const m of ticketMessages) {
       if (!m.ticket_id) continue;
+      const createdAt = toDate(m.created_at);
+      const senderRole = ['user', 'admin', 'system'].includes(m.sender_role) ? m.sender_role : 'user';
+      const senderId = m.sender_id ?? null;
+      const content = m.content || m.message || m.text || '';
+      if (!dryRun) {
+        const { rows } = await pool.query(
+          `SELECT 1 FROM ticket_messages
+            WHERE ticket_id = $1 AND sender_role = $2
+              AND sender_id IS NOT DISTINCT FROM $3 AND content = $4
+              AND created_at IS NOT DISTINCT FROM $5
+            LIMIT 1`,
+          [String(m.ticket_id), senderRole, senderId, content, createdAt]
+        );
+        if (rows.length) { skipped++; continue; }
+      }
       await insert(
         `INSERT INTO ticket_messages (ticket_id, sender_role, sender_id, sender_name, content, file_url, file_type, file_size, created_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [String(m.ticket_id), ['user', 'admin', 'system'].includes(m.sender_role) ? m.sender_role : 'user',
-         m.sender_id ?? null, m.sender_name || '', m.content || m.message || m.text || '',
+        [String(m.ticket_id), senderRole,
+         senderId, m.sender_name || '', content,
          m.file_url ?? null, m.file_type ?? null,
          m.file_size === undefined || m.file_size === null ? null : parseInt(m.file_size, 10) || null,
-         toDate(m.created_at)]
+         createdAt]
       );
       n++;
     }
-    record('ticket_messages', n);
+    recordSkips('ticket_messages', n, skipped, n + skipped);
   }
 
   // ─── consultation notes ────────────────────────────────────────────────────
@@ -241,7 +283,8 @@ async function main() {
   // ─── Report ────────────────────────────────────────────────────────────────
   console.log(`\n[import] ${dryRun ? 'DRY RUN — nothing written' : 'import complete'}:`);
   for (const [table, s] of Object.entries(stats)) {
-    console.log(`  ${table.padEnd(22)} ${s.imported} row(s)`);
+    const skipped = s.skipped ? ` (${s.skipped} already present)` : '';
+    console.log(`  ${table.padEnd(22)} ${s.imported} row(s)${skipped}`);
   }
   const missing = ['users', 'consultations', 'messages']
     .filter((k) => !(k in stats));

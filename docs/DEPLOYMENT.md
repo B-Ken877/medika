@@ -103,7 +103,7 @@ the legacy server; only new consultations are payment-gated.
    | `BLOB_READ_WRITE_TOKEN` | Vercel → Storage → Blob |
    | `LEGACY_UPLOADS_ORIGIN` | e.g. `https://medikahaiti.site` while old uploads live on the VPS |
    | `REDIS_URL` | optional (Upstash) — recommended once you expect >1 concurrent function instance |
-   | `CORS_ORIGINS` | browser origins allowed cross-origin (the PWA/admin are same-origin via proxy; native apps don't need it) |
+   | `CORS_ORIGINS` | browser origins allowed cross-origin (the PWA/admin are same-origin via proxy; native apps don't need it). **Unset in production = cross-origin browsers denied (fail-closed)** |
    | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | only used by `scripts/migrate.js` seeding, not by the runtime |
 
 4. Deploy. Sanity checks against `https://medika-api.<team>.vercel.app`:

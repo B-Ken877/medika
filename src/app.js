@@ -10,7 +10,7 @@
 
 const express = require('express');
 const cors = require('cors');
-const { config } = require('./config');
+const { config, isProduction } = require('./config');
 const { errorHandler, notFoundHandler } = require('./errors');
 const { localStaticMiddleware } = require('./uploads');
 
@@ -28,12 +28,20 @@ const uploadRoutes = require('./routes/upload');
  * CORS: native clients (Android/OkHttp) send no Origin header and pass
  * through; browser origins must be explicitly allowlisted via CORS_ORIGINS.
  * Credentials are never needed (Bearer tokens, not cookies).
+ *
+ * Fail-closed default: with CORS_ORIGINS unset, production denies every
+ * cross-origin browser request (the PWA/admin are same-origin via the proxy,
+ * native apps send no Origin) — it must NEVER default to allowing every
+ * origin. Development keeps the permissive fallback for local tooling.
  */
 function corsMiddleware() {
   const allow = new Set(config.corsOrigins);
+  const devFallback = !isProduction();
   return cors({
     origin(origin, cb) {
-      if (!origin || allow.size === 0 || allow.has(origin)) return cb(null, true);
+      if (!origin) return cb(null, true); // native clients / same-origin
+      if (allow.has(origin)) return cb(null, true); // explicit allowlist
+      if (devFallback && allow.size === 0) return cb(null, true); // dev-only
       cb(null, false); // no CORS headers → browser blocks, server still answers
     },
     credentials: false,
