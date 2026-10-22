@@ -1,13 +1,23 @@
 /**
  * Medika backend — single entry point for BOTH deployment modes:
  *
- *  1. Vercel (zero-config Express + WebSocket): this file is auto-detected as
- *     the Express entry ("server.js" at the repo root). We export the raw
- *     HTTP server (Express app as request listener + WebSocketServer attached
- *     on /ws) — the officially documented pattern for Express apps that also
- *     serve WebSockets on Vercel Functions. REST paths and the /ws protocol
+ *  1. Vercel (Express framework preset): this file is the auto-detected
+ *     Express entry point. The preset's entrypoint detection
+ *     (@vercel/express findEntrypoint) scans app/index/server (+src/)
+ *     candidates in order and requires the entry file to import the
+ *     `express` package DIRECTLY — an indirect import through ./src/*
+ *     modules is not recognized, so this file requires('express') itself.
+ *     We export the composed HTTP server (Express app as request listener +
+ *     WebSocketServer attached on /ws) — the documented pattern for Express
+ *     apps that also serve WebSockets on Vercel Functions (the runtime
+ *     accepts "a function or server"; the server shape keeps the /ws
+ *     upgrade path working). REST paths and the /ws protocol
  *     are identical to the legacy deployment, so Android, the web PWA and the
- *     admin panel keep working (DNS cutover only).
+ *     admin panel keep working (DNS cutover only). The app factory itself
+ *     lives in src/create-app.js — deliberately NOT one of Vercel's
+ *     entrypoint candidate paths, so internal modules can never be mistaken
+ *     for the request handler (regression-checked by
+ *     tests/vercel-entrypoint.test.js).
  *
  *  2. Standalone / Docker / PM2: `node server.js` starts the same composition
  *     on PORT (legacy behavior). realtime/server.js reuses this module for an
@@ -26,7 +36,16 @@
 'use strict';
 
 const http = require('http');
-const { createApp } = require('./src/app');
+// Load-bearing for Vercel's Express preset entrypoint detection: the entry
+// file must import `express` directly, or detection falls through to another
+// candidate (previously src/app.js, which exports only the { createApp }
+// factory → "Invalid export found in module … The default export must be a
+// function or server" → HTTP 500 on every request). The Express app itself
+// is composed by createApp() below; this require is what makes THIS file the
+// unambiguous entry point.
+// eslint-disable-next-line no-unused-vars
+const express = require('express');
+const { createApp } = require('./src/create-app');
 const { attachRealtime } = require('./src/realtime');
 const { assertProductionSafety } = require('./src/config');
 
@@ -37,8 +56,9 @@ const server = http.createServer(app);
 const hub = attachRealtime(server);
 app.locals.hub = hub;
 
-// Export the HTTP server — this is what Vercel's runtime consumes (Express +
-// WebSocket in one Function), and what tests can listen on ephemeral ports.
+// Export the HTTP server — this is what Vercel's runtime consumes (it accepts
+// "a function or server"; the server shape is what keeps WebSocket upgrades
+// flowing to the attached hub), and what tests can listen on ephemeral ports.
 module.exports = server;
 // Some tooling introspects `module.exports.app` — expose it for convenience.
 module.exports.app = app;

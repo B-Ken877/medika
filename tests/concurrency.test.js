@@ -76,7 +76,7 @@ describe('persistence across app instances', () => {
     const dbMod = await import('../src/db.js');
     // Re-create the pool by resetting the module cache is not possible in-process;
     // instead verify through a second HTTP round-trip after pool recycling:
-    const { createApp } = await import('../src/app.js');
+    const { createApp } = await import('../src/create-app.js');
     const supertest = (await import('supertest')).default;
     const freshRequest = supertest(createApp());
     const res = await freshRequest

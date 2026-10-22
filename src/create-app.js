@@ -5,6 +5,15 @@
  * preserves the legacy CORS behavior for native clients while restricting
  * browser origins to an explicit allowlist, and installs centralized error
  * handling that never leaks internals.
+ *
+ * NOTE on the module name: this file is deliberately called create-app.js,
+ * NOT app.js. Vercel's Express preset treats files named
+ * app/index/server (+ src/) as entrypoint candidates; a factory module at
+ * src/app.js was previously auto-selected as the deployment entry and broke
+ * the deployment (its { createApp } export is not "a function or server").
+ * The real entry point is the root server.js, which imports express directly
+ * and exports the composed http.Server — see server.js and
+ * tests/vercel-entrypoint.test.js.
  */
 'use strict';
 
