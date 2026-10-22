@@ -87,9 +87,30 @@ the legacy server; only new consultations are payment-gated.
 1. In Vercel: **Add New → Project → Import** the Git repository.
    Set **Root Directory = repository root** (the repo root contains
    `server.js`, `package.json`, `vercel.json`).
-2. Framework preset: Vercel auto-detects the Express entry (`server.js`).
-   If asked, choose **Other / no framework** — the `vercel.json` + entry file
-   are already in place.
+2. Framework preset: **Express** (auto-detected from the `express`
+   dependency in `package.json`; confirm it if the import flow guessed
+   something else). Do NOT pick "Other / no framework" — the Express preset
+   is what wires the catch-all route that sends every request path
+   (`/api/*`, `/payment/*`, `/uploads/*`, `/ws` upgrades) to the single
+   Function.
+
+   **Express entry contract (deployment incident 2026-10):** the Express
+   preset picks the entry by scanning `app` / `index` / `server` (root, then
+   `src/`) candidates **in that order**, and only accepts candidates that
+   import the `express` package *directly* (regex on the file source,
+   `@vercel/express` `findEntrypoint`). `server.js` satisfies the contract:
+   it `require`s `express` itself and exports the composed `http.Server`
+   (Express listener + `/ws` WebSocketServer) — the runtime accepts "a
+   function or server", and the server shape is what keeps WebSocket
+   upgrades working. The application factory lives at `src/create-app.js`
+   precisely so it is *not* an entrypoint candidate: an earlier layout with
+   the factory at `src/app.js` got that file auto-selected instead (it
+   imports `express` but exports `{ createApp }`), producing
+   `Invalid export found in module "/var/task/src/app.js". The default
+   export must be a function or server.` and HTTP 500 on every request.
+   `tests/vercel-entrypoint.test.js` regression-checks this contract
+   (entry = `server.js`, sole matching candidate, `package.json#main`,
+   `vercel.json` `functions` key, export shape).
 3. Environment variables (Production + Preview — see `.env.example` for the
    full annotated list):
 

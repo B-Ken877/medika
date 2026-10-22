@@ -58,7 +58,7 @@ Key screens: Auth, Patient/Doctor dashboards, symptom intake + payment, chat, ca
 
 ## 🖧 Backend (`server.js` + `src/`)
 
-- **Runtime**: Node 20+ (Express 4) — runs standalone (`node server.js`) or as a Vercel Function (zero-config entry)
+- **Runtime**: Node 20+ (Express 4) — runs standalone (`node server.js`) or as a Vercel Function. Express preset entry contract: `server.js` imports `express` directly and exports the composed `http.Server` (REST + `/ws`); the app factory lives at `src/create-app.js` so it is never mistaken for the entry — regression-checked by `tests/vercel-entrypoint.test.js` (see `docs/DEPLOYMENT.md` §4)
 - **Database**: PostgreSQL via `pg` (migrations in `db/migrations/`, run `npm run migrate`)
 - **Realtime**: `ws` WebSocketServer on `/ws` — legacy protocol preserved; optional Redis (`REDIS_URL`) for cross-instance fan-out; `realtime/server.js` runs the same stack as an always-on host if you prefer that over Vercel's WS beta
 - **Payments**: MonCash REST (`src/moncash.js`), payments table with idempotent verification
