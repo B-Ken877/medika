@@ -1,0 +1,61 @@
+{
+  "name": "Medika — Santé pour tous, partout",
+  "short_name": "Medika",
+  "description": "Téléconsultation avec des médecins haïtiens : chat, appel vidéo et suivi médical.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f8fafb",
+  "theme_color": "#16a34a",
+  "lang": "fr",
+  "dir": "ltr",
+  "categories": ["medical", "health", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nouvelle consultation",
+      "short_name": "Consultation",
+      "description": "Décrire vos symptômes et trouver un médecin",
+      "url": "/app/consult"
+    },
+    {
+      "name": "Mes consultations",
+      "short_name": "Consultations",
+      "description": "Voir vos consultations en cours et passées",
+      "url": "/app/consultations"
+    },
+    {
+      "name": "Mon dossier médical",
+      "short_name": "Dossier",
+      "description": "Allergies, traitements et historique",
+      "url": "/app/dossier"
+    }
+  ]
+}
