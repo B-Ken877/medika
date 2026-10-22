@@ -3,8 +3,10 @@
 /**
  * WebSocket manager for the Medika realtime channel (/ws).
  *
- * Mirrors the Android client's protocol exactly:
- *  - connect, then send {type:"auth", userId}
+ * Mirrors the Android client's protocol, with the hardened auth frame:
+ *  - connect, then send {type:"auth", token: <JWT>}
+ *    (the legacy {type:"auth", userId} frame authenticated nothing and is
+ *    rejected by the migrated backend — see docs/VERCEL_MIGRATION_AUDIT.md C2)
  *  - server sends catch-up messages, then live events
  *  - client sends message:send / typing / call:start / call:accept / call:reject / call:end
  *
@@ -39,7 +41,7 @@ export function wsUrl(apiBase = ""): string {
 
 export class MedikaSocket {
   private ws: WebSocket | null = null;
-  private userId: string | null = null;
+  private token: string | null = null;
   private listeners = new Set<Listener>();
   private statusListeners = new Set<StatusListener>();
   private reconnectAttempts = 0;
@@ -50,15 +52,15 @@ export class MedikaSocket {
   private static MAX_BACKOFF_MS = 30_000;
   private static BASE_BACKOFF_MS = 1_000;
 
-  connect(userId: string): void {
+  connect(token: string): void {
     if (typeof window === "undefined") return;
     this.manuallyClosed = false;
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
-      if (this.userId === userId) return;
+      if (this.token === token) return;
       // Different user (re-login): reset before reconnecting.
       this.teardownSocket();
     }
-    this.userId = userId;
+    this.token = token;
     this.openSocket();
   }
 
@@ -75,8 +77,8 @@ export class MedikaSocket {
 
     socket.onopen = () => {
       this.reconnectAttempts = 0;
-      if (this.userId) {
-        socket.send(JSON.stringify({ type: "auth", userId: this.userId }));
+      if (this.token) {
+        socket.send(JSON.stringify({ type: "auth", token: this.token }));
       }
       this.notifyStatus("open");
     };
@@ -148,7 +150,7 @@ export class MedikaSocket {
   }
 
   disconnect(): void {
-    this.userId = null;
+    this.token = null;
     this.seenMessageIds.clear();
     this.reconnectAttempts = 0;
     this.teardownSocket();

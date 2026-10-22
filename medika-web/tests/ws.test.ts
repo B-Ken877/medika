@@ -67,11 +67,11 @@ describe("MedikaSocket", () => {
     vi.useRealTimers();
   });
 
-  it("authenticates with {type:'auth', userId} on open (Android protocol)", () => {
+  it("authenticates with {type:'auth', token} on open (hardened protocol)", () => {
     socket.connect("patient_1");
     const ws = FakeWebSocket.instances.at(-1)!;
     ws.simulateOpen();
-    expect(ws.sent[0]).toBe(JSON.stringify({ type: "auth", userId: "patient_1" }));
+    expect(ws.sent[0]).toBe(JSON.stringify({ type: "auth", token: "patient_1" }));
   });
 
   it("sends message:send with the exact Android payload shape", () => {

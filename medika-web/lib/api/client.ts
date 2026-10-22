@@ -53,7 +53,7 @@ function messageForStatus(status: number): string {
     case 409:
       return "Cette ressource existe déjà.";
     case 413:
-      return "Fichier trop volumineux (max 50 Mo).";
+      return "Fichier trop volumineux (max 4 Mo).";
     default:
       return "Le serveur est momentanément indisponible. Réessayez plus tard.";
   }

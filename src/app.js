@@ -1,0 +1,96 @@
+/**
+ * Express application factory.
+ *
+ * Composes every route group under /api (and the legacy /payment mount),
+ * preserves the legacy CORS behavior for native clients while restricting
+ * browser origins to an explicit allowlist, and installs centralized error
+ * handling that never leaks internals.
+ */
+'use strict';
+
+const express = require('express');
+const cors = require('cors');
+const { config } = require('./config');
+const { errorHandler, notFoundHandler } = require('./errors');
+const { localStaticMiddleware } = require('./uploads');
+
+const authRoutes = require('./routes/auth');
+const profileRoutes = require('./routes/profile');
+const consultationRoutes = require('./routes/consultations');
+const medicalHistoryRoutes = require('./routes/medical-history');
+const ticketRoutes = require('./routes/tickets');
+const paymentRoutes = require('./routes/payments');
+const adminRoutes = require('./routes/admin');
+const callRoutes = require('./routes/call');
+const uploadRoutes = require('./routes/upload');
+
+/**
+ * CORS: native clients (Android/OkHttp) send no Origin header and pass
+ * through; browser origins must be explicitly allowlisted via CORS_ORIGINS.
+ * Credentials are never needed (Bearer tokens, not cookies).
+ */
+function corsMiddleware() {
+  const allow = new Set(config.corsOrigins);
+  return cors({
+    origin(origin, cb) {
+      if (!origin || allow.size === 0 || allow.has(origin)) return cb(null, true);
+      cb(null, false); // no CORS headers → browser blocks, server still answers
+    },
+    credentials: false,
+  });
+}
+
+/**
+ * Legacy /uploads/* handling:
+ *  - production: 302 redirect to LEGACY_UPLOADS_ORIGIN (old VPS) so historical
+ *    consultation media keeps resolving during migration;
+ *  - development: static serving from LOCAL_UPLOADS_DIR (parity with the old
+ *    server; new uploads carry absolute Blob URLs anyway).
+ */
+function uploadsRoute() {
+  const router = express.Router();
+  const local = localStaticMiddleware();
+  if (local) {
+    router.use('/', local);
+  }
+  router.use('/', (req, res, next) => {
+    if (config.legacyUploadsOrigin) {
+      const target = `${config.legacyUploadsOrigin.replace(/\/+$/, '')}/uploads/${encodeURIComponent(req.path).replace(/%2F/g, '/')}`;
+      return res.redirect(302, target);
+    }
+    if (local) return next(); // fall through to 404 handler
+    res.status(404).json({ error: 'Uploads non disponibles' });
+  });
+  return router;
+}
+
+function createApp() {
+  const app = express();
+  app.disable('x-powered-by');
+  app.use(corsMiddleware());
+  app.use(express.json({ limit: '1mb' })); // legacy default was 100kb; 1mb is a safe superset
+
+  app.use('/uploads', uploadsRoute());
+
+  // Payment server contract lives at /payment/api/payment/* on the legacy
+  // deployment (nginx proxied /payment → port 9998). The same router is also
+  // mounted at /api/payment (canonical) and /payment (aliases).
+  app.use('/api/payment', paymentRoutes);
+  app.use('/payment/api/payment', paymentRoutes);
+  app.use('/payment', paymentRoutes);
+
+  app.use('/api', authRoutes);
+  app.use('/api', profileRoutes);
+  app.use('/api', consultationRoutes);
+  app.use('/api', medicalHistoryRoutes);
+  app.use('/api', ticketRoutes);
+  app.use('/api', uploadRoutes); // /api/upload + /api/admin/upload
+  app.use('/api/admin', adminRoutes); // router-level admin guard applies to /api/admin/* only
+  app.use('/api', callRoutes);
+
+  app.use(notFoundHandler);
+  app.use(errorHandler);
+  return app;
+}
+
+module.exports = { createApp };
