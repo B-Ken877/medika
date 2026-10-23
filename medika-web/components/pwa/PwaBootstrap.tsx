@@ -24,6 +24,21 @@ function isFullScreenInteractionPage(pathname: string | null): boolean {
   return /^\/app\/consultations\/[^/]+$/.test(pathname) || /^\/app\/tickets\/[^/]+$/.test(pathname);
 }
 
+/**
+ * Auth and utility screens keep a tight vertical rhythm (form panels,
+ * keyboard on mobile) — a floating install banner there can cover the
+ * submit button or the registration link. Show it only on the landing
+ * page and inside the authenticated app, where .app-main reserves space
+ * for it via body.has-install-banner.
+ */
+function shouldHideInstallBanner(pathname: string | null): boolean {
+  if (!pathname) return true;
+  return (
+    pathname === "/" ||
+    pathname.startsWith("/app")
+  ) ? false : true;
+}
+
 export function PwaBootstrap() {
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstall, setShowInstall] = useState(false);
@@ -85,8 +100,10 @@ export function PwaBootstrap() {
   };
 
   // Keep the banner from covering interactive content at the page bottom,
-  // and hide it entirely on full-screen interaction pages (chats).
-  const bannerVisible = showInstall && !isFullScreenInteractionPage(pathname);
+  // and hide it entirely on full-screen interaction pages (chats) and on
+  // auth/utility screens (login, register, offline).
+  const bannerVisible =
+    showInstall && !isFullScreenInteractionPage(pathname) && !shouldHideInstallBanner(pathname);
   useEffect(() => {
     if (typeof document === "undefined") return;
     document.body.classList.toggle("has-install-banner", bannerVisible);

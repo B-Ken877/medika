@@ -85,8 +85,8 @@ export default function CustomerCarePage() {
       ) : filtered.length === 0 ? (
         <div className="cc-empty" style={{ padding: '80px 24px' }}>
           <Inbox size={48} />
-          <div style={{ fontSize: 16, fontWeight: 600, color: '#6b7280' }}>Aucun ticket trouv\u00e9</div>
-          <div style={{ fontSize: 13, color: '#9ca3af' }}>Les tickets de support appara\u00eetront ici</div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--mk-text-secondary)' }}>Aucun ticket trouv\u00e9</div>
+          <div style={{ fontSize: 13, color: 'var(--mk-text-muted)' }}>Les tickets de support appara\u00eetront ici</div>
         </div>
       ) : (
         <div className="cc-list">
@@ -108,7 +108,7 @@ export default function CustomerCarePage() {
                 </div>
                 <div className="cc-ticket-meta">
                   <span>{ticket.user_name || 'Utilisateur'}</span>
-                  <span style={{ color: '#d1d5db' }}>\u00b7</span>
+                  <span style={{ color: '#c7d2ce' }}>\u00b7</span>
                   <Clock size={12} style={{ opacity: 0.5 }} />
                   <span>{timeAgo(ticket.updated_at || ticket.created_at)}</span>
                 </div>
@@ -118,7 +118,7 @@ export default function CustomerCarePage() {
               </div>
               <div className="cc-ticket-right">
                 {ticket.unread_count > 0 && <div className="cc-unread-dot" />}
-                <ChevronRight size={16} style={{ color: '#d1d5db' }} />
+                <ChevronRight size={16} style={{ color: '#c7d2ce' }} />
               </div>
             </div>
           ))}

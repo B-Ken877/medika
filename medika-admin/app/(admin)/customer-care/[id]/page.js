@@ -90,7 +90,7 @@ export default function TicketChatPage() {
       <div className="cc-chat-page">
         <div className="cc-loading" style={{ flexDirection: 'column', gap: 16 }}>
           <MessageSquare size={40} style={{ opacity: 0.2 }} />
-          <div style={{ color: '#6b7280', fontSize: 15, fontWeight: 600 }}>Ticket introuvable</div>
+          <div style={{ color: 'var(--mk-text-secondary)', fontSize: 15, fontWeight: 600 }}>Ticket introuvable</div>
           <button className="btn btn-secondary" onClick={() => router.push('/customer-care')}>
             <ArrowLeft size={16} /> Retour aux tickets
           </button>
@@ -148,7 +148,7 @@ export default function TicketChatPage() {
           <div className="cc-empty">
             <MessageSquare size={36} />
             <div>Aucun message pour le moment</div>
-            <div style={{ fontSize: 12, color: '#b0b0b0' }}>Commencez la conversation</div>
+            <div style={{ fontSize: 12, color: 'var(--mk-text-muted)' }}>Commencez la conversation</div>
           </div>
         ) : messages.map((msg, idx) => {
           const isAdmin = msg.sender_role === 'admin';
@@ -173,7 +173,7 @@ export default function TicketChatPage() {
                   )}
                 </div>
                 <div className="cc-msg-footer">
-                  <span style={{ fontWeight: 500, color: '#6b7280' }}>{msg.sender_name || (isAdmin ? 'Support Medika' : userName)}</span>
+                  <span style={{ fontWeight: 500, color: 'var(--mk-text-secondary)' }}>{msg.sender_name || (isAdmin ? 'Support Medika' : userName)}</span>
                   <span>{formatTime(msg.created_at)}</span>
                 </div>
               </div>

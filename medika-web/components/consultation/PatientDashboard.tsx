@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * Patient dashboard — web port of PatientDashboardScreen.kt.
- * Shows: greeting header, consultation status chips, recent consultations
- * (real data), quick actions, medical-record card, and rotating health tips.
- * All data comes from GET /api/consultations; empty states when none.
+ * Patient dashboard — Clinical Calm redesign.
+ * Page heading + primary action, four summary metrics, active consultation
+ * panel, consultation history, compact quick links, health tips.
+ * All data comes from GET /api/consultations (real values only).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -17,17 +17,17 @@ import {
   FolderOpen,
   HeartPulse,
   Moon,
+  Plus,
   Salad,
-  Sparkles,
   Stethoscope,
   Sun,
-  User,
+  LifeBuoy,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
 import { getConsultations } from "@/lib/api/endpoints";
 import type { Consultation } from "@/lib/api/types";
 import { relativeTime } from "@/lib/format";
-import { Avatar, EmptyState, ErrorAlert, SkeletonRows, StatusBadge } from "@/components/ui/primitives";
+import { EmptyState, ErrorAlert, SkeletonRows, StatusBadge } from "@/components/ui/primitives";
 
 const HEALTH_TIPS: { icon: typeof Droplets; title: string; text: string }[] = [
   { icon: Droplets, title: "Hydratez-vous", text: "Buvez au moins 8 verres d'eau par jour pour maintenir une bonne santé." },
@@ -71,93 +71,94 @@ export default function PatientDashboard() {
   const counts = useMemo(() => {
     const list = consultations ?? [];
     return {
+      total: list.length,
       active: list.filter((c) => c.status === "EN_COURS").length,
       pending: list.filter((c) => c.status === "RECHERCHE_MEDECIN").length,
       done: list.filter((c) => c.status === "TERMINE").length,
-      refused: list.filter((c) => c.status === "REFUSE").length,
     };
   }, [consultations]);
 
   const recent = useMemo(() => (consultations ?? []).slice(0, 5), [consultations]);
-
-  const firstName = user?.name?.split(/\s+/)[0] ?? "";
+  const current = useMemo(
+    () => (consultations ?? []).find((c) => c.status === "EN_COURS" || c.status === "RECHERCHE_MEDECIN") ?? null,
+    [consultations],
+  );
 
   return (
     <div className="stack">
-      {/* Greeting */}
-      <div className="flex-between">
+      {/* Page heading */}
+      <div className="page-head">
         <div>
-          <h1 className="page-title">Bonjour, {firstName}</h1>
-          <p className="muted small">Votre espace de santé Medika</p>
+          <h1 className="page-title">Mon espace santé</h1>
+          <p className="page-desc">Retrouvez vos consultations et gérez votre suivi médical.</p>
         </div>
-        <Avatar name={user?.name} src={user?.avatar_url} size="lg" alt={`Avatar de ${user?.name}`} />
+        <div className="page-head-actions">
+          <Link href="/app/consult" className="btn btn-primary">
+            <Plus size={18} aria-hidden /> Nouvelle consultation
+          </Link>
+        </div>
       </div>
 
-      {/* Status chips */}
+      {/* Summary metrics (real counts) */}
       <div className="stat-grid" role="group" aria-label="Résumé des consultations">
-        <div className="stat-card green">
-          <div className="stat-value">{counts.active}</div>
-          <div className="stat-label">En cours</div>
+        <div className="stat-card">
+          <div className="stat-label">
+            <span className="stat-dot gray" aria-hidden /> Consultations totales
+          </div>
+          <div className="stat-value">{counts.total}</div>
         </div>
-        <div className="stat-card yellow">
+        <div className="stat-card">
+          <div className="stat-label">
+            <span className="stat-dot yellow" aria-hidden /> En attente
+          </div>
           <div className="stat-value">{counts.pending}</div>
-          <div className="stat-label">En attente</div>
         </div>
-        <div className="stat-card blue">
+        <div className="stat-card">
+          <div className="stat-label">
+            <span className="stat-dot green" aria-hidden /> En cours
+          </div>
+          <div className="stat-value">{counts.active}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">
+            <span className="stat-dot blue" aria-hidden /> Terminées
+          </div>
           <div className="stat-value">{counts.done}</div>
-          <div className="stat-label">Terminées</div>
-        </div>
-        <div className="stat-card red">
-          <div className="stat-value">{counts.refused}</div>
-          <div className="stat-label">Refusées</div>
         </div>
       </div>
 
-      {/* Quick actions */}
-      <div className="grid-2">
-        <Link href="/app/consult" className="card card-hover" style={{ display: "flex", gap: 14, alignItems: "center" }}>
-          <span className="brand-mark" aria-hidden>
-            <Stethoscope size={17} />
-          </span>
-          <div>
-            <strong>Nouvelle consultation</strong>
-            <div className="small muted">Décrivez vos symptômes et trouvez un médecin</div>
+      {/* Active consultation panel */}
+      {consultations !== null && current && (
+        <section className="panel" aria-labelledby="current-title">
+          <div className="panel-head">
+            <h2 id="current-title" className="panel-title">
+              Consultation en cours
+            </h2>
+            <StatusBadge status={current.status} />
           </div>
-        </Link>
-        <Link href="/app/doctors" className="card card-hover" style={{ display: "flex", gap: 14, alignItems: "center" }}>
-          <span className="brand-mark" aria-hidden>
-            <User size={17} />
-          </span>
-          <div>
-            <strong>Trouver un médecin</strong>
-            <div className="small muted">Parcourir les spécialités et les médecins disponibles</div>
+          <div className="panel-body" style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+            <span className="brand-mark" aria-hidden>
+              <Stethoscope size={17} />
+            </span>
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <div className="row-title">
+                <span>{current.specialty_needed}</span>
+              </div>
+              <div className="row-sub">{current.description || "Sans description"}</div>
+              <div className="row-meta">Demandée {relativeTime(current.created_at)}</div>
+            </div>
+            <Link href={`/app/consultations/${encodeURIComponent(current.id)}`} className="btn btn-secondary">
+              Voir les détails <ChevronRight size={15} aria-hidden />
+            </Link>
           </div>
-        </Link>
-        <Link href="/app/dossier" className="card card-hover" style={{ display: "flex", gap: 14, alignItems: "center" }}>
-          <span className="brand-mark" aria-hidden>
-            <FolderOpen size={17} />
-          </span>
-          <div>
-            <strong>Mon dossier médical</strong>
-            <div className="small muted">Allergies, conditions, traitements et historique</div>
-          </div>
-        </Link>
-        <Link href="/app/tickets" className="card card-hover" style={{ display: "flex", gap: 14, alignItems: "center" }}>
-          <span className="brand-mark" aria-hidden>
-            <Sparkles size={17} />
-          </span>
-          <div>
-            <strong>Assistance</strong>
-            <div className="small muted">Contacter le service client Medika</div>
-          </div>
-        </Link>
-      </div>
+        </section>
+      )}
 
-      {/* Recent consultations */}
+      {/* Consultation history */}
       <section aria-labelledby="recent-title">
-        <div className="flex-between mb-1">
+        <div className="flex-between mb-2">
           <h2 id="recent-title" className="section-title" style={{ marginBottom: 0 }}>
-            Consultations récentes
+            Mes consultations
           </h2>
           <Link href="/app/consultations" className="btn btn-ghost btn-sm">
             Voir tout <ChevronRight size={15} aria-hidden />
@@ -168,37 +169,75 @@ export default function PatientDashboard() {
         <ErrorAlert error={error} onRetry={load} />
 
         {consultations !== null && recent.length === 0 && !error && (
-          <div className="card">
+          <div className="panel">
             <EmptyState
-              icon={<CalendarCheck size={26} />}
-              title="Aucune consultation"
-              description="Commencez votre première consultation avec un médecin maintenant."
+              icon={<CalendarCheck size={24} />}
+              title="Aucune consultation pour le moment"
+              description="Décrivez vos symptômes pour démarrer votre première consultation avec un médecin."
               action={
                 <Link href="/app/consult" className="btn btn-primary">
-                  Commencer une consultation
+                  <Plus size={16} aria-hidden /> Nouvelle consultation
                 </Link>
               }
             />
           </div>
         )}
 
-        <div className="list">
-          {recent.map((c) => (
-            <Link key={c.id} href={`/app/consultations/${encodeURIComponent(c.id)}`} className="row">
-              <span className="brand-mark" aria-hidden>
-                <Stethoscope size={16} />
-              </span>
-              <div className="row-body">
-                <div className="row-title">
-                  <span>{c.specialty_needed}</span>
-                  <StatusBadge status={c.status} />
+        {recent.length > 0 && (
+          <div className="panel">
+            {recent.map((c) => (
+              <Link key={c.id} href={`/app/consultations/${encodeURIComponent(c.id)}`} className="panel-row">
+                <span className="brand-mark" aria-hidden>
+                  <Stethoscope size={16} />
+                </span>
+                <div className="row-body">
+                  <div className="row-title">
+                    <span>{c.specialty_needed}</span>
+                    <StatusBadge status={c.status} />
+                  </div>
+                  <div className="row-sub">{c.description || "Sans description"}</div>
+                  <div className="row-meta">{relativeTime(c.created_at)}</div>
                 </div>
-                <div className="row-sub">{c.description || "Sans description"}</div>
-                <div className="row-meta">{relativeTime(c.created_at)}</div>
-              </div>
-              <ChevronRight size={18} className="muted" aria-hidden />
-            </Link>
-          ))}
+                <ChevronRight size={18} className="muted" aria-hidden />
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Compact quick links (existing routes only) */}
+      <section aria-labelledby="quick-title">
+        <h2 id="quick-title" className="section-title">
+          Accès rapides
+        </h2>
+        <div className="quick-links">
+          <Link href="/app/doctors" className="quick-link">
+            <span className="quick-icon" aria-hidden>
+              <Stethoscope size={17} />
+            </span>
+            <span>
+              Trouver un médecin
+              <div className="quick-sub">Spécialités et disponibilités</div>
+            </span>
+          </Link>
+          <Link href="/app/dossier" className="quick-link">
+            <span className="quick-icon" aria-hidden>
+              <FolderOpen size={17} />
+            </span>
+            <span>
+              Mon dossier médical
+              <div className="quick-sub">Allergies, traitements, historique</div>
+            </span>
+          </Link>
+          <Link href="/app/tickets" className="quick-link">
+            <span className="quick-icon" aria-hidden>
+              <LifeBuoy size={17} />
+            </span>
+            <span>
+              Assistance
+              <div className="quick-sub">Contacter le service client Medika</div>
+            </span>
+          </Link>
         </div>
       </section>
 

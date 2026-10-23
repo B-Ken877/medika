@@ -1,14 +1,16 @@
 "use client";
 
 /**
- * Authenticated app shell: header (brand, notifications, profile) +
- * role-aware bottom navigation on small screens + content area.
+ * Authenticated app shell — Clinical Calm redesign.
+ * 68px white header: brand (logo + wordmark), offline indicator, notifications,
+ * and an account menu (avatar + name → profile / logout dropdown).
+ * Role-aware bottom navigation on small screens + content area.
  * Redirects to /login when unauthenticated; restores session first.
  */
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
-import { Bell, CalendarDays, Home, Stethoscope, User } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Bell, CalendarDays, ChevronDown, Home, LogOut, Stethoscope, User } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
 import { useSocket } from "@/lib/ws/socket-context";
 import { Avatar, Spinner } from "@/components/ui/primitives";
@@ -30,8 +32,73 @@ function navItems(role: "patient" | "doctor") {
   ];
 }
 
+function AccountMenu() {
+  const { user, logout } = useAuth();
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onClick);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onClick);
+    };
+  }, [open]);
+
+  if (!user) return null;
+
+  return (
+    <div className="acct" ref={ref}>
+      <button
+        className="acct-btn"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Menu du compte"
+      >
+        <Avatar name={user.name} src={user.avatar_url} size="sm" alt={`Avatar de ${user.name}`} />
+        <span className="acct-name">{user.name}</span>
+        <ChevronDown size={14} aria-hidden />
+      </button>
+      {open && (
+        <div className="acct-menu" role="menu" aria-label="Compte">
+          <div className="acct-menu-head">
+            <div className="acct-menu-name">{user.name}</div>
+            <div className="acct-menu-role">
+              {user.role === "doctor" ? "Médecin" : user.role === "admin" ? "Administrateur" : "Patient"}
+            </div>
+          </div>
+          <Link href="/app/profile" role="menuitem" onClick={() => setOpen(false)}>
+            <User size={16} aria-hidden /> Mon profil
+          </Link>
+          <button
+            role="menuitem"
+            className="danger"
+            onClick={() => {
+              setOpen(false);
+              logout();
+              router.replace("/login");
+            }}
+          >
+            <LogOut size={16} aria-hidden /> Déconnexion
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
-  const { user, status, logout } = useAuth();
+  const { user, status } = useAuth();
   const { status: wsStatus } = useSocket();
   const router = useRouter();
   const pathname = usePathname();
@@ -62,7 +129,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6V3z" fill="currentColor" />
             </svg>
           </span>
-          Medika
+          <span className="brand-word">Medika</span>
         </Link>
         {wsStatus !== "open" && !onCallPage && (
           <span className="badge badge-gray" title="Reconnexion en cours">
@@ -78,18 +145,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <Bell size={20} />
           </Link>
-          <Link href="/app/profile" aria-label="Mon profil" title="Mon profil" style={{ display: "inline-flex" }}>
-            <Avatar name={user.name} src={user.avatar_url} size="sm" alt={`Avatar de ${user.name}`} />
-          </Link>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => {
-              logout();
-              router.replace("/login");
-            }}
-          >
-            Déconnexion
-          </button>
+          <AccountMenu />
         </div>
       </header>
 

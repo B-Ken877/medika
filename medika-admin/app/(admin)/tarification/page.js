@@ -55,8 +55,8 @@ export default function TarificationPage() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#111827' }}>Tarification par specialite</h2>
-          <p style={{ margin: '4px 0 0', fontSize: 14, color: '#6b7280' }}>Definissez le prix de consultation pour chaque specialite</p>
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--mk-text)' }}>Tarification par specialite</h2>
+          <p style={{ margin: '4px 0 0', fontSize: 14, color: 'var(--mk-text-secondary)' }}>Definissez le prix de consultation pour chaque specialite</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           {hasChanges && (
@@ -76,7 +76,7 @@ export default function TarificationPage() {
         <div style={{
           position: 'fixed', top: 20, right: 20, zIndex: 100, padding: '12px 20px',
           borderRadius: 8, color: '#fff', fontWeight: 600, fontSize: 14,
-          background: toast.type === 'success' ? '#059669' : '#dc2626',
+          background: toast.type === 'success' ? 'var(--mk-brand)' : 'var(--mk-danger)',
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: 8
         }}>
           {toast.type === 'success' ? <Check size={18} /> : null}
@@ -89,19 +89,19 @@ export default function TarificationPage() {
         {specialties.map(spec => (
           <div key={spec.id} className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{
-              padding: '14px 20px', borderBottom: '1px solid #e5e7eb',
-              display: 'flex', alignItems: 'center', gap: 10, background: '#f9fafb'
+              padding: '14px 20px', borderBottom: '1px solid var(--mk-border)',
+              display: 'flex', alignItems: 'center', gap: 10, background: 'var(--mk-bg)'
             }}>
               <div style={{
-                width: 36, height: 36, borderRadius: 8, background: '#dbeafe',
+                width: 36, height: 36, borderRadius: 8, background: 'var(--mk-info-bg)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}>
-                <Tag size={18} color="#2563eb" />
+                <Tag size={18} color="var(--mk-info)" />
               </div>
-              <span style={{ fontWeight: 600, fontSize: 14, color: '#111827' }}>{spec.name}</span>
+              <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--mk-text)' }}>{spec.name}</span>
             </div>
             <div style={{ padding: '16px 20px' }}>
-              <label style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>
+              <label style={{ fontSize: 12, color: 'var(--mk-text-secondary)', fontWeight: 600, textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>
                 Prix de consultation (HTG)
               </label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -111,20 +111,20 @@ export default function TarificationPage() {
                   value={spec.price}
                   onChange={(e) => updatePrice(spec.id, e.target.value)}
                   style={{
-                    flex: 1, padding: '10px 14px', border: '2px solid #e5e7eb', borderRadius: 8,
-                    fontSize: 18, fontWeight: 700, color: '#111827', outline: 'none',
+                    flex: 1, padding: '10px 14px', border: '2px solid var(--mk-border)', borderRadius: 8,
+                    fontSize: 18, fontWeight: 700, color: 'var(--mk-text)', outline: 'none',
                     transition: 'border-color 0.2s'
                   }}
-                  onFocus={(e) => e.target.style.borderColor = '#059669'}
-                  onBlur={(e) => e.target.style.borderColor = '#e5e7eb'}
+                  onFocus={(e) => e.target.style.borderColor = 'var(--mk-brand)'}
+                  onBlur={(e) => e.target.style.borderColor = 'var(--mk-border)'}
                 />
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }}>HTG</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--mk-text-secondary)', whiteSpace: 'nowrap' }}>HTG</span>
               </div>
               {spec.price > 0 && (
-                <div style={{ marginTop: 10, padding: '8px 12px', background: '#f0fdf4', borderRadius: 6, fontSize: 12, color: '#374151' }}>
-                  <span style={{ color: '#059669', fontWeight: 600 }}>Medecin: {formatCurrency(Math.round(spec.price * 0.75))}</span>
+                <div style={{ marginTop: 10, padding: '8px 12px', background: 'var(--mk-success-bg)', borderRadius: 6, fontSize: 12, color: 'var(--mk-text)' }}>
+                  <span style={{ color: 'var(--mk-brand)', fontWeight: 600 }}>Medecin: {formatCurrency(Math.round(spec.price * 0.75))}</span>
                   {' | '}
-                  <span style={{ color: '#b45309', fontWeight: 600 }}>Medika: {formatCurrency(Math.round(spec.price * 0.25))}</span>
+                  <span style={{ color: 'var(--mk-warning)', fontWeight: 600 }}>Medika: {formatCurrency(Math.round(spec.price * 0.25))}</span>
                 </div>
               )}
             </div>

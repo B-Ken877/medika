@@ -78,7 +78,7 @@ export default function ConsultationsPage() {
         </select>
       </div>
 
-      <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 12 }}>{filtered.length} consultation(s)</div>
+      <div style={{ fontSize: 13, color: 'var(--mk-text-secondary)', marginBottom: 12 }}>{filtered.length} consultation(s)</div>
 
       <div className="card" style={{ overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
@@ -93,13 +93,13 @@ export default function ConsultationsPage() {
                 <tr><td colSpan={9} className="empty-state">Aucune consultation</td></tr>
               ) : filtered.map(c => (
                 <tr key={c.id}>
-                  <td style={{ fontFamily: 'monospace', fontSize: 12, color: '#6b7280' }}>{c.id}</td>
+                  <td style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--mk-text-secondary)' }}>{c.id}</td>
                   <td>
                     <div style={{ fontWeight: 600 }}>{c.patient_name}</div>
-                    {c.patient_phone && <div style={{ fontSize: 12, color: '#6b7280' }}>{c.patient_phone}</div>}
+                    {c.patient_phone && <div style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>{c.patient_phone}</div>}
                   </td>
                   <td>
-                    <div style={{ fontWeight: 600 }}>{c.doctor_name || <span style={{ color: '#9ca3af' }}>Non assigne</span>}</div>
+                    <div style={{ fontWeight: 600 }}>{c.doctor_name || <span style={{ color: 'var(--mk-text-muted)' }}>Non assigne</span>}</div>
                   </td>
                   <td><span className="badge badge-blue">{c.specialty_needed}</span></td>
                   <td>
@@ -132,7 +132,7 @@ export default function ConsultationsPage() {
             <div className="modal-header">
               <div>
                 <h2 style={{ fontSize: 16, fontWeight: 700 }}>Messages - {viewMessages.id}</h2>
-                <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>{viewMessages.patient_name} {viewMessages.doctor_name || ''}</div>
+                <div style={{ fontSize: 13, color: 'var(--mk-text-secondary)', marginTop: 2 }}>{viewMessages.patient_name} {viewMessages.doctor_name || ''}</div>
               </div>
               <button onClick={() => setViewMessages(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
             </div>
@@ -146,15 +146,15 @@ export default function ConsultationsPage() {
                   {messages.map(m => (
                     <div key={m.id} style={{
                       padding: '10px 16px',
-                      background: m.sender_id === 'system' ? '#f9fafb' : '#f0fdf4',
-                      borderLeft: m.sender_id === 'system' ? '3px solid #9ca3af' : '3px solid #059669'
+                      background: m.sender_id === 'system' ? 'var(--mk-bg)' : 'var(--mk-success-bg)',
+                      borderLeft: m.sender_id === 'system' ? '3px solid var(--mk-text-muted)' : '3px solid var(--mk-brand)'
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                         <span style={{ fontWeight: 600, fontSize: 13 }}>{m.sender_name}</span>
-                        <span style={{ fontSize: 11, color: '#9ca3af' }}>{formatDate(m.created_at)}</span>
+                        <span style={{ fontSize: 11, color: 'var(--mk-text-muted)' }}>{formatDate(m.created_at)}</span>
                       </div>
                       {m.message_type === 'voice' ? (
-                        <div style={{ fontSize: 13, color: '#6b7280', fontStyle: 'italic' }}>
+                        <div style={{ fontSize: 13, color: 'var(--mk-text-secondary)', fontStyle: 'italic' }}>
                           Message vocal ({m.duration}s)
                         </div>
                       ) : m.message_type === 'image' ? (
@@ -178,7 +178,7 @@ export default function ConsultationsPage() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setConfirmDelete(null)}>
           <div className="modal-content" style={{ maxWidth: 400 }}>
             <div className="modal-header">
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#dc2626' }}>Supprimer la consultation</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--mk-danger)' }}>Supprimer la consultation</h2>
               <button onClick={() => setConfirmDelete(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
             </div>
             <div className="modal-body">
@@ -186,7 +186,7 @@ export default function ConsultationsPage() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setConfirmDelete(null)}>Annuler</button>
-              <button className="btn btn-danger" style={{ background: '#dc2626', color: '#fff' }} onClick={() => handleDelete(confirmDelete)}>
+              <button className="btn btn-danger" style={{ background: 'var(--mk-danger)', color: '#fff' }} onClick={() => handleDelete(confirmDelete)}>
                 <Trash2 size={16} /> Supprimer
               </button>
             </div>

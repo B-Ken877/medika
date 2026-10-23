@@ -18,7 +18,7 @@ export function statusLabel(status: string): string {
 export function statusBadgeClass(status: string): string {
   const map: Record<string, string> = {
     RECHERCHE_MEDECIN: "badge-yellow",
-    EN_COURS: "badge-blue",
+    EN_COURS: "badge-green",
     TERMINE: "badge-green",
     REFUSE: "badge-red",
   };
