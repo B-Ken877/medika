@@ -159,7 +159,7 @@ export default function DoctorsPage() {
         <button className="btn btn-primary" onClick={openCreate}><Plus size={16} /> Ajouter un medecin</button>
       </div>
 
-      <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 12 }}>{filtered.length} medecin(s) trouve(s)</div>
+      <div style={{ fontSize: 13, color: 'var(--mk-text-secondary)', marginBottom: 12 }}>{filtered.length} medecin(s) trouve(s)</div>
 
       {/* Table */}
       <div className="card" style={{ overflow: 'hidden' }}>
@@ -180,20 +180,20 @@ export default function DoctorsPage() {
                       {doc.avatar_url ? (
                         <img src={doc.avatar_url} alt="" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
                       ) : (
-                        <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669', fontWeight: 700, fontSize: 14 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--mk-brand-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--mk-brand)', fontWeight: 700, fontSize: 14 }}>
                           {doc.name?.charAt(0)}
                         </div>
                       )}
                       <div>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{doc.name}</div>
-                        <div style={{ fontSize: 12, color: '#6b7280' }}>@{doc.username}</div>
+                        <div style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>@{doc.username}</div>
                       </div>
                     </div>
                   </td>
                   <td><span className="badge badge-blue">{doc.specialty || 'N/A'}</span></td>
                   <td>
                     <div style={{ fontSize: 13 }}>{doc.email || '-'}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>{doc.phone || '-'}</div>
+                    <div style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>{doc.phone || '-'}</div>
                   </td>
                   <td style={{ textAlign: 'center' }}>
                     <button onClick={() => toggleAvailability(doc)}
@@ -204,9 +204,9 @@ export default function DoctorsPage() {
                   </td>
                   <td style={{ textAlign: 'right' }}>
                     <div>{doc.consultationCount || 0}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>{doc.completedCount || 0} terminees</div>
+                    <div style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>{doc.completedCount || 0} terminees</div>
                   </td>
-                  <td style={{ textAlign: 'right', fontWeight: 600, color: '#059669' }}>{formatCurrency(doc.totalEarnings || 0)}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--mk-brand)' }}>{formatCurrency(doc.totalEarnings || 0)}</td>
                   <td style={{ textAlign: 'center' }}>
                     <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
                       <button className="btn btn-secondary btn-sm" onClick={() => openEdit(doc)} title="Modifier"><Edit2 size={14} /></button>
@@ -248,7 +248,7 @@ export default function DoctorsPage() {
                       <input className="form-input" type={showPassword ? 'text' : 'password'} value={form.password}
                         onChange={e => updateField('password', e.target.value)} required={!editing} style={{ paddingRight: 36 }} />
                       <button type="button" onClick={() => setShowPassword(!showPassword)}
-                        style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280' }}>
+                        style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mk-text-secondary)' }}>
                         {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                       </button>
                     </div>
@@ -323,7 +323,7 @@ export default function DoctorsPage() {
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setConfirmDelete(null); }}>
           <div className="modal-content" style={{ maxWidth: 400 }}>
             <div className="modal-header">
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#dc2626' }}>Confirmer la suppression</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--mk-danger)' }}>Confirmer la suppression</h2>
               <button onClick={() => setConfirmDelete(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
             </div>
             <div className="modal-body">
@@ -331,7 +331,7 @@ export default function DoctorsPage() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setConfirmDelete(null)}>Annuler</button>
-              <button className="btn btn-danger" style={{ background: '#dc2626', color: '#fff' }} onClick={() => handleDelete(confirmDelete)}>
+              <button className="btn btn-danger" style={{ background: 'var(--mk-danger)', color: '#fff' }} onClick={() => handleDelete(confirmDelete)}>
                 <Trash2 size={16} /> Supprimer
               </button>
             </div>
@@ -348,7 +348,7 @@ export default function DoctorsPage() {
               <button onClick={() => { setResetPw(null); setNewPw(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
             </div>
             <div className="modal-body">
-              <p style={{ color: '#374151', marginBottom: 16 }}>Nouveau mot de passe pour <strong>{resetPw.name}</strong> (@{resetPw.username})</p>
+              <p style={{ color: 'var(--mk-text)', marginBottom: 16 }}>Nouveau mot de passe pour <strong>{resetPw.name}</strong> (@{resetPw.username})</p>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <input className="form-input" type="text" value={newPw} onChange={e => setNewPw(e.target.value)}
                   placeholder="Nouveau mot de passe" autoFocus onKeyDown={e => { if (e.key === 'Enter') handleResetPw(); }} />

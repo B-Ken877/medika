@@ -26,9 +26,9 @@ describe("statusLabel", () => {
 });
 
 describe("statusBadgeClass", () => {
-  it("maps statuses to badge colors", () => {
+  it("maps statuses to badge colors (Clinical Calm status vocabulary)", () => {
     expect(statusBadgeClass("RECHERCHE_MEDECIN")).toBe("badge-yellow");
-    expect(statusBadgeClass("EN_COURS")).toBe("badge-blue");
+    expect(statusBadgeClass("EN_COURS")).toBe("badge-green");
     expect(statusBadgeClass("TERMINE")).toBe("badge-green");
     expect(statusBadgeClass("REFUSE")).toBe("badge-red");
     expect(statusBadgeClass("OTHER")).toBe("badge-gray");

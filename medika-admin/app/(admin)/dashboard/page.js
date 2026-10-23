@@ -2,7 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { apiFetch, formatCurrency } from '../../../lib/api';
-import { Stethoscope, Users, MessageSquare, DollarSign, TrendingUp, Clock, CheckCircle, AlertCircle, Wallet } from 'lucide-react';
+import {
+  Stethoscope, Users, MessageSquare, DollarSign, TrendingUp, Clock,
+  CheckCircle, AlertCircle, Wallet,
+} from 'lucide-react';
 
 export default function DashboardPage() {
   const [stats, setStats] = useState(null);
@@ -14,22 +17,43 @@ export default function DashboardPage() {
     return () => clearInterval(iv);
   }, []);
 
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}><div className="spinner" /></div>;
-  if (!stats) return <div className="empty-state"><p>Impossible de charger les statistiques</p></div>;
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
+        <div className="spinner" />
+      </div>
+    );
+  }
+  if (!stats) {
+    return (
+      <div className="empty-state">
+        <p>Impossible de charger les statistiques.</p>
+      </div>
+    );
+  }
 
   const statCards = [
-    { label: 'Medecins', value: stats.totalDoctors, icon: Stethoscope, color: '#059669', bg: '#d1fae5', href: '/doctors' },
-    { label: 'Patients', value: stats.totalPatients, icon: Users, color: '#2563eb', bg: '#dbeafe', href: '/patients' },
-    { label: 'Consultations actives', value: stats.activeConsultations, icon: Clock, color: '#d97706', bg: '#fef3c7', href: '/consultations' },
-    { label: 'Consultations terminees', value: stats.completedConsultations, icon: CheckCircle, color: '#7c3aed', bg: '#ede9fe', href: '/consultations' },
-    { label: 'En attente', value: stats.pendingConsultations, icon: AlertCircle, color: '#dc2626', bg: '#fee2e2', href: '/consultations' },
-    { label: 'Messages', value: stats.totalMessages, icon: MessageSquare, color: '#0891b2', bg: '#cffafe', href: '/consultations' },
-    { label: 'Revenu total', value: formatCurrency(stats.totalRevenue), icon: DollarSign, color: '#059669', bg: '#d1fae5', href: '/finance' },
-    { label: 'Revenu du mois', value: formatCurrency(stats.monthlyRevenue), icon: TrendingUp, color: '#b45309', bg: '#fef3c7', href: '/finance' },
+    { label: 'Médecins', value: stats.totalDoctors, icon: Stethoscope, dot: 'gray', href: '/doctors' },
+    { label: 'Patients', value: stats.totalPatients, icon: Users, dot: 'gray', href: '/patients' },
+    { label: 'Consultations actives', value: stats.activeConsultations, icon: Clock, dot: 'green', href: '/consultations' },
+    { label: 'Consultations terminées', value: stats.completedConsultations, icon: CheckCircle, dot: 'blue', href: '/consultations' },
+    { label: 'En attente', value: stats.pendingConsultations, icon: AlertCircle, dot: 'yellow', href: '/consultations' },
+    { label: 'Messages', value: stats.totalMessages, icon: MessageSquare, dot: 'gray', href: '/consultations' },
+    { label: 'Revenu total', value: formatCurrency(stats.totalRevenue), icon: DollarSign, dot: 'green', href: '/finance' },
+    { label: 'Revenu du mois', value: formatCurrency(stats.monthlyRevenue), icon: TrendingUp, dot: 'green', href: '/finance' },
   ];
 
   return (
     <div>
+      {/* Page heading */}
+      <div className="page-head">
+        <div>
+          <h1 className="page-title">Vue d&apos;ensemble</h1>
+          <p className="page-desc">Suivez l&apos;activité et les indicateurs clés de Medika.</p>
+        </div>
+      </div>
+
+      {/* KPI panels (real data) */}
       <div className="grid-stats">
         {statCards.map((card, i) => {
           const Icon = card.icon;
@@ -38,12 +62,12 @@ export default function DashboardPage() {
               <div className="stat-card" style={{ cursor: 'pointer' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div>
-                    <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>{card.label}</div>
-                    <div style={{ fontSize: 24, fontWeight: 700, color: '#111827' }}>{card.value}</div>
+                    <div className="stat-label">
+                      <span className={`stat-dot ${card.dot}`} aria-hidden /> {card.label}
+                    </div>
+                    <div className="stat-value">{card.value}</div>
                   </div>
-                  <div style={{ width: 40, height: 40, borderRadius: 10, background: card.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Icon size={20} color={card.color} />
-                  </div>
+                  <Icon size={20} color="var(--mk-text-muted)" aria-hidden />
                 </div>
               </div>
             </Link>
@@ -53,33 +77,37 @@ export default function DashboardPage() {
 
       {/* ── Earnings Split Card (Doctor vs Medika) ── */}
       <div className="card" style={{ marginTop: 24 }}>
-        <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', fontWeight: 600, fontSize: 15 }}>Repartition des revenus</div>
+        <div className="card-header">Répartition des revenus</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
-          <div style={{ padding: '24px', borderRight: '1px solid #e5e7eb', textAlign: 'center' }}>
+          <div style={{ padding: '24px', borderRight: '1px solid var(--mk-divider)', textAlign: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8 }}>
-              <Wallet size={20} color="#059669" />
-              <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>Gains Medecins (ce mois)</span>
+              <Wallet size={18} color="var(--mk-success)" aria-hidden />
+              <span className="stat-label" style={{ justifyContent: 'center' }}>Gains médecins (ce mois)</span>
             </div>
-            <div style={{ fontSize: 28, fontWeight: 700, color: '#059669' }}>{formatCurrency(stats.monthlyDoctorEarnings || 0)}</div>
+            <div className="stat-value num" style={{ color: 'var(--mk-success)', fontSize: 28 }}>
+              {formatCurrency(stats.monthlyDoctorEarnings || 0)}
+            </div>
           </div>
           <div style={{ padding: '24px', textAlign: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8 }}>
-              <DollarSign size={20} color="#b45309" />
-              <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>Gains Medika (ce mois)</span>
+              <DollarSign size={18} color="var(--mk-brand)" aria-hidden />
+              <span className="stat-label" style={{ justifyContent: 'center' }}>Gains Medika (ce mois)</span>
             </div>
-            <div style={{ fontSize: 28, fontWeight: 700, color: '#b45309' }}>{formatCurrency(stats.monthlyMedikaEarnings || 0)}</div>
+            <div className="stat-value num" style={{ color: 'var(--mk-brand)', fontSize: 28 }}>
+              {formatCurrency(stats.monthlyMedikaEarnings || 0)}
+            </div>
           </div>
         </div>
       </div>
 
       {stats.doctorEarnings && stats.doctorEarnings.length > 0 && (
         <div className="card" style={{ marginTop: 24 }}>
-          <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', fontWeight: 600, fontSize: 15 }}>Performance des medecins (ce mois)</div>
+          <div className="card-header">Performance des médecins (ce mois)</div>
           <div style={{ overflowX: 'auto' }}>
             <table className="data-table">
               <thead><tr>
-                <th>Medecin</th><th>Specialite</th><th style={{ textAlign: 'right' }}>Consult. (mois)</th>
-                <th style={{ textAlign: 'right' }}>Gains medecin (mois)</th><th style={{ textAlign: 'right' }}>Total consult.</th>
+                <th>Médecin</th><th>Spécialité</th><th style={{ textAlign: 'right' }}>Consult. (mois)</th>
+                <th style={{ textAlign: 'right' }}>Gains médecin (mois)</th><th style={{ textAlign: 'right' }}>Total consult.</th>
                 <th style={{ textAlign: 'right' }}>Gains totaux</th><th style={{ textAlign: 'center' }}>Note</th>
               </tr></thead>
               <tbody>
@@ -87,11 +115,11 @@ export default function DashboardPage() {
                   <tr key={doc.id}>
                     <td style={{ fontWeight: 600 }}>{doc.name}</td>
                     <td><span className="badge badge-blue">{doc.specialty}</span></td>
-                    <td style={{ textAlign: 'right' }}>{doc.monthlyConsultations}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 600, color: '#059669' }}>{formatCurrency(doc.monthlyEarnings)}</td>
-                    <td style={{ textAlign: 'right' }}>{doc.totalConsultations}</td>
-                    <td style={{ textAlign: 'right' }}>{formatCurrency(doc.totalEarnings)}</td>
-                    <td style={{ textAlign: 'center' }}><span style={{ color: '#d97706', fontWeight: 600 }}>{doc.rating}/5</span></td>
+                    <td className="num" style={{ textAlign: 'right' }}>{doc.monthlyConsultations}</td>
+                    <td className="num" style={{ textAlign: 'right', fontWeight: 600, color: 'var(--mk-success)' }}>{formatCurrency(doc.monthlyEarnings)}</td>
+                    <td className="num" style={{ textAlign: 'right' }}>{doc.totalConsultations}</td>
+                    <td className="num" style={{ textAlign: 'right' }}>{formatCurrency(doc.totalEarnings)}</td>
+                    <td style={{ textAlign: 'center' }}><span className="num" style={{ color: 'var(--mk-warning)', fontWeight: 600 }}>{doc.rating}/5</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -109,9 +137,9 @@ export default function DashboardPage() {
               const height = (m.revenue / maxRev) * 180;
               return (
                 <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#059669', marginBottom: 4 }}>{m.revenue > 0 ? formatCurrency(m.revenue) : ''}</div>
-                  <div style={{ width: '100%', maxWidth: 60, height: Math.max(height, 4), background: m.revenue > 0 ? 'linear-gradient(180deg, #059669, #047857)' : '#e5e7eb', borderRadius: '6px 6px 0 0' }} />
-                  <div style={{ fontSize: 11, color: '#6b7280', marginTop: 8, fontWeight: 500 }}>{m.month.substring(0, 3)}</div>
+                  <div className="num" style={{ fontSize: 11, fontWeight: 600, color: 'var(--mk-success)', marginBottom: 4 }}>{m.revenue > 0 ? formatCurrency(m.revenue) : ''}</div>
+                  <div style={{ width: '100%', maxWidth: 60, height: Math.max(height, 4), background: m.revenue > 0 ? 'var(--mk-brand)' : 'var(--mk-divider)', borderRadius: '6px 6px 0 0' }} />
+                  <div style={{ fontSize: 11, color: 'var(--mk-text-muted)', marginTop: 8, fontWeight: 500 }}>{m.month.substring(0, 4)}</div>
                 </div>
               );
             })}

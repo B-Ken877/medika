@@ -1,15 +1,16 @@
 "use client";
 
 /**
- * Doctor dashboard — web port of DoctorDashboardScreen.kt.
- * Availability toggle (PUT /api/doctor/availability), queue tabs
- * (pending / active / done), accept / reject actions, and live updates
- * over the WebSocket (consultation:new / consultation:updated).
+ * Doctor dashboard — Clinical Calm redesign.
+ * Page heading with availability control, three queue metrics, and a single
+ * consultation-queue panel with tabs. Availability toggle (PUT
+ * /api/doctor/availability), accept / reject actions (reject asks for
+ * confirmation), and live updates over the WebSocket are unchanged.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BellRing, CalendarCheck, Check, ChevronRight, X } from "lucide-react";
+import { BellRing, CalendarCheck, Check, ChevronRight, RefreshCw, X } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
 import { useSocket } from "@/lib/ws/socket-context";
 import {
@@ -37,6 +38,7 @@ export default function DoctorDashboard() {
   const [available, setAvailable] = useState<boolean>(user?.is_available === 1);
   const [availabilityBusy, setAvailabilityBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [confirmReject, setConfirmReject] = useState<Consultation | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const showToast = useCallback((msg: string) => {
@@ -135,98 +137,132 @@ export default function DoctorDashboard() {
       load();
     } finally {
       setBusyId(null);
+      setConfirmReject(null);
     }
   };
 
+  const onConfirmReject = (e: FormEvent) => {
+    e.preventDefault();
+    if (confirmReject) onReject(confirmReject.id);
+  };
+
   const list = tab === "queue" ? buckets.queue : tab === "active" ? buckets.active : buckets.done;
-  const doctorName = user?.name?.replace(/^Dr\.?\s*/i, "") ?? "";
 
   return (
     <div className="stack">
-      <div className="flex-between">
+      {/* Page heading + availability control */}
+      <div className="page-head">
         <div>
-          <h1 className="page-title">Dr. {doctorName}</h1>
-          <p className="muted small">
-            {available ? "Vous recevez des consultations" : "Aucune consultation ne vous sera assignée"}
-          </p>
+          <h1 className="page-title">Espace médecin</h1>
+          <p className="page-desc">Gérez vos demandes et suivez vos consultations.</p>
         </div>
-        <button
-          className={`availability-pill ${available ? "on" : ""}`}
-          onClick={toggleAvailability}
-          disabled={availabilityBusy}
-          aria-pressed={available}
-          title="Changer votre disponibilité"
-        >
-          <span className="pulse" aria-hidden />
-          {available ? "En ligne" : "Hors ligne"}
-        </button>
+        <div className="page-head-actions">
+          <div className={`avail ${available ? "on" : "off"}`} aria-label="Disponibilité">
+            <button
+              type="button"
+              role="switch"
+              className="switch"
+              aria-checked={available}
+              onClick={toggleAvailability}
+              disabled={availabilityBusy}
+              aria-label={available ? "Vous êtes disponible" : "Vous êtes indisponible"}
+            />
+            <span className="avail-label">
+              {availabilityBusy ? "Mise à jour…" : available ? "Disponible" : "Indisponible"}
+            </span>
+          </div>
+        </div>
       </div>
 
-      <div className="tabs" role="tablist" aria-label="Filtres de consultations">
-        <button
-          role="tab"
-          aria-selected={tab === "queue"}
-          className={tab === "queue" ? "active" : ""}
-          onClick={() => setTab("queue")}
-        >
-          File d&apos;attente <span className="count">{buckets.queue.length}</span>
-        </button>
-        <button
-          role="tab"
-          aria-selected={tab === "active"}
-          className={tab === "active" ? "active" : ""}
-          onClick={() => setTab("active")}
-        >
-          En cours <span className="count">{buckets.active.length}</span>
-        </button>
-        <button
-          role="tab"
-          aria-selected={tab === "done"}
-          className={tab === "done" ? "active" : ""}
-          onClick={() => setTab("done")}
-        >
-          Terminées <span className="count">{buckets.done.length}</span>
-        </button>
+      {/* Queue summary (real counts) */}
+      <div className="stat-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }} role="group" aria-label="Résumé de la file">
+        <div className="stat-card">
+          <div className="stat-label">
+            <span className="stat-dot yellow" aria-hidden /> En attente
+          </div>
+          <div className="stat-value" style={{ fontSize: 26 }}>{buckets.queue.length}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">
+            <span className="stat-dot green" aria-hidden /> En cours
+          </div>
+          <div className="stat-value" style={{ fontSize: 26 }}>{buckets.active.length}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">
+            <span className="stat-dot blue" aria-hidden /> Terminées
+          </div>
+          <div className="stat-value" style={{ fontSize: 26 }}>{buckets.done.length}</div>
+        </div>
       </div>
 
-      {consultations === null && !error && <SkeletonRows count={3} />}
-      <ErrorAlert error={error} onRetry={load} />
-
-      {consultations !== null && list.length === 0 && !error && (
-        <div className="card">
-          {tab === "queue" && (
-            <EmptyState
-              icon={<BellRing size={26} />}
-              title={available ? "Aucune demande en attente" : "Vous êtes hors ligne"}
-              description={
-                available
-                  ? "Les nouvelles demandes apparaîtront ici automatiquement."
-                  : "Mettez-vous en ligne pour recevoir des demandes de consultation."
-              }
-            />
-          )}
-          {tab === "active" && (
-            <EmptyState
-              icon={<CalendarCheck size={26} />}
-              title="Aucune consultation active"
-              description="Vos consultations en cours apparaîtront ici."
-            />
-          )}
-          {tab === "done" && (
-            <EmptyState
-              icon={<CalendarCheck size={26} />}
-              title="Aucune consultation terminée"
-              description="Vos consultations terminées apparaîtront ici."
-            />
-          )}
+      {/* Consultation queue panel */}
+      <section className="panel" aria-labelledby="queue-title">
+        <div className="panel-head">
+          <h2 id="queue-title" className="panel-title">
+            Demandes de consultation
+          </h2>
+          <div className="panel-tools">
+            <button className="btn btn-secondary btn-sm" onClick={load} disabled={consultations === null}>
+              <RefreshCw size={14} aria-hidden /> Actualiser
+            </button>
+          </div>
         </div>
-      )}
 
-      <div className="list">
+        <div className="tabs" role="tablist" aria-label="Filtres de consultations">
+          <button
+            role="tab"
+            aria-selected={tab === "queue"}
+            className={tab === "queue" ? "active" : ""}
+            onClick={() => setTab("queue")}
+          >
+            En attente <span className="count">{buckets.queue.length}</span>
+          </button>
+          <button
+            role="tab"
+            aria-selected={tab === "active"}
+            className={tab === "active" ? "active" : ""}
+            onClick={() => setTab("active")}
+          >
+            En cours <span className="count">{buckets.active.length}</span>
+          </button>
+          <button
+            role="tab"
+            aria-selected={tab === "done"}
+            className={tab === "done" ? "active" : ""}
+            onClick={() => setTab("done")}
+          >
+            Terminées <span className="count">{buckets.done.length}</span>
+          </button>
+        </div>
+
+        {consultations === null && !error && (
+          <div style={{ padding: 24 }}>
+            <SkeletonRows count={3} />
+          </div>
+        )}
+        <ErrorAlert error={error} onRetry={load} />
+
+        {consultations !== null && list.length === 0 && !error && (
+          <EmptyState
+            icon={tab === "queue" ? <BellRing size={24} /> : <CalendarCheck size={24} />}
+            title={tab === "queue" ? (available ? "Aucune demande pour le moment" : "Vous êtes indisponible") : tab === "active" ? "Aucune consultation active" : "Aucune consultation terminée"}
+            description={
+              tab === "queue"
+                ? available
+                  ? "Les nouvelles demandes apparaîtront ici."
+                  : "Mettez-vous en disponible pour recevoir des demandes de consultation."
+                : tab === "active"
+                  ? "Vos consultations en cours apparaîtront ici."
+                  : "Vos consultations terminées apparaîtront ici."
+            }
+          />
+        )}
+
         {list.map((c) => {
           const isQueue = tab === "queue";
           return (
-            <div key={c.id} className="row" style={{ flexWrap: "wrap" }}>
+            <div key={c.id} className="panel-row" style={{ minHeight: 76 }}>
               <Avatar name={c.patient_name} size="md" alt={`Avatar de ${c.patient_name}`} />
               <div className="row-body">
                 <div className="row-title">
@@ -240,6 +276,9 @@ export default function DoctorDashboard() {
                   {relativeTime(c.created_at)}
                   {c.urgency_level ? ` · Urgence : ${c.urgency_level}` : ""}
                 </div>
+                {tab === "done" && c.status === "TERMINE" && (
+                  <div className="row-meta">Clôturée le {formatDateTime(c.updated_at)}</div>
+                )}
               </div>
               <div className="row-actions">
                 {isQueue ? (
@@ -249,14 +288,14 @@ export default function DoctorDashboard() {
                       onClick={() => onAccept(c.id)}
                       disabled={busyId !== null}
                     >
-                      <Check size={14} aria-hidden /> Accepter
+                      <Check size={15} aria-hidden /> Accepter
                     </button>
                     <button
                       className="btn btn-outline-danger btn-sm"
-                      onClick={() => onReject(c.id)}
+                      onClick={() => setConfirmReject(c)}
                       disabled={busyId !== null}
                     >
-                      <X size={14} aria-hidden /> Refuser
+                      <X size={15} aria-hidden /> Refuser
                     </button>
                   </>
                 ) : (
@@ -265,19 +304,56 @@ export default function DoctorDashboard() {
                   </Link>
                 )}
               </div>
-              {tab === "done" && c.status === "TERMINE" && (
-                <div className="row-meta nowrap" style={{ flexBasis: "100%" }}>
-                  Clôturée le {formatDateTime(c.updated_at)}
-                </div>
-              )}
             </div>
           );
         })}
-      </div>
+      </section>
 
       {toast && (
         <div className="toast-stack" role="status" aria-live="polite">
           <div className="toast">{toast}</div>
+        </div>
+      )}
+
+      {/* Reject confirmation dialog */}
+      {confirmReject && (
+        <div className="modal-backdrop" role="presentation" onClick={() => busyId === null && setConfirmReject(null)}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reject-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="reject-title" className="modal-title">
+              Refuser cette demande ?
+            </h2>
+            <p className="modal-body">
+              La demande de {confirmReject.patient_name} ({confirmReject.specialty_needed}) sera refusée et ne vous
+              sera plus proposée. Cette action est définitive.
+            </p>
+            <form onSubmit={onConfirmReject}>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setConfirmReject(null)}
+                  disabled={busyId !== null}
+                >
+                  Annuler
+                </button>
+                <button type="submit" className="btn btn-danger" disabled={busyId !== null}>
+                  {busyId !== null ? (
+                    <>
+                      <span className="spin" aria-hidden /> Refus en cours…
+                    </>
+                  ) : (
+                    "Refuser la demande"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

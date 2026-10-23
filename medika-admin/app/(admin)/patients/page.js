@@ -58,7 +58,7 @@ export default function PatientsPage() {
         </div>
       </div>
 
-      <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 12 }}>{filtered.length} patient(s) trouve(s)</div>
+      <div style={{ fontSize: 13, color: 'var(--mk-text-secondary)', marginBottom: 12 }}>{filtered.length} patient(s) trouve(s)</div>
 
       <div className="card" style={{ overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
@@ -82,15 +82,15 @@ export default function PatientsPage() {
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div style={{
-                        width: 36, height: 36, borderRadius: '50%', background: '#dbeafe',
+                        width: 36, height: 36, borderRadius: '50%', background: 'var(--mk-info-bg)',
                         backgroundImage: p.avatar_url ? 'url(' + p.avatar_url + ')' : 'none',
                         backgroundSize: 'cover', backgroundPosition: 'center',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: p.avatar_url ? 'transparent' : '#2563eb', fontWeight: 700, fontSize: 14
+                        color: p.avatar_url ? 'transparent' : 'var(--mk-info)', fontWeight: 700, fontSize: 14
                       }}>{p.name?.charAt(0)}</div>
                       <div>
                         <div style={{ fontWeight: 600 }}>{p.name}</div>
-                        <div style={{ fontSize: 12, color: '#6b7280' }}>@{p.username}</div>
+                        <div style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>@{p.username}</div>
                       </div>
                     </div>
                   </td>
@@ -98,7 +98,7 @@ export default function PatientsPage() {
                   <td>{p.age || '-'}</td>
                   <td>
                     <div style={{ fontSize: 13 }}>{p.email || '-'}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>{p.phone || '-'}</div>
+                    <div style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>{p.phone || '-'}</div>
                   </td>
                   <td style={{ textAlign: 'right', fontWeight: 600 }}>{p.consultationCount || 0}</td>
                   <td style={{ fontSize: 13 }}>{formatDate(p.created_at)}</td>
@@ -118,7 +118,7 @@ export default function PatientsPage() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setConfirmDelete(null)}>
           <div className="modal-content" style={{ maxWidth: 400 }}>
             <div className="modal-header">
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#dc2626' }}>Confirmer la suppression</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--mk-danger)' }}>Confirmer la suppression</h2>
               <button onClick={() => setConfirmDelete(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
             </div>
             <div className="modal-body">
@@ -126,7 +126,7 @@ export default function PatientsPage() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setConfirmDelete(null)}>Annuler</button>
-              <button className="btn btn-danger" style={{ background: '#dc2626', color: '#fff' }} onClick={() => handleDelete(confirmDelete)}>
+              <button className="btn btn-danger" style={{ background: 'var(--mk-danger)', color: '#fff' }} onClick={() => handleDelete(confirmDelete)}>
                 <Trash2 size={16} /> Supprimer
               </button>
             </div>

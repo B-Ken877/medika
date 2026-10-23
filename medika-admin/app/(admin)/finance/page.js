@@ -23,25 +23,12 @@ export default function FinancePage() {
         <div className="stat-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>Revenu du mois</div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: '#059669' }}>{formatCurrency(data.currentMonth.revenue)}</div>
-              <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>{data.currentMonth.consultations} consultation(s) - {data.currentMonth.label}</div>
+              <div style={{ fontSize: 12, color: 'var(--mk-text-secondary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>Revenu du mois</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--mk-brand)' }}>{formatCurrency(data.currentMonth.revenue)}</div>
+              <div style={{ fontSize: 13, color: 'var(--mk-text-secondary)', marginTop: 4 }}>{data.currentMonth.consultations} consultation(s) - {data.currentMonth.label}</div>
             </div>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Calendar size={22} color="#059669" />
-            </div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>Gains Medecins (mois)</div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: '#059669' }}>{formatCurrency(data.currentMonth.doctorEarnings || 0)}</div>
-              <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>Versement aux medecins</div>
-            </div>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Wallet size={22} color="#059669" />
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--mk-brand-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Calendar size={22} color="var(--mk-brand)" />
             </div>
           </div>
         </div>
@@ -49,12 +36,12 @@ export default function FinancePage() {
         <div className="stat-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>Gains Medika (mois)</div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: '#b45309' }}>{formatCurrency(data.currentMonth.medikaEarnings || 0)}</div>
-              <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>Frais de plateforme</div>
+              <div style={{ fontSize: 12, color: 'var(--mk-text-secondary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>Gains Medecins (mois)</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--mk-brand)' }}>{formatCurrency(data.currentMonth.doctorEarnings || 0)}</div>
+              <div style={{ fontSize: 13, color: 'var(--mk-text-secondary)', marginTop: 4 }}>Versement aux medecins</div>
             </div>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <DollarSign size={22} color="#b45309" />
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--mk-brand-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Wallet size={22} color="var(--mk-brand)" />
             </div>
           </div>
         </div>
@@ -62,12 +49,25 @@ export default function FinancePage() {
         <div className="stat-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>Revenu total</div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: '#111827' }}>{formatCurrency(data.total.revenue)}</div>
-              <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>{data.total.consultations} consultation(s) terminee(s)</div>
+              <div style={{ fontSize: 12, color: 'var(--mk-text-secondary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>Gains Medika (mois)</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--mk-warning)' }}>{formatCurrency(data.currentMonth.medikaEarnings || 0)}</div>
+              <div style={{ fontSize: 13, color: 'var(--mk-text-secondary)', marginTop: 4 }}>Frais de plateforme</div>
             </div>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <TrendingUp size={22} color="#2563eb" />
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--mk-warning-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <DollarSign size={22} color="var(--mk-warning)" />
+            </div>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ fontSize: 12, color: 'var(--mk-text-secondary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>Revenu total</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--mk-text)' }}>{formatCurrency(data.total.revenue)}</div>
+              <div style={{ fontSize: 13, color: 'var(--mk-text-secondary)', marginTop: 4 }}>{data.total.consultations} consultation(s) terminee(s)</div>
+            </div>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--mk-info-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <TrendingUp size={22} color="var(--mk-info)" />
             </div>
           </div>
         </div>
@@ -75,7 +75,7 @@ export default function FinancePage() {
 
       {/* ── Revenue History Chart ── */}
       <div className="card" style={{ marginBottom: 24 }}>
-        <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', fontWeight: 600, fontSize: 15 }}>Historique des revenus (12 mois)</div>
+        <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--mk-border)', fontWeight: 600, fontSize: 15 }}>Historique des revenus (12 mois)</div>
         <div style={{ padding: 24 }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 220 }}>
             {data.history.map((h, i) => {
@@ -83,15 +83,15 @@ export default function FinancePage() {
               const isCurrentMonth = h.label === data.currentMonth.label;
               return (
                 <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, color: h.revenue > 0 ? '#059669' : '#9ca3af', marginBottom: 4, textAlign: 'center' }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: h.revenue > 0 ? 'var(--mk-brand)' : 'var(--mk-text-muted)', marginBottom: 4, textAlign: 'center' }}>
                     {h.revenue > 0 ? formatCurrency(h.revenue) : ''}
                   </div>
                   <div style={{
                     width: '100%', maxWidth: 50, height: Math.max(height, 4),
-                    background: isCurrentMonth ? 'linear-gradient(180deg, #059669, #047857)' : h.revenue > 0 ? 'linear-gradient(180deg, #10b981, #059669)' : '#f3f4f6',
+                    background: isCurrentMonth ? 'var(--mk-brand)' : h.revenue > 0 ? '#6fa79a' : 'var(--mk-divider)',
                     borderRadius: '6px 6px 0 0', opacity: isCurrentMonth ? 1 : 0.7
                   }} />
-                  <div style={{ fontSize: 10, color: isCurrentMonth ? '#059669' : '#6b7280', marginTop: 6, fontWeight: isCurrentMonth ? 700 : 400, textAlign: 'center' }}>
+                  <div style={{ fontSize: 10, color: isCurrentMonth ? 'var(--mk-brand)' : 'var(--mk-text-secondary)', marginTop: 6, fontWeight: isCurrentMonth ? 700 : 400, textAlign: 'center' }}>
                     {h.month}<br />{String(h.year).slice(2)}
                   </div>
                 </div>
@@ -103,7 +103,7 @@ export default function FinancePage() {
 
       {/* ── Doctor Earnings Table ── */}
       <div className="card" style={{ marginBottom: 24 }}>
-        <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', fontWeight: 600, fontSize: 15 }}>Gains par medecin</div>
+        <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--mk-border)', fontWeight: 600, fontSize: 15 }}>Gains par medecin</div>
         <div style={{ overflowX: 'auto' }}>
           <table className="data-table">
             <thead><tr>
@@ -117,11 +117,11 @@ export default function FinancePage() {
               ) : data.doctorEarnings.map(doc => (
                 <tr key={doc.id}>
                   <td style={{ fontWeight: 600 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Users size={16} color="#059669" />{doc.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Users size={16} color="var(--mk-brand)" />{doc.name}</div>
                   </td>
                   <td><span className="badge badge-blue">{doc.specialty}</span></td>
                   <td style={{ textAlign: 'right' }}>{doc.monthlyConsultations}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669' }}>{formatCurrency(doc.monthlyEarnings)}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--mk-brand)' }}>{formatCurrency(doc.monthlyEarnings)}</td>
                   <td style={{ textAlign: 'right' }}>{doc.totalConsultations}</td>
                   <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatCurrency(doc.totalEarnings)}</td>
                 </tr>
@@ -133,7 +133,7 @@ export default function FinancePage() {
 
       {/* ── Recent Transactions with Fee Split ── */}
       <div className="card">
-        <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', fontWeight: 600, fontSize: 15 }}>Transactions recentes (ce mois)</div>
+        <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--mk-border)', fontWeight: 600, fontSize: 15 }}>Transactions recentes (ce mois)</div>
         <div style={{ overflowX: 'auto' }}>
           <table className="data-table">
             <thead><tr>
@@ -152,8 +152,8 @@ export default function FinancePage() {
                   <td>{t.doctorName}</td>
                   <td><span className="badge badge-blue">{t.specialty}</span></td>
                   <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatCurrency(t.amount)}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600, color: '#059669' }}>{formatCurrency(t.doctorEarning)}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600, color: '#b45309' }}>{formatCurrency(t.medikaEarning)}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--mk-brand)' }}>{formatCurrency(t.doctorEarning)}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--mk-warning)' }}>{formatCurrency(t.medikaEarning)}</td>
                 </tr>
               ))}
             </tbody>

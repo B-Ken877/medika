@@ -1,13 +1,27 @@
 "use client";
 
-/** Login screen — faithful web port of AuthScreen.kt. */
+/**
+ * Login screen — Clinical Calm redesign.
+ * Split layout on desktop (brand panel + form panel), single column on mobile.
+ * Auth behavior unchanged: username + password via useAuth().login().
+ */
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Eye, EyeOff, Lock, User } from "lucide-react";
+import { Eye, EyeOff, Lock } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
 import { ApiError } from "@/lib/api/client";
 import { ErrorAlert } from "@/components/ui/primitives";
+
+function BrandMark({ size = 32 }: { size?: number }) {
+  return (
+    <span className="brand-mark" aria-hidden style={{ width: size, height: size }}>
+      <svg width={Math.round(size * 0.56)} height={Math.round(size * 0.56)} viewBox="0 0 24 24" fill="none" aria-hidden>
+        <path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6V3z" fill="currentColor" />
+      </svg>
+    </span>
+  );
+}
 
 function LoginForm() {
   const { login, status } = useAuth();
@@ -44,30 +58,35 @@ function LoginForm() {
   };
 
   return (
-    <div className="auth-wrap">
-      <div className="auth-card">
-        <div className="auth-brand">
-          <span className="brand-mark" aria-hidden>
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
-              <path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6V3z" fill="currentColor" />
-            </svg>
-          </span>
-          <h1>Medika</h1>
-          <div className="auth-tagline">Soins. Partout. Pour tous.</div>
+    <div className="auth-shell">
+      {/* Brand panel — desktop only */}
+      <aside className="auth-brand-pane" aria-hidden>
+        <div className="auth-brand-logo">
+          <BrandMark />
+          <span className="brand-word">Medika</span>
+        </div>
+        <h2 className="auth-brand-title">Votre santé, plus proche de vous.</h2>
+        <p className="auth-brand-sub">
+          Accédez à vos consultations et suivez votre parcours de soins en toute simplicité.
+        </p>
+      </aside>
+
+      {/* Form panel */}
+      <div className="auth-form-pane">
+        <div className="auth-mobile-brand">
+          <BrandMark />
+          <span className="brand-word">Medika</span>
         </div>
 
-        <h2 className="text-center" style={{ fontSize: "1.2rem" }}>
-          Connexion
-        </h2>
-        <p className="auth-sub">Accédez à votre espace de santé</p>
+        <main className="auth-form">
+          <h1 className="auth-title">Bon retour</h1>
+          <p className="auth-sub">Connectez-vous à votre espace Medika.</p>
 
-        <ErrorAlert error={error} />
+          <ErrorAlert error={error} />
 
-        <form onSubmit={onSubmit} noValidate>
-          <div className="field">
-            <label htmlFor="username">Nom d&apos;utilisateur</label>
-            <div className="input-with-action">
-              <User size={17} className="sr-only" aria-hidden />
+          <form onSubmit={onSubmit} noValidate>
+            <div className="field">
+              <label htmlFor="username">Nom d&apos;utilisateur</label>
               <input
                 id="username"
                 className="input"
@@ -80,53 +99,53 @@ function LoginForm() {
                 placeholder="Nom d'utilisateur ou email"
                 required
                 maxLength={100}
+                autoFocus
               />
             </div>
-          </div>
 
-          <div className="field">
-            <label htmlFor="password">Mot de passe</label>
-            <div className="input-with-action">
-              <input
-                id="password"
-                className="input"
-                type={showPassword ? "text" : "password"}
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Mot de passe"
-                required
-                maxLength={200}
-              />
-              <button
-                type="button"
-                className="toggle-btn"
-                onClick={() => setShowPassword((v) => !v)}
-                aria-label={showPassword ? "Cacher le mot de passe" : "Montrer le mot de passe"}
-              >
-                {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-              </button>
+            <div className="field">
+              <label htmlFor="password">Mot de passe</label>
+              <div className="input-with-action">
+                <input
+                  id="password"
+                  className="input"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Mot de passe"
+                  required
+                  maxLength={200}
+                />
+                <button
+                  type="button"
+                  className="toggle-btn"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? "Cacher le mot de passe" : "Montrer le mot de passe"}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
-          </div>
 
-          <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={submitting}>
-            {submitting ? (
-              <>
-                <span className="spin" aria-hidden /> Connexion en cours…
-              </>
-            ) : (
-              <>
-                <Lock size={16} aria-hidden /> Se connecter
-              </>
-            )}
-          </button>
-        </form>
+            <button className="btn btn-primary auth-submit" type="submit" disabled={submitting}>
+              {submitting ? (
+                <>
+                  <span className="spin" aria-hidden /> Connexion…
+                </>
+              ) : (
+                <>
+                  <Lock size={16} aria-hidden /> Se connecter
+                </>
+              )}
+            </button>
+          </form>
 
-        <p className="auth-alt">
-          Pas de compte ?{" "}
-          <Link href="/register">Créer un compte</Link>
-        </p>
-        <p className="tiny muted text-center mt-1">Connexion sécurisée · Chiffrement TLS</p>
+          <p className="auth-alt">
+            Pas encore de compte ? <Link href="/register">Créer un compte</Link>
+          </p>
+          <p className="auth-note">Connexion sécurisée · Chiffrement TLS</p>
+        </main>
       </div>
     </div>
   );

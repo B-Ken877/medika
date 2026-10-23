@@ -2,6 +2,11 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+/**
+ * Administrator login — Clinical Calm redesign.
+ * Auth behavior unchanged: POST /api/admin/auth/login, token + user persisted
+ * to localStorage, redirect to /dashboard.
+ */
 export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState('');
@@ -32,51 +37,66 @@ export default function LoginPage() {
   };
 
   return (
-    <div style={{
-      minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'linear-gradient(135deg, #059669 0%, #047857 50%, #065f46 100%)'
-    }}>
-      <div style={{
-        width: '100%', maxWidth: 400, padding: 32, background: '#fff',
-        borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.2)'
-      }}>
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{
-            width: 56, height: 56, borderRadius: 14, background: '#059669',
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', fontWeight: 800, fontSize: 24, marginBottom: 16
-          }}>M</div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#111827', marginBottom: 4 }}>Medika Admin</h1>
-          <p style={{ fontSize: 14, color: '#6b7280' }}>Connectez-vous au panneau d&apos;administration</p>
+    <div className="admin-login">
+      <div className="admin-login-card">
+        <div className="admin-login-brand">
+          <span className="brand-mark" aria-hidden>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6V3z" fill="currentColor" />
+            </svg>
+          </span>
+          <span className="brand-word">Medika</span>
         </div>
 
+        <h1 className="admin-login-title">Administration Medika</h1>
+        <p className="admin-login-sub">Connectez-vous pour accéder à l&apos;espace d&apos;administration.</p>
+
         {error && (
-          <div style={{
-            padding: '10px 14px', background: '#fee2e2', color: '#dc2626',
-            borderRadius: 8, fontSize: 13, marginBottom: 16, fontWeight: 500
-          }}>{error}</div>
+          <div className="admin-login-error" role="alert">
+            {error}
+          </div>
         )}
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label className="form-label">Nom d&apos;utilisateur</label>
-            <input className="form-input" type="text" value={username}
-              onChange={e => setUsername(e.target.value)} placeholder="admin" required autoFocus />
+            <label className="form-label" htmlFor="admin-username">Nom d&apos;utilisateur</label>
+            <input
+              className="form-input"
+              id="admin-username"
+              type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              placeholder="admin"
+              required
+              autoFocus
+              autoComplete="username"
+            />
           </div>
           <div className="form-group">
-            <label className="form-label">Mot de passe</label>
-            <input className="form-input" type="password" value={password}
-              onChange={e => setPassword(e.target.value)} placeholder="........" required />
+            <label className="form-label" htmlFor="admin-password">Mot de passe</label>
+            <input
+              className="form-input"
+              id="admin-password"
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+              autoComplete="current-password"
+            />
           </div>
-          <button type="submit" disabled={loading} className="btn btn-primary"
-            style={{ width: '100%', justifyContent: 'center', padding: '10px 16px', fontSize: 15, marginTop: 8 }}>
+          <button type="submit" disabled={loading} className="btn btn-primary admin-login-submit">
             {loading ? (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Connexion...
-              </span>
-            ) : 'Se connecter'}
+              <>
+                <span className="spin" aria-hidden /> Connexion…
+              </>
+            ) : (
+              'Se connecter'
+            )}
           </button>
         </form>
+
+        <p className="admin-login-note">Accès réservé aux administrateurs Medika.</p>
       </div>
     </div>
   );
