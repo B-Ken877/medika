@@ -46,7 +46,8 @@ The dev server proxies `/api`, `/uploads` and `/payment` to
 > **WebSocket note**: browsers cannot reach `/ws` through the Next.js dev
 > rewrites (WebSocket upgrades are not proxied). For local development set
 > `NEXT_PUBLIC_WS_URL=ws://localhost:3000/ws` in `.env.local`. In production
-> nginx routes `/ws` straight to the backend and this variable stays unset.
+> (single Vercel project) the platform routes `/ws` straight to the api
+> service and this variable stays unset.
 
 To run the backend locally: `node server.js` from the repository root
 (seeded credentials are printed on first boot).
@@ -143,18 +144,22 @@ npm run build       # production build
 
 ## Deploying to Vercel
 
-The PWA deploys as its own Vercel project (Root Directory = `medika-web`),
-with the backend deployed separately from the repository root (see
-`../docs/DEPLOYMENT.md` for the full runbook).
+The PWA is deployed as the **`web` service** of the single Medika Vercel
+project (Vercel Services — see `../docs/DEPLOYMENT.md` for the full
+runbook): the repository-root `vercel.json` routes `/` (catch-all) to this
+app, and `/api`, `/payment`, `/uploads`, `/ws` to the Express `api` service
+of the same project.
 
-Build-time environment variables:
+**No build-time environment variables are needed.** The browser talks
+to the API same-origin (`/api/...` relative URLs), and the WebSocket client
+defaults to `wss://<host>/ws`:
 
-| Variable | Purpose |
+| Variable | Value |
 |---|---|
-| `API_ORIGIN` | e.g. `https://medika-api.<team>.vercel.app` — `next.config.mjs` proxies `/api`, `/payment`, `/uploads` through this app so the browser stays same-origin |
-| `NEXT_PUBLIC_WS_URL` | e.g. `wss://medika-api.<team>.vercel.app/ws` — WebSocket upgrades cannot be proxied by Next.js rewrites, so clients connect to the API origin directly |
-| `NEXT_PUBLIC_API_BASE_URL` | keep empty (same-origin via the proxy) |
-| `NEXT_PUBLIC_PAYMENT_BASE_URL` | keep empty (`/payment` is proxied) |
+| `NEXT_PUBLIC_API_BASE_URL` | *(empty — same-origin)* |
+| `NEXT_PUBLIC_PAYMENT_BASE_URL` | *(empty — same-origin `/payment`)* |
+| `NEXT_PUBLIC_WS_URL` | *(unset — same-origin `wss://…/ws`)* |
+| `API_ORIGIN` | **gone** — the old cross-project proxy is no longer read by `next.config.mjs`; do not set it |
 
 Authentication note: the backend now issues **JWT bearer tokens** (the legacy
 token was the raw user id — see `../docs/VERCEL_MIGRATION_AUDIT.md`). The WS

@@ -21,7 +21,10 @@
  *   2. server.js is the ONLY candidate matching the express-import gate
  *      (no ambiguity, no order-dependent selection, no build warning);
  *   3. package.json#main points at server.js (main-fallback detection path);
- *   4. vercel.json keys the function config at the entry file 'server.js';
+ *   4. vercel.json declares the api service (Vercel Services, single project)
+ *      with framework "express", entrypoint "server.js" and the function
+ *      config keyed at 'server.js' (moved off the top level — top-level
+ *      build/runtime keys are invalid once `services` is present);
  *   5. requiring server.js yields the composed http.Server with the Express
  *      app and the realtime hub attached — the "server" handler shape the
  *      Vercel runtime accepts, which is what keeps /ws upgrades working.
@@ -94,10 +97,19 @@ describe('Vercel Express entrypoint detection (platform contract)', () => {
     expect(pkg.main).toBe('server.js');
   });
 
-  it("vercel.json keys the function config at the entry file 'server.js'", () => {
+  it("vercel.json declares the api service with the entry file 'server.js'", () => {
     const vercelJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'vercel.json'), 'utf8'));
-    expect(Object.keys(vercelJson.functions ?? {})).toContain('server.js');
-    expect(typeof vercelJson.functions['server.js'].maxDuration).toBe('number');
+    // Vercel Services (single project): the api service owns the build config.
+    const apiService = vercelJson.services?.api;
+    expect(apiService).toBeTruthy();
+    expect(apiService.root).toBe('.');
+    expect(apiService.framework).toBe('express');
+    expect(apiService.entrypoint).toBe('server.js');
+    expect(Object.keys(apiService.functions ?? {})).toContain('server.js');
+    expect(typeof apiService.functions['server.js'].maxDuration).toBe('number');
+    // Top-level build/runtime keys are invalid once `services` is present —
+    // they must live inside the owning service.
+    expect(vercelJson.functions).toBeUndefined();
   });
 });
 

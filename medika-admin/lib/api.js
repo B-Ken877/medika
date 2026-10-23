@@ -15,7 +15,10 @@ export async function apiFetch(endpoint, options = {}) {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('medika_admin_token');
       localStorage.removeItem('medika_admin_user');
-      window.location.href = '/login';
+      // basePath is "/admin" (next.config.mjs) — raw location assignments
+      // do NOT get the basePath prepended (unlike router.push), so the
+      // login page must be addressed by its full /admin/login path.
+      window.location.href = '/admin/login';
     }
   }
 

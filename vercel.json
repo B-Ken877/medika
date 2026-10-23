@@ -1,10 +1,38 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "functions": {
-    "server.js": {
-      "maxDuration": 300
+  "framework": "services",
+  "services": {
+    "web": {
+      "root": "medika-web",
+      "framework": "nextjs"
+    },
+    "admin": {
+      "root": "medika-admin",
+      "framework": "nextjs"
+    },
+    "api": {
+      "root": ".",
+      "framework": "express",
+      "entrypoint": "server.js",
+      "functions": {
+        "server.js": {
+          "maxDuration": 300
+        }
+      }
     }
   },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": { "service": "api" } },
+    { "source": "/api", "destination": { "service": "api" } },
+    { "source": "/payment/(.*)", "destination": { "service": "api" } },
+    { "source": "/payment", "destination": { "service": "api" } },
+    { "source": "/uploads/(.*)", "destination": { "service": "api" } },
+    { "source": "/uploads", "destination": { "service": "api" } },
+    { "source": "/ws", "destination": { "service": "api" } },
+    { "source": "/admin", "destination": { "service": "admin" } },
+    { "source": "/admin/(.*)", "destination": { "service": "admin" } },
+    { "source": "/(.*)", "destination": { "service": "web" } }
+  ],
   "headers": [
     {
       "source": "/api/(.*)",
