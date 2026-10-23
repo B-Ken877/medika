@@ -133,11 +133,11 @@ the legacy server; only new consultations are payment-gated.
    `services` key — if either is missing, Vercel falls back to plain framework
    detection and **silently ignores** the services configuration (the
    deployment then behaves like the Express-only API of October 2026: `/`
-   answers the API's French 404 JSON instead of the PWA). `vercel.json` also
-   declares `"framework": "services"` at the top level; if the import flow
-   does not pick "Services" up from it, set it under
-   **Project Settings → Build & Deployment → Framework Preset** before the
-   first deploy.
+   answers the API's French 404 JSON instead of the PWA). Set it under
+   **Project Settings → Build & Deployment → Framework Preset → Services**.
+   Do NOT add a top-level `framework` key to `vercel.json` — it is invalid
+   once `services` is present and the deployment is rejected instantly
+   (observed 2026-10).
 
    **Existing "medika" project**: flip the preset in Project Settings → Build
    & Deployment → Framework Preset → **Services**. Flipping it while `main`

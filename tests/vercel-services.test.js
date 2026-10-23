@@ -118,11 +118,12 @@ describe('vercel.json — services definition', () => {
     expect(api.functions['server.js'].maxDuration).toBeGreaterThan(60);
   });
 
-  it('declares the Services framework (project-level build mode)', () => {
-    // The platform requires the project framework to be "Services" for the
-    // services key to take effect; declaring it in vercel.json keeps the
-    // repository self-describing (and hedges the dashboard setting).
-    expect(vercelJson.framework).toBe('services');
+  it('keeps the framework declaration OFF the top level (invalid once services is present)', () => {
+    // The platform requires the project framework to be "Services" (set in
+    // the project settings) for the services key to take effect — and a
+    // top-level `framework` key in vercel.json is NOT valid when `services`
+    // is present (deployment 2026-10: instant config rejection with it).
+    expect(vercelJson.framework).toBeUndefined();
   });
 
   it('keeps build/runtime config OUT of the top level (invalid once services is present)', () => {
