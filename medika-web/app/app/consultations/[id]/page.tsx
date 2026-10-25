@@ -223,7 +223,7 @@ export default function ConsultationChatPage() {
             {canChat
               ? partnerTyping
                 ? "écrit…"
-                : "En ligne"
+                : "Consultation active"
               : waiting
                 ? "Recherche de médecin…"
                 : finished
@@ -365,8 +365,13 @@ export default function ConsultationChatPage() {
           </div>
         ))}
         {partnerTyping && (
-          <div className="typing-row" aria-label="Votre interlocuteur est en train d'écrire">
-            <div className="typing-dots">
+          <div
+            className="typing-row"
+            role="status"
+            aria-label="Votre interlocuteur est en train d'écrire"
+          >
+            <span className="typing-label">Votre interlocuteur écrit</span>
+            <div className="typing-dots" aria-hidden="true">
               <i />
               <i />
               <i />
