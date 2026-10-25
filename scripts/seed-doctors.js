@@ -12,6 +12,9 @@
  *   results on preview branches. Every profile is marked as a demonstration
  *   account in its biography and license number (DEMO-LIC-xxxx) — none of
  *   these clinicians exist and no real-world license is implied.
+ *   No email, phone, or rating values are set: rating is inserted as an
+ *   explicit NULL (the column default of 5.0 would fabricate feedback that
+ *   no patient ever gave — the existing preview records carry no ratings).
  *
  * SAFETY GATES (read before running)
  *   1. The script REFUSES to run when NODE_ENV=production.
@@ -30,11 +33,17 @@
  *   ALWAYS run `--dry-run` first and check the printed host against your
  *   Neon project's preview branch endpoint.
  *
- * IDEMPOTENCY
- *   Rows are keyed on the UNIQUE username (dr.seed.*) with
- *   ON CONFLICT (username) DO NOTHING — re-running never duplicates and
- *   never overwrites existing rows (seeded or real). Stable ids
- *   (doctor_seed_01…) cannot collide with runtime ids (doctor_<uuid8>).
+ * IDEMPOTENCY (and the existing Neon preview records)
+ *   The Neon preview branch (preview/feat/clinical-calm-redesign) already
+ *   holds 10 manually seeded rows whose ids AND usernames are both
+ *   doctor_seed_01…doctor_seed_10. This script uses exactly those identities
+ *   (id = username = doctor_seed_NN), and every INSERT ends in a bare
+ *   ON CONFLICT DO NOTHING — no conflict target — so a rerun is skipped when
+ *   EITHER unique constraint fires: the users primary key (id) or the UNIQUE
+ *   username. A rerun against the already-seeded preview branch therefore
+ *   inserts nothing, crashes on nothing, and overwrites nothing (seeded or
+ *   real rows alike). Runtime-created users cannot collide (ids are
+ *   doctor_<uuid8> and usernames are chosen by real people).
  *
  * CREDENTIALS
  *   users.password_hash is NOT NULL, so each row gets a REAL bcrypt hash of
@@ -60,78 +69,80 @@ const bcrypt = require('bcryptjs');
  * The 10 synthetic directory doctors. French/Haitian-style FICTIONAL names,
  * canonical specialties only, fictional hospitals explicitly labeled "de
  * Démo", license numbers explicitly labeled DEMO. No email/phone (the API
- * strips them from patient-facing listings anyway).
+ * strips them from patient-facing listings anyway) and no ratings — the
+ * identities (id = username = doctor_seed_NN) deliberately match the 10 rows
+ * manually seeded on the Neon preview branch so a rerun conflicts cleanly.
  */
 const SYNTHETIC_DOCTORS = [
   {
-    id: 'doctor_seed_01', username: 'dr.seed.dariste', name: 'Dr Alain Dariste',
+    id: 'doctor_seed_01', username: 'doctor_seed_01', name: 'Dr Alain Dariste',
     specialty: 'Cardiologie', age: 47, gender: 'Homme',
     hospital: 'Centre Cardiologique de Démo — Port-au-Prince',
     location: 'Port-au-Prince, Haïti', license_number: 'DEMO-LIC-0001',
-    rating: 4.8, is_available: true,
+    is_available: true,
   },
   {
-    id: 'doctor_seed_02', username: 'dr.seed.fontaine', name: 'Dr Michèle Fontaine',
+    id: 'doctor_seed_02', username: 'doctor_seed_02', name: 'Dr Michèle Fontaine',
     specialty: 'Pediatrie', age: 41, gender: 'Femme',
     hospital: 'Clinique Pédiatrique de Démo — Delmas',
     location: 'Delmas, Haïti', license_number: 'DEMO-LIC-0002',
-    rating: 4.9, is_available: true,
+    is_available: true,
   },
   {
-    id: 'doctor_seed_03', username: 'dr.seed.antoine', name: 'Dr Gérard Antoine',
+    id: 'doctor_seed_03', username: 'doctor_seed_03', name: 'Dr Gérard Antoine',
     specialty: 'Dermatologie', age: 52, gender: 'Homme',
     hospital: 'Cabinet Dermatologique de Démo — Pétion-Ville',
     location: 'Pétion-Ville, Haïti', license_number: 'DEMO-LIC-0003',
-    rating: 4.6, is_available: true,
+    is_available: true,
   },
   {
-    id: 'doctor_seed_04', username: 'dr.seed.baptiste', name: 'Dr Nadège Baptiste',
+    id: 'doctor_seed_04', username: 'doctor_seed_04', name: 'Dr Nadège Baptiste',
     specialty: 'Gynecologie', age: 38, gender: 'Femme',
     hospital: 'Maternité de Démo — Carrefour',
     location: 'Carrefour, Haïti', license_number: 'DEMO-LIC-0004',
-    rating: 4.7, is_available: false,
+    is_available: false,
   },
   {
-    id: 'doctor_seed_05', username: 'dr.seed.rosemond', name: 'Dr Rosemond Étienne',
+    id: 'doctor_seed_05', username: 'doctor_seed_05', name: 'Dr Rosemond Étienne',
     specialty: 'Medecine Generale', age: 44, gender: 'Homme',
     hospital: 'Centre de Santé de Démo — Tabarre',
     location: 'Tabarre, Haïti', license_number: 'DEMO-LIC-0005',
-    rating: 4.5, is_available: true,
+    is_available: true,
   },
   {
-    id: 'doctor_seed_06', username: 'dr.seed.charlemagne', name: 'Dr Yvette Charlemagne',
+    id: 'doctor_seed_06', username: 'doctor_seed_06', name: 'Dr Yvette Charlemagne',
     specialty: 'Psychiatrie', age: 49, gender: 'Femme',
     hospital: 'Institut de Santé Mentale de Démo — Delmas',
     location: 'Delmas, Haïti', license_number: 'DEMO-LIC-0006',
-    rating: 4.9, is_available: true,
+    is_available: true,
   },
   {
-    id: 'doctor_seed_07', username: 'dr.seed.delva', name: 'Dr Frantz Delva',
+    id: 'doctor_seed_07', username: 'doctor_seed_07', name: 'Dr Frantz Delva',
     specialty: 'Odontologie', age: 36, gender: 'Homme',
     hospital: 'Cabinet Dentaire de Démo — Port-au-Prince',
     location: 'Port-au-Prince, Haïti', license_number: 'DEMO-LIC-0007',
-    rating: 4.4, is_available: true,
+    is_available: true,
   },
   {
-    id: 'doctor_seed_08', username: 'dr.seed.vilmont', name: 'Dr Clarisse Vilmont',
+    id: 'doctor_seed_08', username: 'doctor_seed_08', name: 'Dr Clarisse Vilmont',
     specialty: 'Ophtalmologie', age: 43, gender: 'Femme',
     hospital: 'Centre Ophtalmologique de Démo — Croix-des-Bouquets',
     location: 'Croix-des-Bouquets, Haïti', license_number: 'DEMO-LIC-0008',
-    rating: 4.7, is_available: true,
+    is_available: true,
   },
   {
-    id: 'doctor_seed_09', username: 'dr.seed.belizaire', name: 'Dr Jacques Belizaire',
+    id: 'doctor_seed_09', username: 'doctor_seed_09', name: 'Dr Jacques Belizaire',
     specialty: 'Orthopedie', age: 55, gender: 'Homme',
     hospital: 'Clinique Orthopédique de Démo — Pétion-Ville',
     location: 'Pétion-Ville, Haïti', license_number: 'DEMO-LIC-0009',
-    rating: 4.6, is_available: false,
+    is_available: false,
   },
   {
-    id: 'doctor_seed_10', username: 'dr.seed.larose', name: 'Dr Sylvie Larose',
+    id: 'doctor_seed_10', username: 'doctor_seed_10', name: 'Dr Sylvie Larose',
     specialty: 'Nutrition', age: 34, gender: 'Femme',
     hospital: 'Cabinet Nutrition de Démo — Tabarre',
     location: 'Tabarre, Haïti', license_number: 'DEMO-LIC-0010',
-    rating: 4.8, is_available: true,
+    is_available: true,
   },
 ];
 
@@ -149,18 +160,25 @@ function buildDoctorInsert(doctor) {
   // Real bcrypt hash of an unknowable random password (see header). The
   // plaintext is discarded in this scope and never returned or logged.
   const passwordHash = bcrypt.hashSync(randomBytes(24).toString('base64url'), 10);
+  // Bare ON CONFLICT DO NOTHING — no conflict target — skips the insert when
+  // EITHER unique constraint fires: the users primary key (id) or the UNIQUE
+  // username. That is what makes a rerun against the already-seeded Neon
+  // preview branch safe: the manual rows (id = username = doctor_seed_NN)
+  // collide on both constraints and are left untouched instead of crashing
+  // with a duplicate-key error. rating is an explicit NULL: the column
+  // default (5.0) would fabricate a rating the records intentionally lack.
   const sql = `
     INSERT INTO users (id, username, password_hash, role, name, email, phone,
                        age, gender, specialty, license_number, location,
                        hospital, biography, rating, is_available)
     VALUES ($1, $2, $3, 'doctor', $4, NULL, NULL,
-            $5, $6, $7, $8, $9, $10, $11, $12, $13)
-    ON CONFLICT (username) DO NOTHING`;
+            $5, $6, $7, $8, $9, $10, $11, NULL, $12)
+    ON CONFLICT DO NOTHING`;
   const params = [
     doctor.id, doctor.username, passwordHash, doctor.name,
     doctor.age, doctor.gender, doctor.specialty, doctor.license_number,
     doctor.location, doctor.hospital, SYNTHETIC_BIOGRAPHY,
-    doctor.rating, doctor.is_available,
+    doctor.is_available,
   ];
   return { sql, params };
 }
@@ -241,11 +259,12 @@ async function main() {
     // ── Status mode: report and exit without writing ──────────────────────
     if (statusOnly) {
       const { rows: seeded } = await pool.query(
-        `SELECT username, name, specialty, is_available FROM users WHERE id LIKE 'doctor\\_seed\\_%' ORDER BY id`,
+        `SELECT username, name, specialty, rating, is_available FROM users WHERE id LIKE 'doctor\\_seed\\_%' ORDER BY id`,
       );
       console.log('[seed-doctors] synthetic profiles present:', seeded.length);
       for (const s of seeded) {
-        console.log(`  - ${s.username} | ${s.name} | ${s.specialty} | ${s.is_available ? 'disponible' : 'indisponible'}`);
+        const rating = s.rating === null ? 'non noté' : `noté ${s.rating}`;
+        console.log(`  - ${s.username} | ${s.name} | ${s.specialty} | ${rating} | ${s.is_available ? 'disponible' : 'indisponible'}`);
       }
       return;
     }
@@ -282,7 +301,10 @@ async function main() {
     );
     console.log('[seed-doctors] synthetic profiles in database:', seededCount[0].n);
     if (seededCount[0].n !== SYNTHETIC_DOCTORS.length) {
-      console.error('[seed-doctors] WARNING: unexpected synthetic profile count.');
+      console.error(
+        `[seed-doctors] WARNING: expected ${SYNTHETIC_DOCTORS.length} synthetic profiles, found ${seededCount[0].n}` +
+          ' — a colliding username or id may be blocking an identity. Run --status to inspect.',
+      );
       process.exit(1);
     }
   } catch (err) {
