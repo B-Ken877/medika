@@ -119,9 +119,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const items = navItems(user.role === "doctor" ? "doctor" : "patient");
   const onCallPage = pathname?.startsWith("/app/consultations/") && pathname.endsWith("/call");
+  const isConsultationChat =
+    /^\/app\/consultations\/[^/]+$/.test(pathname ?? "");
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${isConsultationChat ? " chat-mode" : ""}`}>
       <header className="app-header">
         <Link href="/app" className="brand" aria-label="Medika — Accueil">
           <span className="brand-mark" aria-hidden>

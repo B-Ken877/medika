@@ -41,17 +41,20 @@ const HEALTH_TIPS: { icon: typeof Droplets; title: string; text: string }[] = [
 ];
 
 export default function PatientDashboard() {
-  const { user } = useAuth();
+  const { user, token, status } = useAuth();
   const [consultations, setConsultations] = useState<Consultation[] | null>(null);
   const [error, setError] = useState<unknown>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(() => {
-    if (!user) return;
+    // Guard: issue the protected request only once the session is fully
+    // restored (not while "restoring") and both the user and its bearer
+    // token are available. The token — never user.id — authorizes the call.
+    if (status !== "authenticated" || !user || !token) return;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    getConsultations(user.id, controller.signal)
+    getConsultations(token, controller.signal)
       .then((list) => {
         setConsultations(Array.isArray(list) ? list : []);
         setError(null);
@@ -61,7 +64,7 @@ export default function PatientDashboard() {
         setError(err);
         setConsultations([]);
       });
-  }, [user]);
+  }, [user, token, status]);
 
   useEffect(() => {
     load();

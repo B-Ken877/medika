@@ -99,7 +99,6 @@ function LoginForm() {
                 placeholder="Nom d'utilisateur ou email"
                 required
                 maxLength={100}
-                autoFocus
               />
             </div>
 
