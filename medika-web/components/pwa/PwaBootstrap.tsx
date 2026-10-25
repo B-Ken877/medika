@@ -110,6 +110,16 @@ export function PwaBootstrap() {
     return () => document.body.classList.remove("has-install-banner");
   }, [bannerVisible]);
 
+  // While the offline toast is visible, auth screens reserve extra scroll
+  // room (body.has-offline-toast .auth-form-pane padding in the CSS) so the
+  // submit area can always be scrolled clear of the fixed toast — same
+  // mechanism as the install banner above.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.body.classList.toggle("has-offline-toast", offline);
+    return () => document.body.classList.remove("has-offline-toast");
+  }, [offline]);
+
   // Auto-dismiss the banner so it never lingers over content.
   useEffect(() => {
     if (!bannerVisible) return;

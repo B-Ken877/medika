@@ -223,6 +223,27 @@ a {
   line-height: 1.65;
 }
 
+/* Floating controls on auth screens.
+   The offline status toast (rendered by PwaBootstrap at the end of <body>)
+   inherits `.toast-stack { bottom: calc(var(--bottomnav-h) + 14px) }` from
+   globals.css, which reserves clearance for the app's bottom navigation.
+   Auth screens render .auth-shell as a preceding body sibling and have no
+   bottom navigation, so that offset floats the toast over the form's submit
+   area on phones. The sibling selector pins it to the viewport bottom on
+   auth screens only — app screens keep the bottom-nav clearance.
+   (:has() is deliberately avoided — Next.js 14's default browser targets
+   predate it and the CSS pipeline strips the rule.) */
+.auth-shell ~ .toast-stack {
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+}
+
+/* While the offline toast is visible, auth screens reserve scroll room so
+   the submit area and footer links can always be scrolled clear of the
+   fixed toast (mirrors the existing has-install-banner pattern). */
+body.has-offline-toast .auth-form-pane {
+  padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+}
+
 /* Keep the desktop split layout, but make both panes more refined. */
 .auth-brand-pane {
   position: relative;
@@ -537,6 +558,36 @@ textarea.input:focus {
 @media (max-width: 640px) {
   :root {
     --content-pad: 14px;
+  }
+
+  /* Auth screens: stack the mobile brand above the form card.
+     globals.css leaves .auth-form-pane as a flex row (its flex-direction is
+     unset, defaulting to row), so the brand mark and the form card sit
+     side-by-side on phones, squeezing the card below its min-content width
+     and causing horizontal overflow at 320–430 px. Column direction plus
+     min-width: 0 restores the intended stacked mobile layout. */
+  .auth-form-pane {
+    flex-direction: column;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Consult intake (Trouver un docteur): keep the heading, specialty
+     dropdown, and primary action compact so the search button stays visible
+     on phones without scrolling. A 2-line symptoms textarea (resizable)
+     replaces the 110px default; tighter stack/field rhythm trims the rest. */
+  .consult-intake {
+    gap: 12px;
+  }
+
+  .consult-intake #symptoms {
+    min-height: 72px;
+  }
+
+  .consult-intake .field {
+    margin-bottom: 12px;
   }
 
   .app-main {

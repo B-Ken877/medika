@@ -11,6 +11,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "migrate": "node scripts/migrate.js",
+    "seed-doctors": "node scripts/seed-doctors.js",
     "import-json": "node scripts/import-json-data.js",
     "smoke-verify": "node scripts/smoke-verify.js",
     "test": "vitest run",

@@ -238,7 +238,7 @@ function ConsultFlow() {
 
   if (step === "intake") {
     return (
-      <div className="stack" style={{ maxWidth: 640, margin: "0 auto" }}>
+      <div className="stack consult-intake" style={{ maxWidth: 640, margin: "0 auto" }}>
         <Link href="/app" className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start" }}>
           <ArrowLeft size={16} aria-hidden /> Retour
         </Link>
@@ -281,25 +281,25 @@ function ConsultFlow() {
             </div>
           </div>
 
-          <fieldset style={{ border: "none" }}>
-            <legend className="field label" style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--gray-700)" }}>
-              Choisissez une spécialité
-            </legend>
-            <div className="flex" style={{ gap: 8, flexWrap: "wrap" }}>
+          <div className="field">
+            <label htmlFor="specialty">Spécialité</label>
+            <select
+              id="specialty"
+              name="specialty"
+              className="select"
+              value={specialty}
+              onChange={(e) => setSpecialty(e.target.value)}
+              required
+            >
+              <option value="">Choisir une spécialité…</option>
               {prices.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  className={`btn btn-sm ${specialty === p.name ? "btn-primary" : "btn-secondary"}`}
-                  onClick={() => setSpecialty(p.name)}
-                  aria-pressed={specialty === p.name}
-                >
-                  {p.name}
-                </button>
+                <option key={p.id} value={p.name}>
+                  {p.name} · {formatCurrency(p.price)}
+                </option>
               ))}
-              {prices.length === 0 && <span className="muted small">Chargement des spécialités…</span>}
-            </div>
-          </fieldset>
+            </select>
+            {prices.length === 0 && <span className="muted small">Chargement des spécialités…</span>}
+          </div>
 
           <button className="btn btn-primary btn-block btn-lg mt-2" type="submit">
             <Search size={16} aria-hidden /> Trouver un docteur
