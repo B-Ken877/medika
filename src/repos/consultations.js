@@ -44,6 +44,9 @@ function msgToApi(row) {
     file_url: row.file_url ?? null,
     duration: row.duration ?? null,
     file_size: row.file_size === null ? null : Number(row.file_size),
+    // Persisted read receipt (epoch seconds, NULL = unread). Same instant for
+    // REST and WS-derived views; never derived client-side.
+    read_at: row.read_at ? Math.floor(new Date(row.read_at).getTime() / 1000) : null,
   };
 }
 
@@ -177,6 +180,47 @@ async function catchUp(userId, limit = 50) {
   return rows.reverse().map(msgToApi);
 }
 
+/**
+ * Distinct counterpart user ids across every consultation the user is part of
+ * (presence scoping: presence is only ever signalled to these users).
+ */
+async function listCounterpartIds(userId) {
+  const { rows } = await query(
+    `SELECT DISTINCT CASE WHEN patient_id = $1 THEN doctor_id ELSE patient_id END AS other
+       FROM consultations
+      WHERE (patient_id = $1 OR doctor_id = $1)
+        AND CASE WHEN patient_id = $1 THEN doctor_id ELSE patient_id END IS NOT NULL`,
+    [userId]
+  );
+  return rows.map((r) => r.other);
+}
+
+/**
+ * Atomically mark the OTHER participant's unread, non-system messages read.
+ * `readerId` always comes from the authenticated request — never the payload.
+ * Idempotent: rows already carrying read_at are filtered out, so repeated
+ * requests are no-ops. One `now()` timestamps the whole batch. Returns
+ * { messageIds, readAt } with readAt in epoch seconds (or null when nothing
+ * needed marking).
+ */
+async function markIncomingRead({ consultationId, readerId, counterpartId }) {
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `UPDATE messages
+          SET read_at = now()
+        WHERE consultation_id = $1
+          AND sender_id = $2
+          AND sender_id <> $3
+          AND read_at IS NULL
+        RETURNING id, read_at`,
+      [consultationId, counterpartId, readerId]
+    );
+    if (rows.length === 0) return { messageIds: [], readAt: null };
+    const readAt = Math.floor(new Date(rows[0].read_at).getTime() / 1000);
+    return { messageIds: rows.map((r) => Number(r.id)), readAt };
+  });
+}
+
 async function countAll() {
   const { rows } = await query(`SELECT count(*)::int AS n FROM messages`);
   return rows[0].n;
@@ -200,6 +244,8 @@ module.exports = {
   listMessages,
   createMessage,
   catchUp,
+  listCounterpartIds,
+  markIncomingRead,
   countAll,
   deleteForConsultation,
 };
