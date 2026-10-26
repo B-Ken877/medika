@@ -19,6 +19,25 @@ const bool = (name, fallback) => {
 
 const isProduction = () => process.env.NODE_ENV === 'production';
 
+/**
+ * Deployment-stage detection for payment simulation gating.
+ *
+ * On Vercel, VERCEL_ENV is a platform-injected system variable
+ * ('development' | 'preview' | 'production') that cannot be overridden from
+ * project settings, and PREVIEW deployments build with NODE_ENV=production —
+ * so NODE_ENV alone cannot distinguish a Preview from a Production
+ * deployment. When VERCEL_ENV is present it is authoritative; any UNKNOWN
+ * value fails CLOSED (treated as production — simulation stays disabled).
+ * Off Vercel (legacy VPS, local dev, tests) NODE_ENV remains the signal.
+ */
+function isProductionDeployment() {
+  const vercelEnv = process.env.VERCEL_ENV;
+  if (vercelEnv !== undefined && vercelEnv !== '') {
+    return vercelEnv !== 'preview' && vercelEnv !== 'development';
+  }
+  return isProduction();
+}
+
 const config = {
   env: process.env.NODE_ENV || 'development',
   isProduction,
@@ -92,9 +111,14 @@ function assertProductionSafety() {
   if (!process.env.DATABASE_URL) {
     problems.push('DATABASE_URL is required');
   }
-  if (config.paymentSimulation) {
-    // Simulated payments must be impossible to enable accidentally in production.
-    problems.push('PAYMENT_SIMULATION must NOT be enabled when NODE_ENV=production');
+  if (config.paymentSimulation && isProductionDeployment()) {
+    // Simulated payments must be impossible on PRODUCTION deployments.
+    // Vercel Preview deployments run with NODE_ENV=production but
+    // VERCEL_ENV=preview — they are authorized testing targets and must boot.
+    problems.push(
+      'PAYMENT_SIMULATION must NOT be enabled on a production deployment ' +
+      '(VERCEL_ENV=production, or NODE_ENV=production without VERCEL_ENV)'
+    );
   }
   if (config.seedDemo) {
     problems.push('SEED_DEMO must NOT be enabled when NODE_ENV=production');
@@ -115,9 +139,12 @@ function moncashConfigured() {
   return Boolean(config.moncashClientId && config.moncashClientSecret);
 }
 
-/** Simulation is allowed only in non-production AND sandbox mode. */
+/** Simulation is allowed only on NON-production deployments AND sandbox mode.
+ * Deployment stage comes from isProductionDeployment() — VERCEL_ENV-aware so
+ * Vercel Preview deployments (NODE_ENV=production, VERCEL_ENV=preview) can
+ * run the isolated simulation, while true production fails closed. */
 function simulationAllowed() {
-  return config.paymentSimulation && !isProduction() && config.moncashMode !== 'production';
+  return config.paymentSimulation && !isProductionDeployment() && config.moncashMode !== 'production';
 }
 
-module.exports = { config, assertProductionSafety, moncashConfigured, simulationAllowed, isProduction };
+module.exports = { config, assertProductionSafety, moncashConfigured, simulationAllowed, isProduction, isProductionDeployment };

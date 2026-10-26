@@ -269,6 +269,32 @@ Cutover checklist:
   Verification is pull-based (`RetrieveOrderPayment` / by transactionId);
   handle MonCash's business return URL by pointing it at the PWA.
 
+### Simulated payments on authorized testing deployments
+
+`PAYMENT_SIMULATION=true` enables a strictly isolated simulated-payment path
+so the complete patient → doctor consultation workflow can be tested without a
+real MonCash transaction. The server records clearly-identified simulated
+payments (`payments.simulated = true`, `SIM-…` transaction ids) and the web
+payment step shows an explicit test-mode notice ("Mòd tès la aktive…") instead
+of opening MonCash.
+
+Production protection (fail closed, enforced server-side):
+
+- Vercel Production deployments (`VERCEL_ENV=production`) **refuse to boot**
+  with `PAYMENT_SIMULATION` set, and the runtime gate rejects simulated
+  operations even if the boot guard were bypassed.
+- Preview deployments build with `NODE_ENV=production`; `VERCEL_ENV`
+  (platform-injected, not overridable from project settings) is the
+  authoritative stage signal. Unknown `VERCEL_ENV` values are treated as
+  production — simulation stays disabled.
+- Client-supplied flags (query params, body fields) are never trusted as
+  authorization; only the server-side environment decides.
+
+Enable for preview testing: Vercel Project "medika" → Settings → Environment
+Variables → add `PAYMENT_SIMULATION=true` scoped to **Preview** only. Disable
+(remove the variable) to restore the ordinary MonCash flow — no code change,
+no migration, nothing else to clean up.
+
 ## 8. Backups & data protection
 
 - Managed PostgreSQL: enable the provider's PITR / scheduled backups before

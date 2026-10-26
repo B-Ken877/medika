@@ -62,9 +62,13 @@ router.post('/create', authenticate, (req, res, next) => {
     }
 
     if (simulationAllowed()) {
-      // Simulation is only reachable outside production (config boot guard).
+      // Simulation is only reachable on authorized non-production deployments
+      // (config boot guard + runtime isProductionDeployment check). The
+      // `simulated: true` flag lets web clients branch on a SERVER-provided
+      // signal — a client-supplied flag is never trusted as authorization.
       return res.json({
         success: true,
+        simulated: true,
         redirectUrl: `/payment/simulated?orderId=${encodeURIComponent(row.order_id)}`,
       });
     }
@@ -139,9 +143,22 @@ router.post('/verify', authenticate, (req, res, next) => {
   });
 });
 
-// ─── GET /payment/simulated (dev/sandbox-only page) ──────────────────────────
-// A trivial page so the WebView/browser flow works end-to-end in simulation.
-// Unreachable in production (config.assertProductionSafety refuses to boot).
+// ─── GET /config (mode discovery for clients) ───────────────────────────────
+// Lets the web payment step label itself honestly (simulated test vs real
+// MonCash) BEFORE the patient clicks anything. Server-authoritative and
+// display-only: authorization is still enforced per-request at /create and
+// /verify. Exposes only the boolean test-mode flag — never credentials or
+// payment settings. Fail-closed by construction: simulationAllowed() is false
+// on every production deployment.
+router.get('/config', (req, res) => {
+  res.json({ simulated: simulationAllowed() });
+});
+
+// ─── GET /payment/simulated (authorized-testing-only page) ──────────────────
+// A trivial page so the WebView/browser flow works end-to-end in simulation
+// (legacy Android path; the web PWA confirms in-page instead). Unreachable in
+// production: simulationAllowed() is false there AND the boot guard refuses
+// PAYMENT_SIMULATION on production deployments.
 
 router.get('/simulated', (req, res) => {
   if (!simulationAllowed()) {
@@ -149,10 +166,10 @@ router.get('/simulated', (req, res) => {
   }
   const orderId = String(req.query.orderId || '').replace(/[<>&"']/g, '');
   res.type('html').send(
-    `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">` +
-    `<title>Paiement simule</title><style>body{font-family:system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0;background:#f0fdf4;color:#14532d}main{text-align:center}</style></head>` +
-    `<body><main><h1>Mode simulation</h1><p>Ceci est un paiement <strong>simule</strong> (developpement / sandbox uniquement).</p>` +
-    `<p>Commande : <code>${orderId}</code></p><p>Vous pouvez fermer cet onglet et revenir a l'application.</p></main></body></html>`
+    `<!doctype html><html lang="ht"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">` +
+    `<title>Peman simile</title><style>body{font-family:system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0;background:#f0fdf4;color:#14532d}main{text-align:center}</style></head>` +
+    `<body><main><h1>Mòd tès</h1><p>Sa a se yon <strong>peman simile</strong> (tè sèlman — pa gen lajan k ap deplase).</p>` +
+    `<p>Kòmand : <code>${orderId}</code></p><p>Ou ka fèmen onglet sa a epi retounen nan aplikasyon an.</p></main></body></html>`
   );
 });
 
