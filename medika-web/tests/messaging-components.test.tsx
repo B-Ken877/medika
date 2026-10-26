@@ -141,6 +141,56 @@ describe("Source contracts — composer integration guards", () => {
     // Read-marking is visibility-gated, never fire-and-forget on fetch.
     expect(src).toContain('document.visibilityState !== "visible"');
   });
+
+  it("composer is conditionally replaced by the voice surface (one authoritative mode)", async () => {
+    const fs = await import("node:fs");
+    const src = fs.readFileSync("app/app/consultations/[id]/page.tsx", "utf8");
+    // The page tracks the recorder's mode and gates the normal row on idle.
+    expect(src).toContain('voiceMode === "idle" && (');
+    expect(src).toContain("onModeChange={setVoiceMode}");
+    // Attachment/emoji/input never render while a voice surface is active:
+    // the normal row block is inside the idle branch.
+    const idleBlock = src.split('voiceMode === "idle" && (')[1] ?? "";
+    expect(idleBlock).toContain("AttachmentMenu");
+    expect(idleBlock).toContain("emoji-wrap");
+    // The voice recorder itself stays mounted outside the idle-only branch.
+    expect(src).toContain("onDiscard={handleVoiceDiscard}");
+    expect(src).toContain("onSend={handleVoiceSend}");
+  });
+
+  it("sends are DURABLE: WS sends wait for the persisted echo, REST is the fallback", async () => {
+    const fs = await import("node:fs");
+    const src = fs.readFileSync("app/app/consultations/[id]/page.tsx", "utf8");
+    expect(src).toContain("waitForMessageEcho(socket, clientMsgId)");
+    // Text path: echo-confirmed with REST fallback.
+    expect(src).toMatch(/echoed \? true : restFallback\(\)/);
+    // Media path: identical contract.
+    expect(src).toContain("persisted = await waitForMessageEcho(socket, clientMsgId)");
+    // REST fallback returns the persisted row and merges without duplicates.
+    expect(src).toContain("mergePersistedMessage(prev, msg)");
+    // Failed media sends keep a recoverable pending entry (retry affordance).
+    expect(src).toContain("p.failed && p.messageType !== \"voice\"");
+    expect(src).toContain("Eseye ankò");
+    // Retries reuse the same correlation id (server-side idempotency).
+    expect(src).toMatch(/clientMsgId: entry\.clientMsgId/);
+  });
+
+  it("VoiceRecorder preserves the recording on failure and cleans up resources", async () => {
+    const fs = await import("node:fs");
+    const src = fs.readFileSync("components/consultation/VoiceRecorder.tsx", "utf8");
+    // Failed delivery returns to preview — never destroys the clip.
+    expect(src).toContain('dispatch({ type: "SEND_FAIL" })');
+    expect(src).toContain("buildPreviewFromChunks()");
+    // Full resource release on stop/cancel/unmount.
+    expect(src).toContain("releaseStream");
+    expect(src).toContain("closeAudioAnalysis");
+    expect(src).toContain("URL.revokeObjectURL");
+    // Permission is requested only on tap (never pre-emptively).
+    expect(src).toContain("PERMISSION_REQUEST");
+    // Web Audio drives the live waveform; resources freed when idle.
+    expect(src).toContain("createAnalyser");
+    expect(src).toMatch(/void ctx\?\.close\(\)/);
+  });
 });
 
 // Keep the unused-import linter calm for vi (used implicitly by stubs).

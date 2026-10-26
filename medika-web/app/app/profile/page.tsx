@@ -83,16 +83,14 @@ export default function ProfilePage() {
     setError(null);
     try {
       const up = await uploadFile(token, file);
-      // The backend stores the avatar on the user record via profile update:
-      // PUT /api/profile only accepts the shared fields, and the Android app
-      // uploads then relies on the same flow. We re-fetch the profile to
-      // reflect whatever the server stored.
-      const controller = new AbortController();
-      const { getProfile } = await import("@/lib/api/endpoints");
-      const fresh = await getProfile(token, controller.signal);
+      // The upload alone stores nothing on the user record — persist the
+      // returned URL through the profile update (validated server-side to be
+      // an absolute http(s) URL or a site-relative /uploads/ path).
+      const fresh = await updateProfile(token, { avatarUrl: up.url });
       setUser(fresh);
+      setSaved(true);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Nou pa t kapab voye foto a.");
+      setError(err instanceof ApiError ? err : new ApiError("network", 0, "Nou pa t kapab voye foto a."));
     } finally {
       setUploadingAvatar(false);
     }

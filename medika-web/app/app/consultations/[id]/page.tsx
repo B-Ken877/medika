@@ -32,6 +32,8 @@ import { PartnerTypingTracker, TypingNotifier } from "@/lib/ws/typing";
 import { presenceFromEvent, presenceLabel, type PresenceState } from "@/lib/ws/presence";
 import { applyMessagesRead, receiptFor, unreadIncomingIds, type ReceiptState } from "@/lib/chat/receipts";
 import { insertAtCursor } from "@/lib/chat/emoji";
+import { waitForMessageEcho, mergePersistedMessage } from "@/lib/chat/delivery";
+import type { VoiceMode } from "@/lib/chat/voice";
 import { uploadConsultationAttachment } from "@/lib/api/endpoints";
 import { Avatar, ErrorAlert, Spinner } from "@/components/ui/primitives";
 import { PrescriptionModal } from "@/components/consultation/PrescriptionModal";
@@ -42,7 +44,10 @@ import { AttachmentMenu } from "@/components/consultation/AttachmentMenu";
 import { EmojiPicker } from "@/components/consultation/EmojiPicker";
 import { VoiceRecorder } from "@/components/consultation/VoiceRecorder";
 
-/** Optimistic entry while a send is unresolved (removed on the persisted echo). */
+/** Optimistic entry while a durable send is unresolved. `failed` marks a
+ *  total delivery failure (WS echo timeout AND REST fallback failed) — the
+ *  entry then offers a retry that reuses the SAME clientMsgId (server-side
+ *  idempotency) and the already-uploaded attachment when present. */
 interface PendingMessage {
   clientMsgId: string;
   createdAt: number;
@@ -51,6 +56,11 @@ interface PendingMessage {
   fileUrl: string | null;
   fileSize: number | null;
   duration: number | null;
+  failed?: boolean;
+  /** In-memory File for the retry path (never serialized). */
+  fileRef?: File | null;
+  /** Already-uploaded attachment reference — a retry skips re-uploading. */
+  attachmentRef?: { url: string; size: number } | null;
 }
 
 const UPLOAD_MAX_BYTES = 4 * 1024 * 1024; // keep in step with the server's MAX_UPLOAD_MB
@@ -79,12 +89,24 @@ export default function ConsultationChatPage() {
   const [uploadProgress, setUploadProgress] = useState<{ name: string; pct: number } | null>(null);
   const [showEmoji, setShowEmoji] = useState(false);
   const [showRx, setShowRx] = useState(false);
+  /** Authoritative voice-composer mode — replaces the normal composer while
+   *  recording / previewing / uploading a voice message. */
+  const [voiceMode, setVoiceMode] = useState<VoiceMode>("idle");
 
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const typingTrackerRef = useRef<PartnerTypingTracker | null>(null);
   const notifierRef = useRef<TypingNotifier | null>(null);
   const markedRef = useRef<Set<number>>(new Set());
+  /** Mirror of `pending` for retry lookups (state is async to read). */
+  const pendingRef = useRef<PendingMessage[]>([]);
+  /** Voice retry bookkeeping: the same File instance across recorder retries
+   *  maps to the SAME clientMsgId so uploads/messages are never duplicated. */
+  const voiceSendRef = useRef<{ file: File; clientMsgId: string } | null>(null);
+
+  useEffect(() => {
+    pendingRef.current = pending;
+  }, [pending]);
 
   const isDoctor = user?.role === "doctor";
 
@@ -243,88 +265,204 @@ export default function ConsultationChatPage() {
     notifierRef.current?.notify(text);
   }, []);
 
-  /** Send through WS; on a dead socket, persist through REST instead —
-   *  a message is only "sent" once the server has actually stored it. */
+  /** Send through WS and wait for the PERSISTED echo (the hub emits it only
+   *  after the INSERT); on timeout or a dead socket, persist through REST —
+   *  a message is only "sent" once the server has actually stored it. Both
+   *  paths carry the same clientMsgId, so a retry can never duplicate it. */
   const sendText = useCallback(
     (text: string, clientMsgId: string): Promise<boolean> => {
-      if (!socket || !user) return Promise.resolve(false);
-      const ok = socket.sendMessage(consultationId, user.id, user.name, text, clientMsgId);
-      if (ok) return Promise.resolve(true); // echo will confirm persistence
-      if (!token) return Promise.resolve(false);
-      return sendConsultationMessage(token, consultationId, {
-        text,
-        messageType: "text",
-      })
-        .then(() => true)
-        .catch(() => false);
+      if (!user) return Promise.resolve(false);
+      const restFallback = (): Promise<boolean> => {
+        if (!token) return Promise.resolve(false);
+        return sendConsultationMessage(token, consultationId, {
+          text,
+          messageType: "text",
+          clientMsgId,
+        })
+          .then((msg) => {
+            setMessages((prev) => (prev ? mergePersistedMessage(prev, msg) : [msg]));
+            return true;
+          })
+          .catch(() => false);
+      };
+      if (!socket) return restFallback();
+      const buffered = socket.sendMessage(consultationId, user.id, user.name, text, clientMsgId);
+      if (!buffered) return restFallback();
+      return waitForMessageEcho(socket, clientMsgId).then((echoed) =>
+        echoed ? true : restFallback(),
+      );
     },
     [socket, user, consultationId, token],
   );
 
-  /** Media messages: upload privately, then send (WS with REST fallback). */
+  /** Media messages: upload privately, then send with durable semantics —
+   *  the WS path must be ECHO-CONFIRMED (persisted), otherwise the REST
+   *  fallback runs. Resolves true ONLY with persisted evidence, so a voice
+   *  recording is never cleared on an unconfirmed send. Retries reuse the
+   *  same clientMsgId + already-uploaded attachment (no duplicates, no
+   *  redundant uploads). */
   const sendMedia = useCallback(
     async (
       file: File,
       kind: "image" | "video" | "file" | "voice",
       duration?: number,
+      opts: {
+        clientMsgId?: string;
+        onProgress?: (fraction: number) => void;
+      } = {},
     ): Promise<boolean> => {
       if (!token || !user || !consultationId) return false;
-      const clientMsgId = newClientMsgId();
-      setPending((prev) => [
-        ...prev,
-        {
-          clientMsgId,
-          createdAt: Math.floor(Date.now() / 1000),
-          text: kind === "file" ? file.name : "",
-          messageType: kind,
-          fileUrl: null, // still uploading — no URL to show yet
-          fileSize: file.size,
-          duration: duration ?? null,
-        },
-      ]);
+      const clientMsgId = opts.clientMsgId ?? newClientMsgId();
+      const prior = pendingRef.current.find((p) => p.clientMsgId === clientMsgId);
+      const showStripProgress = !opts.onProgress; // voice renders its own progress
+
+      // Create-or-retry the optimistic entry.
+      setPending((prev) => {
+        const idx = prev.findIndex((p) => p.clientMsgId === clientMsgId);
+        if (idx === -1) {
+          return [
+            ...prev,
+            {
+              clientMsgId,
+              createdAt: Math.floor(Date.now() / 1000),
+              text: kind === "file" ? file.name : "",
+              messageType: kind,
+              fileUrl: prior?.attachmentRef?.url ?? null,
+              fileSize: prior?.attachmentRef?.size ?? file.size,
+              duration: duration ?? null,
+              failed: false,
+              fileRef: file,
+              attachmentRef: prior?.attachmentRef ?? null,
+            },
+          ];
+        }
+        const next = prev.slice();
+        next[idx] = { ...next[idx], failed: false };
+        return next;
+      });
+
+      const reportProgress = (fraction: number) => {
+        opts.onProgress?.(fraction);
+        if (showStripProgress) {
+          setUploadProgress({ name: file.name, pct: Math.round(fraction * 100) });
+        }
+      };
+
       try {
         if (file.size > UPLOAD_MAX_BYTES) {
           throw new ApiError("validation", 413, "Fichye a twò gwo. Redwi li anvan ou voye l.");
         }
-        const up = await uploadConsultationAttachment(token, consultationId, file, {
-          onProgress: (p) => setUploadProgress({ name: file.name, pct: Math.round(p * 100) }),
-        });
-        setUploadProgress(null);
+        // Reuse an already-uploaded attachment on retry (skip re-upload).
+        let up = prior?.attachmentRef ?? null;
+        if (!up) {
+          const uploaded = await uploadConsultationAttachment(token, consultationId, file, {
+            onProgress: reportProgress,
+          });
+          up = { url: uploaded.url, size: uploaded.size };
+          const attachmentRef = { url: uploaded.url, size: uploaded.size };
+          setPending((prev) =>
+            prev.map((p) =>
+              p.clientMsgId === clientMsgId
+                ? { ...p, fileUrl: uploaded.url, fileSize: uploaded.size, attachmentRef }
+                : p,
+            ),
+          );
+        }
+        reportProgress(1);
+
         const meta = {
           messageType: kind,
           fileUrl: up.url,
           fileSize: up.size,
           duration: duration ?? null,
         };
-        // Refresh the pending entry with the real reference.
-        setPending((prev) =>
-          prev.map((p) => (p.clientMsgId === clientMsgId ? { ...p, fileUrl: up.url, fileSize: up.size } : p)),
-        );
-        const ok = socket
-          ? socket.sendMediaMessage(consultationId, user.id, user.name, meta, clientMsgId)
-          : false;
-        if (ok) return true;
-        await sendConsultationMessage(token, consultationId, {
-          messageType: kind,
-          text: kind === "file" ? file.name : "",
-          fileUrl: up.url,
-          fileSize: up.size,
-          duration: duration ?? null,
-        });
+
+        let persisted = false;
+        if (socket) {
+          const buffered = socket.sendMediaMessage(consultationId, user.id, user.name, meta, clientMsgId);
+          if (buffered) {
+            persisted = await waitForMessageEcho(socket, clientMsgId);
+          }
+        }
+        if (!persisted) {
+          // REST fallback — idempotent: returns the original row when the WS
+          // frame actually made it, so no duplicate bubbles ever appear.
+          const msg = await sendConsultationMessage(token, consultationId, {
+            messageType: kind,
+            text: kind === "file" ? file.name : "",
+            fileUrl: up.url,
+            fileSize: up.size,
+            duration: duration ?? null,
+            clientMsgId,
+          });
+          setMessages((prev) => (prev ? mergePersistedMessage(prev, msg) : [msg]));
+          persisted = true;
+        }
+        setPending((prev) => prev.filter((p) => p.clientMsgId !== clientMsgId));
         return true;
       } catch (err) {
-        setUploadProgress(null);
-        setPending((prev) => prev.filter((p) => p.clientMsgId !== clientMsgId));
+        if (showStripProgress) setUploadProgress(null);
+        setPending((prev) =>
+          prev.map((p) => (p.clientMsgId === clientMsgId ? { ...p, failed: true } : p)),
+        );
         setError(
           err instanceof ApiError
             ? err
             : new ApiError("network", 0, "Nou pa t kapab voye fichye a. Tanpri, eseye ankò."),
         );
         return false;
+      } finally {
+        if (showStripProgress) setUploadProgress(null);
       }
     },
     [token, user, consultationId, socket],
   );
+
+  /** Voice onSend wrapper: recorder retries present the SAME File instance —
+   *  map it to the SAME clientMsgId so retries never duplicate. */
+  const handleVoiceSend = useCallback(
+    async (file: File, duration: number, onProgress?: (fraction: number) => void) => {
+      let entry = voiceSendRef.current && voiceSendRef.current.file === file ? voiceSendRef.current : null;
+      if (!entry) {
+        entry = { file, clientMsgId: newClientMsgId() };
+        voiceSendRef.current = entry;
+      }
+      const ok = await sendMedia(file, "voice", duration, {
+        clientMsgId: entry.clientMsgId,
+        onProgress,
+      });
+      if (ok) voiceSendRef.current = null;
+      return ok;
+    },
+    [sendMedia],
+  );
+
+  /** Voice discard: drop any failed pending entry for the discarded clip. */
+  const handleVoiceDiscard = useCallback(() => {
+    const id = voiceSendRef.current?.clientMsgId;
+    voiceSendRef.current = null;
+    if (!id) return;
+    setPending((prev) => prev.filter((p) => p.clientMsgId !== id));
+  }, []);
+
+  const retryPending = useCallback(
+    (entry: PendingMessage) => {
+      // Voice retries through the recorder (clip preserved there); text
+      // failures restore the draft instead — only media entries retry here.
+      if (!entry.fileRef) return;
+      if (entry.messageType !== "image" && entry.messageType !== "video" && entry.messageType !== "file") {
+        return;
+      }
+      void sendMedia(entry.fileRef, entry.messageType, entry.duration ?? undefined, {
+        clientMsgId: entry.clientMsgId,
+      });
+    },
+    [sendMedia],
+  );
+
+  const dismissPending = useCallback((clientMsgId: string) => {
+    setPending((prev) => prev.filter((p) => p.clientMsgId !== clientMsgId));
+  }, []);
 
   const onSend = (e: FormEvent) => {
     e.preventDefault();
@@ -703,22 +841,45 @@ export default function ConsultationChatPage() {
           </div>
         ))}
         {/* Optimistic (unconfirmed) own messages */}
-        {pending.map((p) =>
-          renderBubble(
-            {
-              id: p.clientMsgId,
-              text: p.text,
-              createdAt: p.createdAt,
-              messageType: p.messageType,
-              fileUrl: p.fileUrl,
-              fileSize: p.fileSize,
-              duration: p.duration,
-              senderId: user?.id ?? "",
-              receipt: "pending",
-            },
-            true,
-          ),
-        )}
+        {pending.map((p) => (
+          <div key={p.clientMsgId}>
+            {renderBubble(
+              {
+                id: p.clientMsgId,
+                text: p.text,
+                createdAt: p.createdAt,
+                messageType: p.messageType,
+                fileUrl: p.fileUrl,
+                fileSize: p.fileSize,
+                duration: p.duration,
+                senderId: user?.id ?? "",
+                receipt: "pending",
+              },
+              true,
+            )}
+            {p.failed && p.messageType !== "voice" && (
+              <div className="pending-failed-row" role="alert">
+                <span className="tiny">Pake voye. </span>
+                {p.fileRef && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => retryPending(p)}
+                  >
+                    Eseye ankò
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => dismissPending(p.clientMsgId)}
+                >
+                  Retire
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
         {partnerTyping && (
           <div
             className="typing-row"
@@ -739,10 +900,11 @@ export default function ConsultationChatPage() {
         <ErrorAlert error={error} />
       </div>
 
-      {/* Composer */}
+      {/* Composer — the normal row is REPLACED by the voice surface while a
+          recording / preview / upload is active (one authoritative mode). */}
       {canChat ? (
         <form className="chat-composer" onSubmit={onSend}>
-          {uploadProgress ? (
+          {voiceMode === "idle" && uploadProgress ? (
             <div className="upload-progress" role="status" aria-label="N ap voye fichye a">
               <span className="tiny upload-name">{uploadProgress.name}</span>
               <div className="upload-bar" aria-hidden>
@@ -752,64 +914,69 @@ export default function ConsultationChatPage() {
             </div>
           ) : (
             <>
-              <AttachmentMenu
-                disabled={Boolean(uploadProgress) || sending}
-                onFile={(file, kind) => {
-                  void sendMedia(file, kind);
-                }}
-              />
-              <div className="emoji-wrap">
-                <button
-                  type="button"
-                  className="composer-btn"
-                  onClick={() => setShowEmoji((v) => !v)}
-                  aria-expanded={showEmoji}
-                  aria-haspopup="dialog"
-                  aria-label="Ajoute yon emoji"
-                  title="Ajoute yon emoji"
-                >
-                  <Smile size={20} />
-                </button>
-                {showEmoji && <EmojiPicker onPick={onEmojiPick} onClose={() => setShowEmoji(false)} />}
-              </div>
-              <input
-                ref={inputRef}
-                className="input"
-                value={draft}
-                onChange={(e) => {
-                  setDraft(e.target.value);
-                  notifyTyping(e.target.value);
-                }}
-                onBlur={() => notifierRef.current?.stop()}
-                placeholder="Ekri mesaj ou..."
-                aria-label="Mesaj ou"
-                maxLength={4000}
-              />
-              {draft.trim() ? (
-                <button
-                  type="submit"
-                  className="composer-btn send"
-                  disabled={sending}
-                  aria-label="Voye"
-                >
-                  <Send size={19} />
-                </button>
-              ) : (
-                <VoiceRecorder
-                  disabled={Boolean(uploadProgress) || sending}
-                  maxBytes={UPLOAD_MAX_BYTES}
-                  onSend={(file, duration) => sendMedia(file, "voice", duration)}
-                  onPermissionError={() =>
-                    setError(
-                      new ApiError(
-                        "forbidden",
-                        403,
-                        "Pèmèt aksè ak mikwofòn pou anrejistre mesaj vwa a.",
-                      ),
-                    )
-                  }
-                />
+              {voiceMode === "idle" && (
+                <>
+                  <AttachmentMenu
+                    disabled={Boolean(uploadProgress) || sending}
+                    onFile={(file, kind) => {
+                      void sendMedia(file, kind);
+                    }}
+                  />
+                  <div className="emoji-wrap">
+                    <button
+                      type="button"
+                      className="composer-btn"
+                      onClick={() => setShowEmoji((v) => !v)}
+                      aria-expanded={showEmoji}
+                      aria-haspopup="dialog"
+                      aria-label="Ajoute yon emoji"
+                      title="Ajoute yon emoji"
+                    >
+                      <Smile size={20} />
+                    </button>
+                    {showEmoji && <EmojiPicker onPick={onEmojiPick} onClose={() => setShowEmoji(false)} />}
+                  </div>
+                  <input
+                    ref={inputRef}
+                    className="input"
+                    value={draft}
+                    onChange={(e) => {
+                      setDraft(e.target.value);
+                      notifyTyping(e.target.value);
+                    }}
+                    onBlur={() => notifierRef.current?.stop()}
+                    placeholder="Ekri mesaj ou..."
+                    aria-label="Mesaj ou"
+                    maxLength={4000}
+                  />
+                  {draft.trim() && (
+                    <button
+                      type="submit"
+                      className="composer-btn send"
+                      disabled={sending}
+                      aria-label="Voye"
+                    >
+                      <Send size={19} />
+                    </button>
+                  )}
+                </>
               )}
+              <VoiceRecorder
+                disabled={Boolean(uploadProgress) || sending || voiceMode !== "idle"}
+                maxBytes={UPLOAD_MAX_BYTES}
+                onSend={handleVoiceSend}
+                onPermissionError={() =>
+                  setError(
+                    new ApiError(
+                      "forbidden",
+                      403,
+                      "Pèmèt aksè ak mikwofòn pou anrejistre mesaj vwa a.",
+                    ),
+                  )
+                }
+                onModeChange={setVoiceMode}
+                onDiscard={handleVoiceDiscard}
+              />
             </>
           )}
         </form>

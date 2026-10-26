@@ -80,6 +80,9 @@ export interface ServerMessage {
   file_size?: number | null;
   /** Persisted read receipt (epoch seconds, NULL = unread). */
   read_at?: number | null;
+  /** Client correlation id (migration 003) — present when the sender supplied
+   *  one; lets retries reconcile to the canonical persisted row. */
+  client_msg_id?: string | null;
 }
 
 /** Result of POST /api/consultations/:id/read — persisted receipt state. */

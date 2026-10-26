@@ -18,6 +18,8 @@ process.env.LOCAL_UPLOADS_DIR = process.env.LOCAL_UPLOADS_DIR ||
   require('node:fs').mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'medika-attach-'));
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 const h = await import('./helpers');
 
 let r, users, token = {};
@@ -143,6 +145,46 @@ describe('POST /api/consultations/:id/attachments', () => {
     expect(res.status).toBe(201);
     expect(res.body.filename).toBe('passwd.png'); // basename only, no traversal
     expect(res.body.filename).not.toMatch(/\.\.|\/|\\/);
+  });
+
+  it('rejects an EMPTY file with 400 (no zero-byte medical media)', async () => {
+    const res = await r.post(`/api/consultations/${consId}/attachments`)
+      .set('Authorization', `Bearer ${token.patient}`)
+      .attach('file', Buffer.alloc(0), 'vid.png');
+    expect(res.status).toBe(400);
+  });
+
+  it('removes the stored file when registry persistence fails (no orphaned private media)', async () => {
+    // Force the post-storage DB write to fail by dropping the registry table,
+    // then verify the route cleans up the just-written private file.
+    const dbMod = await import('../src/db.js');
+    const query = dbMod.query ?? dbMod.default?.query;
+    await query('DROP TABLE consultation_attachments');
+
+    const privateDir = path.join(process.env.LOCAL_UPLOADS_DIR, 'private', 'consultations', consId);
+    const before = fs.existsSync(privateDir)
+      ? fs.readdirSync(privateDir).filter((f) => f.startsWith('att_')).sort()
+      : [];
+
+    let status;
+    try {
+      const res = await r.post(`/api/consultations/${consId}/attachments`)
+        .set('Authorization', `Bearer ${token.patient}`)
+        .attach('file', PNG_BYTES, 'orfan.png');
+      status = res.status;
+    } finally {
+      // ALWAYS restore the schema (migration 002 is idempotent), even when an
+      // assertion below would otherwise skip the restore and break later suites.
+      const sql002 = fs.readFileSync(
+        path.join(__dirname, '..', 'db', 'migrations', '002_messaging_upgrade.sql'), 'utf8');
+      await query(sql002);
+    }
+
+    expect(status).toBe(500); // registry failure surfaces as a server error
+    const after = fs.existsSync(privateDir)
+      ? fs.readdirSync(privateDir).filter((f) => f.startsWith('att_')).sort()
+      : [];
+    expect(after).toEqual(before); // the failed upload left NO new file behind
   });
 });
 

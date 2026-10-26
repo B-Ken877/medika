@@ -106,3 +106,22 @@ update:
   in `file_url`. Android builds that render `file_url` directly will show
   these as non-loadable until updated to fetch a signed URL via
   `GET .../url` first. Historical public Blob URLs keep working unchanged.
+
+## Durable message delivery (additive — migration 003)
+
+Server-side retry idempotency is now available to every client, no update
+required to benefit:
+
+- **`clientMsgId` is now persisted** (migration 003: `messages.client_msg_id`,
+  unique per `(sender_id, client_msg_id)`). A WS `message:send` frame or a
+  REST `POST /api/consultations/{id}/messages` carrying the same
+  `clientMsgId` from the same sender returns the ALREADY-PERSISTED message
+  instead of inserting a duplicate.
+- **Recommended Android pattern** (optional, additive): generate a UUID per
+  send attempt, keep it until the `message:new` echo (or REST response)
+  confirms persistence, and replay the SAME id on any retry after a dropped
+  connection. Retries then become exactly-once server-side.
+- **REST responses** now include `client_msg_id` (null when the sender sent
+  none). Unknown-field tolerance in Gson makes this safe for old builds.
+- **No protocol changes**: frames, envelopes and endpoints keep the same
+  names, units and semantics as before.

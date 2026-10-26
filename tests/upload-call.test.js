@@ -78,6 +78,50 @@ describe('POST /api/upload', () => {
       .attach('file', Buffer.from('89504e470d0a1a0a', 'hex'), 'y.png');
     expect(res.status).toBe(401);
   });
+
+  it('rejects an EMPTY file with 400 (legacy contract, explicit guard)', async () => {
+    const res = await r.post('/api/upload')
+      .set('Authorization', `Bearer ${token.patient}`)
+      .attach('file', Buffer.alloc(0), 'vid.png');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Fichye a vid');
+  });
+});
+
+describe('classifyStorageError — sanitized storage failure categories', () => {
+  // Local stand-ins for the @vercel/blob error classes: classification keys on
+  // the constructor NAME (stable across versions), never on the message.
+  class BlobAccessError extends Error {}
+  class BlobStoreNotFoundError extends Error {}
+  class BlobClientTokenExpiredError extends Error {}
+  class BlobFileTooLargeError extends Error {}
+  class BlobServiceRateLimited extends Error {}
+  class BlobServiceNotAvailable extends Error {}
+  class BlobRequestAbortedError extends Error {}
+  class BlobError extends Error {}
+
+  it('maps auth/config-class failures to storage_auth 503', async () => {
+    const { classifyStorageError } = await import('../src/uploads.js');
+    expect(classifyStorageError(new BlobAccessError('secret'))).toEqual({ category: 'storage_auth', status: 503 });
+    expect(classifyStorageError(new BlobStoreNotFoundError('store-x'))).toEqual({ category: 'storage_auth', status: 503 });
+    expect(classifyStorageError(new BlobClientTokenExpiredError('t'))).toEqual({ category: 'storage_auth', status: 503 });
+  });
+
+  it('maps size/rate/availability/abort classes to their categories', async () => {
+    const { classifyStorageError } = await import('../src/uploads.js');
+    expect(classifyStorageError(new BlobFileTooLargeError())).toEqual({ category: 'storage_too_large', status: 413 });
+    expect(classifyStorageError(new BlobServiceRateLimited())).toEqual({ category: 'storage_rate_limited', status: 503 });
+    expect(classifyStorageError(new BlobServiceNotAvailable())).toEqual({ category: 'storage_unavailable', status: 503 });
+    expect(classifyStorageError(new BlobRequestAbortedError())).toEqual({ category: 'storage_aborted', status: 400 });
+  });
+
+  it('maps the BASE BlobError (e.g. an unparseable read-write token) to storage_error 503', async () => {
+    const { classifyStorageError } = await import('../src/uploads.js');
+    expect(classifyStorageError(new BlobError('Invalid `BLOB_READ_WRITE_TOKEN`')))
+      .toEqual({ category: 'storage_error', status: 503 });
+    expect(classifyStorageError(new Error('anything else'))).toEqual({ category: 'storage_error', status: 503 });
+    expect(classifyStorageError(null)).toEqual({ category: 'storage_error', status: 503 });
+  });
 });
 
 describe('POST /api/call/token (LiveKit)', () => {
