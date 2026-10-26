@@ -43,33 +43,33 @@ export default function NotificationsPage() {
         if (user.role === "doctor" && !e.patientName) return;
         push({
           icon: "consult",
-          title: user.role === "doctor" ? "Nouvelle demande de consultation" : "Demande envoyée",
+          title: user.role === "doctor" ? "Nouvo demann konsiltasyon" : "Demann lan voye",
           body:
             user.role === "doctor"
-              ? `${e.patientName ?? "Un patient"} — ${e.specialtyNeeded ?? ""} : ${e.description ?? ""}`
-              : `Votre demande (${e.specialtyNeeded ?? ""}) est en attente d'un médecin.`,
+              ? `${e.patientName ?? "Yon pasyan"} — ${e.specialtyNeeded ?? ""} : ${e.description ?? ""}`
+              : `Demann ou a (${e.specialtyNeeded ?? ""}) ap tann yon doktè.`,
           href: `/app/consultations/${encodeURIComponent(e.id)}`,
         });
       } else if (event.type === "consultation:updated") {
         const e = event as { id: string; status?: string; doctor_id?: string | null };
         const labels: Record<string, string> = {
-          EN_COURS: "consultation acceptée — la conversation est ouverte",
-          TERMINE: "consultation clôturée — consultez votre ordonnance",
-          REFUSE: "demande refusée",
+          EN_COURS: "konsiltasyon an aksepte — konvèsasyon an louvri",
+          TERMINE: "konsiltasyon an fini — gade òrdònans ou a",
+          REFUSE: "demann lan refize",
         };
-        const label = e.status ? (labels[e.status] ?? e.status) : "mise à jour";
+        const label = e.status ? (labels[e.status] ?? e.status) : "yon mete ajou";
         push({
           icon: "update",
-          title: "Mise à jour de consultation",
-          body: `Votre ${label}.`,
+          title: "Mete ajou konsiltasyon",
+          body: `Gen ${label}.`,
           href: `/app/consultations/${encodeURIComponent(e.id)}`,
         });
       } else if (event.type === "call:incoming") {
         const e = event as { consultationId: string; fromName?: string; callType?: string };
         push({
           icon: "call",
-          title: `Appel ${e.callType === "video" ? "vidéo" : "vocal"} entrant`,
-          body: `${e.fromName ?? "Votre interlocuteur"} vous appelle. Rejoignez l'appel depuis la conversation.`,
+          title: `Apèl ${e.callType === "video" ? "videyo" : "vwa"} ap antre`,
+          body: `${e.fromName ?? "Lòt moun nan"} ap rele w. Rejwenn apèl la nan konvèsasyon an.`,
           href: `/app/consultations/${encodeURIComponent(e.consultationId)}`,
         });
       }
@@ -84,12 +84,12 @@ export default function NotificationsPage() {
     <div className="stack">
       <div className="flex-between">
         <div>
-          <h1 className="page-title">Notifications</h1>
-          <p className="muted small">Événements de votre session en cours</p>
+          <h1 className="page-title">Notifikasyon</h1>
+          <p className="muted small">Evènman nan sesyon k ap pase kounye a</p>
         </div>
         {notices.length > 0 && (
           <button className="btn btn-secondary btn-sm" onClick={clear}>
-            <Trash2 size={14} aria-hidden /> Effacer
+            <Trash2 size={14} aria-hidden /> Efase
           </button>
         )}
       </div>
@@ -98,8 +98,8 @@ export default function NotificationsPage() {
         <div className="card">
           <EmptyState
             icon={<Bell size={26} />}
-            title="Aucune notification pour le moment"
-            description="Les mises à jour de vos consultations et les appels entrants apparaîtront ici en temps réel."
+            title="Pa gen notifikasyon pou kounye a"
+            description="Mete ajou konsiltasyon ou yo ak apèl k ap antre yo ap parèt isit an tan reyèl."
           />
         </div>
       ) : (
@@ -128,12 +128,11 @@ export default function NotificationsPage() {
       )}
 
       <p className="tiny muted text-center">
-        Les notifications sont éphémères et propres à cet onglet — aucune donnée médicale n&apos;est stockée sur
-        votre appareil. Consultez{" "}
+        Notifikasyon yo tanporè epi yo sèlman pou onglet sa a — pa gen done medikal ki kenbe sou aparèy ou a. Gade{" "}
         <Link href="/app/consultations" className="nowrap">
-          vos consultations
+          konsiltasyon ou yo
         </Link>{" "}
-        pour l&apos;historique complet.
+        pou istwa konplè a.
       </p>
     </div>
   );

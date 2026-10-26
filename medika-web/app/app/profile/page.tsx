@@ -14,7 +14,7 @@ import { useAuth } from "@/lib/auth/context";
 import { updateProfile, uploadFile } from "@/lib/api/endpoints";
 import type { User as UserType } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
-import { genderLabel } from "@/lib/format";
+import { specialtyLabel } from "@/lib/labels";
 import { Avatar, ErrorAlert, Spinner } from "@/components/ui/primitives";
 
 export default function ProfilePage() {
@@ -40,7 +40,7 @@ export default function ProfilePage() {
     setGender(user.gender ?? "Homme");
   }, [user]);
 
-  if (!user || !token) return <Spinner label="Chargement du profil…" />;
+  if (!user || !token) return <Spinner label="N ap chaje pwofil ou..." />;
 
   const isDoctor = user.role === "doctor";
 
@@ -48,12 +48,12 @@ export default function ProfilePage() {
     e.preventDefault();
     if (submitting) return; // anti double-submit
     if (!name.trim()) {
-      setError(new ApiError("validation", 0, "Le nom ne peut pas être vide."));
+      setError(new ApiError("validation", 0, "Non an pa ka vid."));
       return;
     }
     const ageNum = age.trim() === "" ? undefined : Number(age);
     if (ageNum !== undefined && (!Number.isFinite(ageNum) || ageNum < 0 || ageNum > 130)) {
-      setError(new ApiError("validation", 0, "Âge invalide."));
+      setError(new ApiError("validation", 0, "Laj la pa valab."));
       return;
     }
     setSubmitting(true);
@@ -92,7 +92,7 @@ export default function ProfilePage() {
       const fresh = await getProfile(token, controller.signal);
       setUser(fresh);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Envoi de la photo impossible.");
+      setError(err instanceof ApiError ? err.message : "Nou pa t kapab voye foto a.");
     } finally {
       setUploadingAvatar(false);
     }
@@ -101,17 +101,17 @@ export default function ProfilePage() {
   return (
     <div className="stack" style={{ maxWidth: 640, margin: "0 auto" }}>
       <div>
-        <h1 className="page-title">Mon profil</h1>
+        <h1 className="page-title">Pwofil mwen</h1>
         <p className="muted small">
-          {isDoctor ? "Espace médecin" : "Espace patient"} · @{user.username}
+          {isDoctor ? "Espas doktè" : "Espas pasyan"} · @{user.username}
         </p>
       </div>
 
       <div className="card flex" style={{ gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-        <Avatar name={user.name} src={user.avatar_url} size="lg" alt={`Avatar de ${user.name}`} />
+        <Avatar name={user.name} src={user.avatar_url} size="lg" alt={`Foto pwofil ${user.name}`} />
         <div style={{ flex: 1, minWidth: 200 }}>
           <strong style={{ fontSize: "1.05rem" }}>{user.name}</strong>
-          <div className="small muted">{isDoctor ? user.specialty ?? "Médecine générale" : "Patient Medika"}</div>
+          <div className="small muted">{isDoctor ? user.specialty ? specialtyLabel(user.specialty) : "Medsin Jeneral" : "Pasyan Medika"}</div>
           {isDoctor && user.hospital && (
             <div className="tiny muted flex mt-1" style={{ gap: 4 }}>
               <MapPin size={12} aria-hidden /> {user.hospital}
@@ -119,12 +119,12 @@ export default function ProfilePage() {
           )}
           {isDoctor && user.license_number && (
             <div className="tiny muted flex mt-1" style={{ gap: 4 }}>
-              <Award size={12} aria-hidden /> Licence MSPP : {user.license_number}
+              <Award size={12} aria-hidden /> Lisans MSPP: {user.license_number}
             </div>
           )}
         </div>
         <label className="btn btn-secondary btn-sm" style={{ cursor: uploadingAvatar ? "wait" : "pointer" }}>
-          {uploadingAvatar ? "Envoi…" : "Changer la photo"}
+          {uploadingAvatar ? "N ap voye..." : "Chanje foto a"}
           <input
             type="file"
             accept="image/*"
@@ -136,32 +136,31 @@ export default function ProfilePage() {
       </div>
 
       {isDoctor && (
-        <div className="card" aria-label="Informations professionnelles (lecture seule)">
+        <div className="card" aria-label="Enfòmasyon profesyonèl (lekti sèlman)">
           <h2 className="section-title flex" style={{ gap: 8 }}>
-            <Stethoscope size={16} color="var(--green-700)" aria-hidden /> Informations professionnelles
+            <Stethoscope size={16} color="var(--green-700)" aria-hidden /> Enfòmasyon profesyonèl
           </h2>
           <div className="stack small" style={{ gap: 6 }}>
             <p>
-              <strong>Spécialité :</strong> {user.specialty ?? "—"}
+              <strong>Espesyalite:</strong> {user.specialty ? specialtyLabel(user.specialty) : "—"}
             </p>
             <p>
-              <strong>Hôpital :</strong> {user.hospital ?? "—"}
+              <strong>Lopital:</strong> {user.hospital ?? "—"}
             </p>
             <p>
-              <strong>Licence MSPP :</strong> {user.license_number ?? "—"}
+              <strong>Lisans MSPP:</strong> {user.license_number ?? "—"}
             </p>
             <p>
-              <strong>Localisation :</strong> {user.location ?? "—"}
+              <strong>Kote li ye:</strong> {user.location ?? "—"}
             </p>
             {user.biography && (
               <p>
-                <strong>Biographie :</strong> {user.biography}
+                <strong>Biyografi:</strong> {user.biography}
               </p>
             )}
           </div>
           <p className="tiny muted mt-1">
-            Ces informations sont gérées par l&apos;administration Medika. Contactez le support pour toute
-            modification.
+            Administrasyon Medika la jere enfòmasyon sa yo. Kontakte sipò a si w bezwen yon chanjman.
           </p>
         </div>
       )}
@@ -170,7 +169,7 @@ export default function ProfilePage() {
 
       <form onSubmit={onSubmit} className="card stack">
         <div className="field">
-          <label htmlFor="p-name">Nom complet</label>
+          <label htmlFor="p-name">Non konplè</label>
           <input
             id="p-name"
             className="input"
@@ -181,7 +180,7 @@ export default function ProfilePage() {
           />
         </div>
         <div className="field">
-          <label htmlFor="p-email">Email</label>
+          <label htmlFor="p-email">Imèl</label>
           <input
             id="p-email"
             className="input"
@@ -189,12 +188,12 @@ export default function ProfilePage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             maxLength={150}
-            placeholder="vous@exemple.com"
+            placeholder="ou@egzanp.com"
           />
         </div>
         <div className="grid-2">
           <div className="field">
-            <label htmlFor="p-phone">Téléphone</label>
+            <label htmlFor="p-phone">Nimewo telefòn</label>
             <input
               id="p-phone"
               className="input"
@@ -206,7 +205,7 @@ export default function ProfilePage() {
             />
           </div>
           <div className="field">
-            <label htmlFor="p-age">Âge</label>
+            <label htmlFor="p-age">Laj</label>
             <input
               id="p-age"
               className="input"
@@ -215,15 +214,15 @@ export default function ProfilePage() {
               max={130}
               value={age}
               onChange={(e) => setAge(e.target.value)}
-              placeholder="Ex : 28"
+              placeholder="Egzanp: 28"
             />
           </div>
         </div>
         <div className="field">
-          <label htmlFor="p-gender">Genre</label>
+          <label htmlFor="p-gender">Sèks</label>
           <select id="p-gender" className="select" value={gender} onChange={(e) => setGender(e.target.value)}>
-            <option value="Homme">Homme</option>
-            <option value="Femme">Femme</option>
+            <option value="Homme">Gason</option>
+            <option value="Femme">Fi</option>
           </select>
         </div>
 
@@ -231,17 +230,17 @@ export default function ProfilePage() {
           <button className="btn btn-primary" type="submit" disabled={submitting}>
             {submitting ? (
               <>
-                <span className="spin" aria-hidden /> Enregistrement…
+                <span className="spin" aria-hidden /> N ap anrejistre...
               </>
             ) : (
               <>
-                <Save size={15} aria-hidden /> Enregistrer
+                <Save size={15} aria-hidden /> Anrejistre
               </>
             )}
           </button>
           {saved && (
             <span className="badge badge-green flex" style={{ alignSelf: "center", gap: 4 }} role="status">
-              <Check size={12} aria-hidden /> Profil mis à jour
+              <Check size={12} aria-hidden /> Pwofil ou mete ajou
             </span>
           )}
         </div>
@@ -251,10 +250,10 @@ export default function ProfilePage() {
         <div className="flex-between">
           <div>
             <strong className="flex" style={{ gap: 8 }}>
-              <User size={16} color="var(--green-700)" aria-hidden /> Session
+              <User size={16} color="var(--green-700)" aria-hidden /> Sesyon
             </strong>
             <p className="tiny muted mt-1">
-              Votre session est conservée dans cet onglet uniquement — fermé l&apos;onglet vous déconnecte.
+              Sesyon ou a rete nan onglet sa a sèlman — si w fèmen l, w ap dekonekte.
             </p>
           </div>
           <button
@@ -264,7 +263,7 @@ export default function ProfilePage() {
               router.replace("/login");
             }}
           >
-            Se déconnecter
+            Dekonekte
           </button>
         </div>
       </div>

@@ -15,7 +15,7 @@ import { ApiError } from "@/lib/api/client";
 import { EmptyState, ErrorAlert, SkeletonRows } from "@/components/ui/primitives";
 
 function ticketTitle(t: Ticket): string {
-  return String(t.subject ?? t.title ?? `Demande #${t.id}`);
+  return String(t.subject ?? t.title ?? `Demann #${t.id}`);
 }
 
 function ticketDate(t: Ticket): string {
@@ -28,7 +28,7 @@ function ticketDate(t: Ticket): string {
 function ticketPreview(t: Ticket): string {
   const last = t.last_message;
   if (typeof last === "string") return last;
-  return "Ouvrez la conversation pour voir les messages.";
+  return "Ouvri konvèsasyon an pou w gade mesaj yo.";
 }
 
 export default function TicketsPage() {
@@ -67,7 +67,7 @@ export default function TicketsPage() {
     e.preventDefault();
     if (!token || submitting) return;
     if (!subject.trim()) {
-      setFormError(new ApiError("validation", 0, "Indiquez l'objet de votre demande."));
+      setFormError(new ApiError("validation", 0, "Tanpri, presize sujeta demann ou a."));
       return;
     }
     setSubmitting(true);
@@ -91,11 +91,11 @@ export default function TicketsPage() {
     <div className="stack">
       <div className="flex-between">
         <div>
-          <h1 className="page-title">Assistance</h1>
-          <p className="muted small">Le service client Medika répond à vos demandes</p>
+          <h1 className="page-title">Èd</h1>
+          <p className="muted small">Sèvis kliyan Medika ap reponn demann ou yo</p>
         </div>
         <button className="btn btn-primary btn-sm" onClick={() => setCreating(true)}>
-          <Plus size={15} aria-hidden /> Nouvelle demande
+          <Plus size={15} aria-hidden /> Nouvo demann
         </button>
       </div>
 
@@ -106,11 +106,11 @@ export default function TicketsPage() {
         <div className="card">
           <EmptyState
             icon={<LifeBuoy size={26} />}
-            title="Aucune demande d'assistance"
-            description="Un problème de paiement, de connexion ou de consultation ? Créez une demande, l'équipe Medika vous répondra."
+            title="Pa gen demann èd"
+            description="Yon pwoblèm ak peman, koneksyon oswa konsiltasyon? Kreye yon demann, ekip Medika a ap reponn w."
             action={
               <button className="btn btn-primary" onClick={() => setCreating(true)}>
-                Créer une demande
+                Kreye yon demann
               </button>
             }
           />
@@ -140,38 +140,38 @@ export default function TicketsPage() {
       {creating && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={() => setCreating(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2 className="modal-title">Nouvelle demande d&apos;assistance</h2>
+            <h2 className="modal-title">Nouvo demann èd</h2>
             <ErrorAlert error={formError} />
             <form onSubmit={onCreate}>
               <div className="field">
-                <label htmlFor="ticket-subject">Objet</label>
+                <label htmlFor="ticket-subject">Sujeta</label>
                 <input
                   id="ticket-subject"
                   className="input"
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
-                  placeholder="Ex : Problème de paiement MonCash"
+                  placeholder="Egzanp: Pwoblèm ak peman MonCash"
                   maxLength={200}
                   required
                 />
               </div>
               <div className="field">
-                <label htmlFor="ticket-message">Décrivez votre problème</label>
+                <label htmlFor="ticket-message">Deskribe pwoblèm ou a</label>
                 <textarea
                   id="ticket-message"
                   className="textarea"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Détaillez votre situation pour nous aider à résoudre rapidement…"
+                  placeholder="Ba nou detay sou sitiyasyon ou a pou n ka ede w byen vit..."
                   maxLength={4000}
                 />
               </div>
               <div className="modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={() => setCreating(false)} disabled={submitting}>
-                  Annuler
+                  Anile
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={submitting}>
-                  {submitting ? "Envoi…" : "Envoyer"}
+                  {submitting ? "N ap voye..." : "Voye"}
                 </button>
               </div>
             </form>

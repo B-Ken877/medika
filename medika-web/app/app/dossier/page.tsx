@@ -28,6 +28,7 @@ import { getMedicalHistory, updateMedicalHistory } from "@/lib/api/endpoints";
 import type { AllergyItem, ChronicConditionItem, MedicationItem, MedicalHistory } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
 import { formatDateTime } from "@/lib/format";
+import { specialtyLabel } from "@/lib/labels";
 import { EmptyState, ErrorAlert, Spinner } from "@/components/ui/primitives";
 
 export default function DossierPage() {
@@ -96,15 +97,15 @@ export default function DossierPage() {
   if (isDoctor) {
     return (
       <div className="card" style={{ maxWidth: 480, margin: "40px auto" }}>
-        <ErrorAlert error={new ApiError("forbidden", 403, "Le dossier médical est réservé au patient concerné.")} />
+        <ErrorAlert error={new ApiError("forbidden", 403, "Dosisye medikal la rezève pou pasyan ki enpe yo.")} />
         <Link href="/app" className="btn btn-secondary btn-block">
-          Retour à l&apos;accueil
+          Retounen sou tablo travay la
         </Link>
       </div>
     );
   }
 
-  if (!loaded) return <Spinner label="Chargement de votre dossier…" />;
+  if (!loaded) return <Spinner label="N ap chaje dosisye ou a..." />;
 
   if (error && !history) {
     return (
@@ -131,10 +132,10 @@ export default function DossierPage() {
       </button>
 
       <div>
-        <h1 className="page-title">Mon dossier médical</h1>
+        <h1 className="page-title">Dosisye medikal mwen</h1>
         <p className="muted small">
           {history?.patient_name ?? user?.name}
-          {history?.last_updated ? ` · Mis à jour le ${formatDateTime(history.last_updated)}` : ""}
+          {history?.last_updated ? ` · Mete ajou ${formatDateTime(history.last_updated)}` : ""}
         </p>
       </div>
 
@@ -144,7 +145,7 @@ export default function DossierPage() {
         <div className="alert alert-error" role="alert">
           <AlertTriangle size={17} aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
           <div>
-            <strong>Allergies signalées :</strong>{" "}
+            <strong>Alèji siyale:</strong>{" "}
             {allergies.map((a) => [a.name, a.severity].filter(Boolean).join(" (") + (a.severity ? ")" : "")).join(", ")}
           </div>
         </div>
@@ -152,37 +153,37 @@ export default function DossierPage() {
 
       <div className="grid-2">
         {/* Basic info */}
-        <section className="card" aria-label="Informations de base">
+        <section className="card" aria-label="Enfòmasyon de baz">
           <h2 className="section-title flex" style={{ gap: 8 }}>
-            <UserRound size={17} color="var(--green-700)" aria-hidden /> Informations de base
+            <UserRound size={17} color="var(--green-700)" aria-hidden /> Enfòmasyon de baz
           </h2>
           {history?.basic_info?.bloodType || history?.basic_info?.weight || history?.basic_info?.height ? (
             <div className="stack" style={{ gap: 6 }}>
               {history?.basic_info?.bloodType && (
                 <p className="small">
-                  <strong>Groupe sanguin :</strong> {history.basic_info.bloodType}
+                  <strong>Gwoup san:</strong> {history.basic_info.bloodType}
                 </p>
               )}
               {history?.basic_info?.weight != null && (
                 <p className="small">
-                  <strong>Poids :</strong> {history.basic_info.weight} kg
+                  <strong>Pwa:</strong> {history.basic_info.weight} kg
                 </p>
               )}
               {history?.basic_info?.height != null && (
                 <p className="small">
-                  <strong>Taille :</strong> {history.basic_info.height} cm
+                  <strong>Wotè:</strong> {history.basic_info.height} cm
                 </p>
               )}
             </div>
           ) : (
-            <p className="muted small">Aucune information de base enregistrée.</p>
+            <p className="muted small">Pa gen enfòmasyon de baz ki anrejistre.</p>
           )}
         </section>
 
         {/* Emergency contact */}
-        <section className="card" aria-label="Contact d'urgence">
+        <section className="card" aria-label="Kontakt ijans">
           <h2 className="section-title flex" style={{ gap: 8 }}>
-            <Shield size={17} color="var(--green-700)" aria-hidden /> Contact d&apos;urgence
+            <Shield size={17} color="var(--green-700)" aria-hidden /> Kontakt ijans
           </h2>
           {emergency?.name ? (
             <div className="stack" style={{ gap: 6 }}>
@@ -193,30 +194,30 @@ export default function DossierPage() {
               {emergency.phone && <p className="small muted">{emergency.phone}</p>}
             </div>
           ) : (
-            <p className="muted small">Aucun contact d&apos;urgence enregistré.</p>
+            <p className="muted small">Pa gen kontakt ijans ki anrejistre.</p>
           )}
         </section>
       </div>
 
       {/* Allergies */}
-      <section className="card" aria-label="Allergies">
+      <section className="card" aria-label="Alèji">
         <div className="flex-between mb-1">
           <h2 className="section-title flex" style={{ gap: 8, marginBottom: 0 }}>
-            <AlertTriangle size={17} color="var(--danger)" aria-hidden /> Allergies ({allergies.length})
+            <AlertTriangle size={17} color="var(--danger)" aria-hidden /> Alèji ({allergies.length})
           </h2>
           <button className="btn btn-secondary btn-sm" onClick={() => openEditor("allergies")}>
-            <Plus size={13} aria-hidden /> Gérer
+            <Plus size={13} aria-hidden /> Jere
           </button>
         </div>
         {allergies.length === 0 ? (
-          <p className="muted small">Aucune allergie connue.</p>
+          <p className="muted small">Pa gen alèji ki konnen.</p>
         ) : (
           <ul className="stack small" style={{ listStyle: "none", gap: 6 }}>
             {allergies.map((a, i) => (
               <li key={i}>
                 <strong>{a.name || "—"}</strong>
-                {a.severity ? ` · Gravité : ${a.severity}` : ""}
-                {a.reaction ? ` · Réaction : ${a.reaction}` : ""}
+                {a.severity ? ` · Degre: ${a.severity}` : ""}
+                {a.reaction ? ` · Reaksyon: ${a.reaction}` : ""}
               </li>
             ))}
           </ul>
@@ -224,25 +225,25 @@ export default function DossierPage() {
       </section>
 
       {/* Chronic conditions */}
-      <section className="card" aria-label="Conditions chroniques">
+      <section className="card" aria-label="Maladi kwonik">
         <div className="flex-between mb-1">
           <h2 className="section-title flex" style={{ gap: 8, marginBottom: 0 }}>
-            <HeartPulse size={17} color="var(--danger)" aria-hidden /> Conditions chroniques ({conditions.length})
+            <HeartPulse size={17} color="var(--danger)" aria-hidden /> Maladi kwonik ({conditions.length})
           </h2>
           <button className="btn btn-secondary btn-sm" onClick={() => openEditor("conditions")}>
-            <Plus size={13} aria-hidden /> Gérer
+            <Plus size={13} aria-hidden /> Jere
           </button>
         </div>
         {conditions.length === 0 ? (
-          <p className="muted small">Aucune condition chronique enregistrée.</p>
+          <p className="muted small">Pa gen maladi kwonik ki anrejistre.</p>
         ) : (
           <ul className="stack small" style={{ listStyle: "none", gap: 6 }}>
             {conditions.map((c, i) => (
               <li key={i}>
                 <strong>{c.name || "—"}</strong>
                 {c.status ? ` · ${c.status}` : ""}
-                {c.diagnosed_at ? ` · Diagnostiqué : ${c.diagnosed_at}` : ""}
-                {c.source === "doctor_notes" ? " · (issue des notes du médecin)" : ""}
+                {c.diagnosed_at ? ` · Dyagnostike: ${c.diagnosed_at}` : ""}
+                {c.source === "doctor_notes" ? " · (ki soti nan nòt doktè a)" : ""}
               </li>
             ))}
           </ul>
@@ -250,25 +251,25 @@ export default function DossierPage() {
       </section>
 
       {/* Medications */}
-      <section className="card" aria-label="Médications actuelles">
+      <section className="card" aria-label="Medikaman k ap pran kounye a">
         <div className="flex-between mb-1">
           <h2 className="section-title flex" style={{ gap: 8, marginBottom: 0 }}>
-            <Pill size={17} color="var(--green-700)" aria-hidden /> Médications actuelles ({medications.length})
+            <Pill size={17} color="var(--green-700)" aria-hidden /> Medikaman k ap pran kounye a ({medications.length})
           </h2>
           <button className="btn btn-secondary btn-sm" onClick={() => openEditor("medications")}>
-            <Plus size={13} aria-hidden /> Gérer
+            <Plus size={13} aria-hidden /> Jere
           </button>
         </div>
         {medications.length === 0 ? (
-          <p className="muted small">Aucune médication en cours.</p>
+          <p className="muted small">Pa gen medikaman k ap pran kounye a.</p>
         ) : (
           <ul className="stack small" style={{ listStyle: "none", gap: 6 }}>
             {medications.map((m, i) => (
               <li key={i}>
                 <strong>{m.name || "—"}</strong>
                 {m.dosage ? ` · ${m.dosage}` : ""}
-                {m.since ? ` · Depuis ${m.since}` : ""}
-                {m.source === "doctor_notes" ? " · (prescrite par votre médecin)" : ""}
+                {m.since ? ` · Depi ${m.since}` : ""}
+                {m.source === "doctor_notes" ? " · (doktè w la preskri l)" : ""}
               </li>
             ))}
           </ul>
@@ -276,19 +277,19 @@ export default function DossierPage() {
       </section>
 
       {/* Vaccinations */}
-      <section className="card" aria-label="Vaccinations">
+      <section className="card" aria-label="Vaksen">
         <h2 className="section-title flex" style={{ gap: 8 }}>
-          <Syringe size={17} color="var(--info)" aria-hidden /> Vaccinations ({vaccinations.length})
+          <Syringe size={17} color="var(--info)" aria-hidden /> Vaksen ({vaccinations.length})
         </h2>
         {vaccinations.length === 0 ? (
-          <p className="muted small">Aucune vaccination enregistrée.</p>
+          <p className="muted small">Pa gen vaksen ki anrejistre.</p>
         ) : (
           <ul className="stack small" style={{ listStyle: "none", gap: 6 }}>
             {vaccinations.map((v, i) => (
               <li key={i}>
                 <strong>{v.name || "—"}</strong>
                 {v.date ? ` · ${v.date}` : ""}
-                {v.doseNumber != null ? ` · Dose n° ${v.doseNumber}` : ""}
+                {v.doseNumber != null ? ` · Dòz nimewo ${v.doseNumber}` : ""}
               </li>
             ))}
           </ul>
@@ -296,31 +297,31 @@ export default function DossierPage() {
       </section>
 
       {/* Consultation timeline */}
-      <section className="card" aria-label="Historique des consultations">
+      <section className="card" aria-label="Istwa konsiltasyon yo">
         <h2 className="section-title flex" style={{ gap: 8 }}>
-          <History size={17} color="var(--green-700)" aria-hidden /> Historique des consultations
+          <History size={17} color="var(--green-700)" aria-hidden /> Istwa konsiltasyon
         </h2>
         {timeline.length === 0 ? (
           <EmptyState
             icon={<Activity size={24} />}
-            title="Aucun historique"
-            description="Votre historique se remplira automatiquement après vos consultations."
+            title="Pa gen istwa"
+            description="Istwa ou a ap ranpli otomatikman apre konsiltasyon ou yo."
           />
         ) : (
           <ol className="stack" style={{ listStyle: "none" }}>
             {timeline.map((t, i) => (
               <li key={i} className="card" style={{ padding: 12, boxShadow: "none" }}>
                 <div className="flex-between">
-                  <strong className="small">{t.doctor_name || "Médecin"}</strong>
+                  <strong className="small">{t.doctor_name || "Doktè"}</strong>
                   <span className="tiny muted">{t.date ?? ""}</span>
                 </div>
                 <p className="small muted" style={{ marginTop: 2 }}>
-                  {t.specialty}
+                  {specialtyLabel(t.specialty)}
                   {t.diagnosis ? ` · ${t.diagnosis}` : ""}
                 </p>
                 {t.summary && <p className="small" style={{ marginTop: 4 }}>{t.summary}</p>}
                 {t.prescriptions.length > 0 && (
-                  <p className="tiny muted mt-1">Prescriptions : {t.prescriptions.join(", ")}</p>
+                  <p className="tiny muted mt-1">Òrdònans: {t.prescriptions.join(", ")}</p>
                 )}
               </li>
             ))}
@@ -333,11 +334,10 @@ export default function DossierPage() {
         <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={() => setEditing(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
             <h2 className="modal-title">
-              {editing === "allergies" ? "Allergies" : editing === "conditions" ? "Conditions chroniques" : "Médications"}
+              {editing === "allergies" ? "Alèji" : editing === "conditions" ? "Maladi kwonik" : "Medikaman"}
             </h2>
             <p className="modal-body">
-              Ajoutez ou retirez des entrées. Les entrées issues des notes de vos médecins sont marquées
-              « prescrite par votre médecin ».
+              Ajoute oswa retire antre yo. Antre ki soti nan nòt doktè ou yo make “doktè w la preskri l”.
             </p>
 
             <div className="stack">
@@ -350,8 +350,8 @@ export default function DossierPage() {
                       onChange={(e) =>
                         setDraftAllergies(draftAllergies.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))
                       }
-                      placeholder="Allergène (ex : Pénicilline)"
-                      aria-label={`Allergène ${i + 1}`}
+                      placeholder="Sa w alèjik ak li (egzanp: Penisilin)"
+                      aria-label={`Sa w alèjik ak li ${i + 1}`}
                     />
                     <input
                       className="input"
@@ -359,8 +359,8 @@ export default function DossierPage() {
                       onChange={(e) =>
                         setDraftAllergies(draftAllergies.map((x, j) => (j === i ? { ...x, severity: e.target.value } : x)))
                       }
-                      placeholder="Gravité (ex : sévère)"
-                      aria-label={`Gravité ${i + 1}`}
+                      placeholder="Degre (egzanp: grav)"
+                      aria-label={`Degre ${i + 1}`}
                     />
                     <input
                       className="input"
@@ -368,10 +368,10 @@ export default function DossierPage() {
                       onChange={(e) =>
                         setDraftAllergies(draftAllergies.map((x, j) => (j === i ? { ...x, reaction: e.target.value } : x)))
                       }
-                      placeholder="Réaction (ex : urticaire)"
-                      aria-label={`Réaction ${i + 1}`}
+                      placeholder="Reaksyon (egzanp: blotè sou po)"
+                      aria-label={`Reaksyon ${i + 1}`}
                     />
-                    <RemoveBtn onRemove={() => setDraftAllergies(draftAllergies.filter((_, j) => j !== i))} label={`Retirer l'allergie ${i + 1}`} />
+                    <RemoveBtn onRemove={() => setDraftAllergies(draftAllergies.filter((_, j) => j !== i))} label={`Retire alèji ${i + 1}`} />
                   </EditableRow>
                 ))}
               {editing === "allergies" && (
@@ -379,7 +379,7 @@ export default function DossierPage() {
                   onAdd={() =>
                     setDraftAllergies([...draftAllergies, { name: "", severity: "", reaction: "", notedAt: null }])
                   }
-                  label="Ajouter une allergie"
+                  label="Ajoute yon alèji"
                 />
               )}
 
@@ -392,8 +392,8 @@ export default function DossierPage() {
                       onChange={(e) =>
                         setDraftConditions(draftConditions.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))
                       }
-                      placeholder="Condition (ex : Hypertension)"
-                      aria-label={`Condition ${i + 1}`}
+                      placeholder="Maladi (egzanp: Tansyon wo)"
+                      aria-label={`Maladi ${i + 1}`}
                     />
                     <input
                       className="input"
@@ -401,10 +401,10 @@ export default function DossierPage() {
                       onChange={(e) =>
                         setDraftConditions(draftConditions.map((x, j) => (j === i ? { ...x, status: e.target.value } : x)))
                       }
-                      placeholder="Statut (ex : contrôlée)"
-                      aria-label={`Statut ${i + 1}`}
+                      placeholder="Estati (egzanp: kontwole)"
+                      aria-label={`Estati ${i + 1}`}
                     />
-                    <RemoveBtn onRemove={() => setDraftConditions(draftConditions.filter((_, j) => j !== i))} label={`Retirer la condition ${i + 1}`} />
+                    <RemoveBtn onRemove={() => setDraftConditions(draftConditions.filter((_, j) => j !== i))} label={`Retire maladi a ${i + 1}`} />
                   </EditableRow>
                 ))}
               {editing === "conditions" && (
@@ -415,7 +415,7 @@ export default function DossierPage() {
                       { name: "", status: "", notes: "", diagnosed_at: null, source: "patient" },
                     ])
                   }
-                  label="Ajouter une condition"
+                  label="Ajoute yon maladi"
                 />
               )}
 
@@ -428,8 +428,8 @@ export default function DossierPage() {
                       onChange={(e) =>
                         setDraftMedications(draftMedications.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))
                       }
-                      placeholder="Médicament (ex : Paracétamol)"
-                      aria-label={`Médicament ${i + 1}`}
+                      placeholder="Medikaman (egzanp: Parasetamol)"
+                      aria-label={`Medikaman ${i + 1}`}
                     />
                     <input
                       className="input"
@@ -437,10 +437,10 @@ export default function DossierPage() {
                       onChange={(e) =>
                         setDraftMedications(draftMedications.map((x, j) => (j === i ? { ...x, dosage: e.target.value } : x)))
                       }
-                      placeholder="Dosage (ex : 500 mg)"
-                      aria-label={`Dosage ${i + 1}`}
+                      placeholder="Dòz (egzanp: 500 mg)"
+                      aria-label={`Dòz ${i + 1}`}
                     />
-                    <RemoveBtn onRemove={() => setDraftMedications(draftMedications.filter((_, j) => j !== i))} label={`Retirer la médication ${i + 1}`} />
+                    <RemoveBtn onRemove={() => setDraftMedications(draftMedications.filter((_, j) => j !== i))} label={`Retire medikaman an ${i + 1}`} />
                   </EditableRow>
                 ))}
               {editing === "medications" && (
@@ -451,17 +451,17 @@ export default function DossierPage() {
                       { name: "", dosage: "", since: null, prescribed_by: null, source: "patient" },
                     ])
                   }
-                  label="Ajouter une médication"
+                  label="Ajoute yon medikaman"
                 />
               )}
             </div>
 
             <div className="modal-actions mt-2">
               <button className="btn btn-secondary" onClick={() => setEditing(null)} disabled={saving}>
-                Annuler
+                Anile
               </button>
               <button className="btn btn-primary" onClick={saveEditor} disabled={saving}>
-                {saving ? "Enregistrement…" : "Enregistrer"}
+                {saving ? "N ap anrejistre..." : "Anrejistre"}
               </button>
             </div>
           </div>
@@ -490,7 +490,7 @@ function AddBtn({ onAdd, label }: { onAdd: () => void; label: string }) {
 function RemoveBtn({ onRemove, label }: { onRemove: () => void; label: string }) {
   return (
     <button type="button" className="btn btn-outline-danger btn-sm" style={{ alignSelf: "flex-start" }} onClick={onRemove} aria-label={label}>
-      <Trash2 size={13} aria-hidden /> Retirer
+      <Trash2 size={13} aria-hidden /> Retire
     </button>
   );
 }

@@ -31,7 +31,7 @@ export function PrescriptionModal({
     if (!token || submitting) return; // anti double-submit
     const value = text.trim();
     if (!value) {
-      setError(new ApiError("validation", 0, "L'ordonnance ne peut pas être vide."));
+      setError(new ApiError("validation", 0, "Òrdònans lan pa ka vid."));
       return;
     }
     setSubmitting(true);
@@ -49,38 +49,37 @@ export function PrescriptionModal({
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="rx-title" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h2 className="modal-title" id="rx-title">
-          Ordonnance
+          Òrdònans
         </h2>
         <p className="modal-body">
-          Rédigez l&apos;ordonnance pour {consultation.patient_name}. Enregistrer l&apos;ordonnance clôture la
-          consultation — cette action est irréversible.
+          Ekri òrdònans lan pou {consultation.patient_name}. Lè w anrejistre l, konsiltasyon an ap fèmen — aksyon sa a definitif.
         </p>
         <ErrorAlert error={error} />
         <form onSubmit={onSubmit}>
           <div className="field">
-            <label htmlFor="rx-text">Contenu de l&apos;ordonnance</label>
+            <label htmlFor="rx-text">Sa ki nan òrdònans lan</label>
             <textarea
               id="rx-text"
               className="textarea"
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder={"Ex :\n— Paracétamol 500 mg : 1 comprimé 3×/jour pendant 5 jours\n— Repos et hydratation abondante"}
+              placeholder={"Egzanp:\n— Parasetamol 500 mg: 1 tablete 3 fwa pa jou pandan 5 jou\n— Repo epi bwè anpil dlo"}
               maxLength={4000}
               required
             />
           </div>
           <div className="modal-actions">
             <button type="button" className="btn btn-secondary" onClick={onClose} disabled={submitting}>
-              Annuler
+              Anile
             </button>
             <button type="submit" className="btn btn-primary" disabled={submitting}>
               {submitting ? (
                 <>
-                  <span className="spin" aria-hidden /> Enregistrement…
+                  <span className="spin" aria-hidden /> N ap anrejistre...
                 </>
               ) : (
                 <>
-                  <ClipboardList size={15} aria-hidden /> Enregistrer et clôturer
+                  <ClipboardList size={15} aria-hidden /> Anrejistre epi fèmen
                 </>
               )}
             </button>

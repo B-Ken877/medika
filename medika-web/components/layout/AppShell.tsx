@@ -18,17 +18,17 @@ import { Avatar, Spinner } from "@/components/ui/primitives";
 function navItems(role: "patient" | "doctor") {
   if (role === "doctor") {
     return [
-      { href: "/app", label: "Accueil", icon: Home, exact: true },
-      { href: "/app/consultations", label: "Consultations", icon: CalendarDays },
-      { href: "/app/notifications", label: "Notifications", icon: Bell },
-      { href: "/app/profile", label: "Profil", icon: User },
+      { href: "/app", label: "Akèy", icon: Home, exact: true },
+      { href: "/app/consultations", label: "Konsiltasyon yo", icon: CalendarDays },
+      { href: "/app/notifications", label: "Notifikasyon", icon: Bell },
+      { href: "/app/profile", label: "Pwofil mwen", icon: User },
     ];
   }
   return [
-    { href: "/app", label: "Accueil", icon: Home, exact: true },
-    { href: "/app/doctors", label: "Médecins", icon: Stethoscope },
-    { href: "/app/consultations", label: "Consultations", icon: CalendarDays },
-    { href: "/app/profile", label: "Profil", icon: User },
+    { href: "/app", label: "Akèy", icon: Home, exact: true },
+    { href: "/app/doctors", label: "Doktè yo", icon: Stethoscope },
+    { href: "/app/consultations", label: "Konsiltasyon yo", icon: CalendarDays },
+    { href: "/app/profile", label: "Pwofil mwen", icon: User },
   ];
 }
 
@@ -63,22 +63,22 @@ function AccountMenu() {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="Menu du compte"
+        aria-label="Meni kont la"
       >
-        <Avatar name={user.name} src={user.avatar_url} size="sm" alt={`Avatar de ${user.name}`} />
+        <Avatar name={user.name} src={user.avatar_url} size="sm" alt={`Foto pwofil ${user.name}`} />
         <span className="acct-name">{user.name}</span>
         <ChevronDown size={14} aria-hidden />
       </button>
       {open && (
-        <div className="acct-menu" role="menu" aria-label="Compte">
+        <div className="acct-menu" role="menu" aria-label="Kont">
           <div className="acct-menu-head">
             <div className="acct-menu-name">{user.name}</div>
             <div className="acct-menu-role">
-              {user.role === "doctor" ? "Médecin" : user.role === "admin" ? "Administrateur" : "Patient"}
+              {user.role === "doctor" ? "Doktè" : user.role === "admin" ? "Administratè" : "Pasyan"}
             </div>
           </div>
           <Link href="/app/profile" role="menuitem" onClick={() => setOpen(false)}>
-            <User size={16} aria-hidden /> Mon profil
+            <User size={16} aria-hidden /> Pwofil mwen
           </Link>
           <button
             role="menuitem"
@@ -89,7 +89,7 @@ function AccountMenu() {
               router.replace("/login");
             }}
           >
-            <LogOut size={16} aria-hidden /> Déconnexion
+            <LogOut size={16} aria-hidden /> Dekonekte
           </button>
         </div>
       )}
@@ -112,7 +112,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (status !== "authenticated" || !user) {
     return (
       <div style={{ minHeight: "100dvh", display: "grid", placeItems: "center" }}>
-        <Spinner label="Restauration de votre session…" />
+        <Spinner label="N ap restore sesyon ou a..." />
       </div>
     );
   }
@@ -125,7 +125,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className={`app-shell${isConsultationChat ? " chat-mode" : ""}`}>
       <header className="app-header">
-        <Link href="/app" className="brand" aria-label="Medika — Accueil">
+        <Link href="/app" className="brand" aria-label="Medika — Akèy">
           <span className="brand-mark" aria-hidden>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
               <path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6V3z" fill="currentColor" />
@@ -134,16 +134,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           <span className="brand-word">Medika</span>
         </Link>
         {wsStatus !== "open" && !onCallPage && (
-          <span className="badge badge-gray" title="Reconnexion en cours">
-            Hors ligne
+          <span className="badge badge-gray" title="N ap rekonekte...">
+            Pa gen koneksyon
           </span>
         )}
         <div className="header-actions">
           <Link
             href="/app/notifications"
             className="icon-btn"
-            aria-label="Notifications"
-            title="Notifications"
+            aria-label="Notifikasyon"
+            title="Notifikasyon"
           >
             <Bell size={20} />
           </Link>
@@ -153,7 +153,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <main className="app-main">{children}</main>
 
-      <nav className="bottom-nav" aria-label="Navigation principale">
+      <nav className="bottom-nav" aria-label="Navigasyon prensipal">
         {items.map(({ href, label, icon: Icon, exact }) => {
           const active = exact ? pathname === href : pathname?.startsWith(href) && href !== "/app";
           return (

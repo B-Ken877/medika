@@ -21,6 +21,7 @@ import {
 } from "@/lib/api/endpoints";
 import type { Consultation } from "@/lib/api/types";
 import { formatDateTime, relativeTime } from "@/lib/format";
+import { specialtyLabel, urgencyLabel } from "@/lib/labels";
 import { ApiError } from "@/lib/api/client";
 import { Avatar, EmptyState, ErrorAlert, SkeletonRows, StatusBadge } from "@/components/ui/primitives";
 
@@ -74,7 +75,7 @@ export default function DoctorDashboard() {
     return socket.onEvent((event) => {
       if (event.type === "consultation:new" && !available) return;
       if (event.type === "consultation:new") {
-        showToast(`Nouvelle demande : ${String((event as { patientName?: string }).patientName ?? "patient")}`);
+        showToast(`Nouvo demann: ${String((event as { patientName?: string }).patientName ?? "pasyan")}`);
         load();
       } else if (event.type === "consultation:updated") {
         load();
@@ -103,7 +104,7 @@ export default function DoctorDashboard() {
       await updateAvailability(token, next);
       setAvailable(next);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Impossible de changer votre statut. Réessayez.");
+      showToast(err instanceof ApiError ? err.message : "Nou pa t kapab chanje estati ou a. Tanpri, eseye ankò.");
     } finally {
       setAvailabilityBusy(false);
     }
@@ -114,11 +115,11 @@ export default function DoctorDashboard() {
     setBusyId(id);
     try {
       await acceptConsultation(token, id);
-      showToast("Consultation acceptée.");
+      showToast("Konsiltasyon an aksepte.");
       router.push(`/app/consultations/${encodeURIComponent(id)}`);
     } catch (err) {
       // 404/409 → someone else took it or it changed; refresh the list.
-      showToast(err instanceof ApiError ? err.message : "Action impossible. La liste est rafraîchie.");
+      showToast(err instanceof ApiError ? err.message : "Aksyon an pa t posib. Nou ap refrèchi lis la.");
       load();
     } finally {
       setBusyId(null);
@@ -130,10 +131,10 @@ export default function DoctorDashboard() {
     setBusyId(id);
     try {
       await rejectConsultation(token, id);
-      showToast("Demande refusée.");
+      showToast("Demann lan refize.");
       load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Action impossible. La liste est rafraîchie.");
+      showToast(err instanceof ApiError ? err.message : "Aksyon an pa t posib. Nou ap refrèchi lis la.");
       load();
     } finally {
       setBusyId(null);
@@ -153,11 +154,11 @@ export default function DoctorDashboard() {
       {/* Page heading + availability control */}
       <div className="page-head">
         <div>
-          <h1 className="page-title">Espace médecin</h1>
-          <p className="page-desc">Gérez vos demandes et suivez vos consultations.</p>
+          <h1 className="page-title">Espas doktè a</h1>
+          <p className="page-desc">Jere demann pasyan yo epi swiv konsiltasyon ou yo.</p>
         </div>
         <div className="page-head-actions">
-          <div className={`avail ${available ? "on" : "off"}`} aria-label="Disponibilité">
+          <div className={`avail ${available ? "on" : "off"}`} aria-label="Disponibilite">
             <button
               type="button"
               role="switch"
@@ -165,32 +166,32 @@ export default function DoctorDashboard() {
               aria-checked={available}
               onClick={toggleAvailability}
               disabled={availabilityBusy}
-              aria-label={available ? "Vous êtes disponible" : "Vous êtes indisponible"}
+              aria-label={available ? "Ou disponib" : "Ou pa disponib"}
             />
             <span className="avail-label">
-              {availabilityBusy ? "Mise à jour…" : available ? "Disponible" : "Indisponible"}
+              {availabilityBusy ? "N ap mete ajou..." : available ? "Disponib" : "Pa disponib"}
             </span>
           </div>
         </div>
       </div>
 
       {/* Queue summary (real counts) */}
-      <div className="stat-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }} role="group" aria-label="Résumé de la file">
+      <div className="stat-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }} role="group" aria-label="Rezime demann yo">
         <div className="stat-card">
           <div className="stat-label">
-            <span className="stat-dot yellow" aria-hidden /> En attente
+            <span className="stat-dot yellow" aria-hidden /> An atant
           </div>
           <div className="stat-value" style={{ fontSize: 26 }}>{buckets.queue.length}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">
-            <span className="stat-dot green" aria-hidden /> En cours
+            <span className="stat-dot green" aria-hidden /> K ap dewoule
           </div>
           <div className="stat-value" style={{ fontSize: 26 }}>{buckets.active.length}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">
-            <span className="stat-dot blue" aria-hidden /> Terminées
+            <span className="stat-dot blue" aria-hidden /> Fini
           </div>
           <div className="stat-value" style={{ fontSize: 26 }}>{buckets.done.length}</div>
         </div>
@@ -200,23 +201,23 @@ export default function DoctorDashboard() {
       <section className="panel" aria-labelledby="queue-title">
         <div className="panel-head">
           <h2 id="queue-title" className="panel-title">
-            Demandes de consultation
+            Demann pasyan yo
           </h2>
           <div className="panel-tools">
             <button className="btn btn-secondary btn-sm" onClick={load} disabled={consultations === null}>
-              <RefreshCw size={14} aria-hidden /> Actualiser
+              <RefreshCw size={14} aria-hidden /> Refrèchi
             </button>
           </div>
         </div>
 
-        <div className="tabs" role="tablist" aria-label="Filtres de consultations">
+        <div className="tabs" role="tablist" aria-label="Filtè konsiltasyon yo">
           <button
             role="tab"
             aria-selected={tab === "queue"}
             className={tab === "queue" ? "active" : ""}
             onClick={() => setTab("queue")}
           >
-            En attente <span className="count">{buckets.queue.length}</span>
+            An atant <span className="count">{buckets.queue.length}</span>
           </button>
           <button
             role="tab"
@@ -224,7 +225,7 @@ export default function DoctorDashboard() {
             className={tab === "active" ? "active" : ""}
             onClick={() => setTab("active")}
           >
-            En cours <span className="count">{buckets.active.length}</span>
+            K ap dewoule <span className="count">{buckets.active.length}</span>
           </button>
           <button
             role="tab"
@@ -232,7 +233,7 @@ export default function DoctorDashboard() {
             className={tab === "done" ? "active" : ""}
             onClick={() => setTab("done")}
           >
-            Terminées <span className="count">{buckets.done.length}</span>
+            Fini <span className="count">{buckets.done.length}</span>
           </button>
         </div>
 
@@ -246,15 +247,15 @@ export default function DoctorDashboard() {
         {consultations !== null && list.length === 0 && !error && (
           <EmptyState
             icon={tab === "queue" ? <BellRing size={24} /> : <CalendarCheck size={24} />}
-            title={tab === "queue" ? (available ? "Aucune demande pour le moment" : "Vous êtes indisponible") : tab === "active" ? "Aucune consultation active" : "Aucune consultation terminée"}
+            title={tab === "queue" ? (available ? "Pa gen demann pou kounye a" : "Ou pa disponib") : tab === "active" ? "Pa gen konsiltasyon k ap dewoule" : "Pa gen konsiltasyon ki fini"}
             description={
               tab === "queue"
                 ? available
-                  ? "Les nouvelles demandes apparaîtront ici."
-                  : "Mettez-vous en disponible pour recevoir des demandes de consultation."
+                  ? "Nouvo demann yo ap parèt isit."
+                  : "Mete tèt ou disponib pou w ka resevwa demann konsiltasyon."
                 : tab === "active"
-                  ? "Vos consultations en cours apparaîtront ici."
-                  : "Vos consultations terminées apparaîtront ici."
+                  ? "Konsiltasyon k ap dewoule yo ap parèt isit."
+                  : "Konsiltasyon ki fini yo ap parèt isit."
             }
           />
         )}
@@ -263,21 +264,21 @@ export default function DoctorDashboard() {
           const isQueue = tab === "queue";
           return (
             <div key={c.id} className="panel-row" style={{ minHeight: 76 }}>
-              <Avatar name={c.patient_name} size="md" alt={`Avatar de ${c.patient_name}`} />
+              <Avatar name={c.patient_name} size="md" alt={`Foto pwofil ${c.patient_name}`} />
               <div className="row-body">
                 <div className="row-title">
                   <span>{c.patient_name}</span>
                   <StatusBadge status={c.status} />
                 </div>
-                <div className="row-sub">{c.description || "Sans description"}</div>
+                <div className="row-sub">{c.description || "Pa gen deskripsyon"}</div>
                 <div className="row-meta">
-                  {c.specialty_needed}
-                  {c.patient_age != null && c.patient_age !== "" ? ` · ${c.patient_age} ans` : ""} ·{" "}
+                  {specialtyLabel(c.specialty_needed)}
+                  {c.patient_age != null && c.patient_age !== "" ? ` · ${c.patient_age} an` : ""} ·{" "}
                   {relativeTime(c.created_at)}
-                  {c.urgency_level ? ` · Urgence : ${c.urgency_level}` : ""}
+                  {c.urgency_level ? ` · Ijans: ${urgencyLabel(c.urgency_level)}` : ""}
                 </div>
                 {tab === "done" && c.status === "TERMINE" && (
-                  <div className="row-meta">Clôturée le {formatDateTime(c.updated_at)}</div>
+                  <div className="row-meta">Li fèmen {formatDateTime(c.updated_at)}</div>
                 )}
               </div>
               <div className="row-actions">
@@ -288,19 +289,19 @@ export default function DoctorDashboard() {
                       onClick={() => onAccept(c.id)}
                       disabled={busyId !== null}
                     >
-                      <Check size={15} aria-hidden /> Accepter
+                      <Check size={15} aria-hidden /> Aksepte
                     </button>
                     <button
                       className="btn btn-outline-danger btn-sm"
                       onClick={() => setConfirmReject(c)}
                       disabled={busyId !== null}
                     >
-                      <X size={15} aria-hidden /> Refuser
+                      <X size={15} aria-hidden /> Refize
                     </button>
                   </>
                 ) : (
                   <Link className="btn btn-secondary btn-sm" href={`/app/consultations/${encodeURIComponent(c.id)}`}>
-                    Voir <ChevronRight size={14} aria-hidden />
+                    Gade <ChevronRight size={14} aria-hidden />
                   </Link>
                 )}
               </div>
@@ -326,11 +327,11 @@ export default function DoctorDashboard() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="reject-title" className="modal-title">
-              Refuser cette demande ?
+              Refize demann sa a?
             </h2>
             <p className="modal-body">
-              La demande de {confirmReject.patient_name} ({confirmReject.specialty_needed}) sera refusée et ne vous
-              sera plus proposée. Cette action est définitive.
+              Demann {confirmReject.patient_name} ({specialtyLabel(confirmReject.specialty_needed)}) ap refize epi li
+              pap vin jwenn ou ankò. Aksyon sa a definitif.
             </p>
             <form onSubmit={onConfirmReject}>
               <div className="modal-actions">
@@ -340,15 +341,15 @@ export default function DoctorDashboard() {
                   onClick={() => setConfirmReject(null)}
                   disabled={busyId !== null}
                 >
-                  Annuler
+                  Anile
                 </button>
                 <button type="submit" className="btn btn-danger" disabled={busyId !== null}>
                   {busyId !== null ? (
                     <>
-                      <span className="spin" aria-hidden /> Refus en cours…
+                      <span className="spin" aria-hidden /> N ap refize l...
                     </>
                   ) : (
-                    "Refuser la demande"
+                    "Refize demann lan"
                   )}
                 </button>
               </div>
