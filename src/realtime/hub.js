@@ -214,7 +214,7 @@ class RealtimeHub {
     const { consultationId, senderId, senderName, text, messageType, fileUrl, duration, fileSize } = data;
     if (!consultationId) return;
     const type = messageType || 'text';
-    if (!text && type !== 'voice' && type !== 'image' && type !== 'video') return;
+    if (!text && type !== 'voice' && type !== 'image' && type !== 'video' && type !== 'file') return;
 
     const consultation = await consultationsRepo.findById(consultationId);
     if (!consultation ||

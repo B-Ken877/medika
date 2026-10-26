@@ -3,14 +3,17 @@
  * One function per backend route — no invented endpoints.
  * Contract source: server.js (repo) + GeminiApi.kt (production Android client).
  */
-import { apiFetch } from "./client";
+import { apiFetch, ApiError, API_BASE_URL } from "./client";
 import type {
   AuthResponse,
+  AttachmentUploadResponse,
+  AttachmentUrlResponse,
   CallTokenResponse,
   Consultation,
   ConsultationNote,
   MedicalHistory,
   MedicalHistorySnapshot,
+  ReadReceiptResult,
   SaveConsultationNoteRequest,
   ServerMessage,
   SpecialtyPrice,
@@ -133,6 +136,38 @@ export function getMessages(token: string, consultationId: string, signal?: Abor
   });
 }
 
+/** Mark the other participant's unread incoming messages as read (idempotent). */
+export function markConsultationRead(token: string, consultationId: string, signal?: AbortSignal) {
+  return apiFetch<ReadReceiptResult>(`/api/consultations/${encodeURIComponent(consultationId)}/read`, {
+    method: "POST",
+    token,
+    signal,
+  });
+}
+
+/** REST message send — the WS-independent fallback path. The response is the
+ *  PERSISTED message; only its arrival proves the message was stored. */
+export function sendConsultationMessage(
+  token: string,
+  consultationId: string,
+  input: {
+    text?: string;
+    messageType?: string;
+    fileUrl?: string | null;
+    duration?: number | null;
+    fileSize?: number | null;
+  },
+  signal?: AbortSignal,
+) {
+  return apiFetch<ServerMessage>(`/api/consultations/${encodeURIComponent(consultationId)}/messages`, {
+    method: "POST",
+    body: input,
+    token,
+    signal,
+    timeoutMs: 30_000,
+  });
+}
+
 export function acceptConsultation(token: string, id: string, signal?: AbortSignal) {
   return apiFetch<Consultation>(`/api/consultations/${encodeURIComponent(id)}/accept`, {
     method: "PUT",
@@ -195,6 +230,92 @@ export function uploadFile(token: string, file: File, consultationId?: string, s
     signal,
     timeoutMs: 120_000,
   });
+}
+
+// ─── Private consultation attachments ────────────────────────────────────────
+
+/**
+ * Upload a file as a PRIVATE consultation attachment (participant-authorized,
+ * active consultation only, server-side type/size validation). XHR instead of
+ * fetch because progress reporting requires upload events; errors are
+ * normalized to the same ApiError vocabulary as apiFetch().
+ */
+export function uploadConsultationAttachment(
+  token: string,
+  consultationId: string,
+  file: File,
+  opts: { signal?: AbortSignal; onProgress?: (fraction: number) => void; timeoutMs?: number } = {},
+): Promise<AttachmentUploadResponse> {
+  const { signal, onProgress, timeoutMs = 120_000 } = opts;
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      return reject(new ApiError("aborted", 0, "Demand lan anile."));
+    }
+    const xhr = new XMLHttpRequest();
+    const timer = setTimeout(() => xhr.abort(), timeoutMs);
+    const onAbort = () => xhr.abort();
+    signal?.addEventListener("abort", onAbort, { once: true });
+
+    xhr.open("POST", `${API_BASE_URL}/api/consultations/${encodeURIComponent(consultationId)}/attachments`);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.responseType = "json";
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
+    };
+    xhr.onload = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      const body = xhr.response ?? {};
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(body as AttachmentUploadResponse);
+      } else {
+        reject(new ApiError(
+          xhr.status === 401 ? "unauthorized"
+            : xhr.status === 403 ? "forbidden"
+            : xhr.status === 404 ? "not_found"
+            : xhr.status === 400 ? "validation"
+            : xhr.status === 409 ? "conflict"
+            : xhr.status === 413 ? "validation"
+            : "server",
+          xhr.status,
+          xhr.status === 413
+            ? "Fichye a twò gwo. Redwi li anvan ou voye l."
+            : "Nou pa t kapab voye fichye a. Eseye ankò.",
+          body?.error ? String(body.error) : undefined,
+        ));
+      }
+    };
+    xhr.onerror = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      reject(new ApiError("network", 0, "Pa gen koneksyon entènèt. Verifye koneksyon ou epi eseye ankò."));
+    };
+    xhr.onabort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      reject(new ApiError("aborted", 0, "Demand lan anile."));
+    };
+
+    const form = new FormData();
+    form.append("file", file);
+    xhr.send(form);
+  });
+}
+
+/**
+ * Obtain a short-lived signed URL for a private attachment. Re-authorized on
+ * every call; callers must handle expiry by requesting a fresh URL.
+ */
+export function getAttachmentUrl(
+  token: string,
+  consultationId: string,
+  attachmentId: string,
+  signal?: AbortSignal,
+) {
+  return apiFetch<AttachmentUrlResponse>(
+    `/api/consultations/${encodeURIComponent(consultationId)}/attachments/${encodeURIComponent(attachmentId)}/url`,
+    { token, signal },
+  );
 }
 
 // ─── Consultation notes (doctor) ──────────────────────────────────────────────

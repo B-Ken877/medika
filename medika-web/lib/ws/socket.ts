@@ -17,7 +17,7 @@
 import type { ServerMessage, WsServerEvent } from "../api/types";
 
 export interface SendFileMeta {
-  messageType: "voice" | "image" | "video";
+  messageType: "voice" | "image" | "video" | "file";
   fileUrl: string;
   duration?: number | null;
   fileSize?: number | null;
@@ -189,7 +189,18 @@ export class MedikaSocket {
 
   // ── Client → server messages (exact Android protocol) ─────────────────────
 
-  sendMessage(consultationId: string, senderId: string, senderName: string, text: string): boolean {
+  /**
+   * Send a text message. `clientMsgId` (optional, additive) is echoed back on
+   * the message:new event so the sender can reconcile its optimistic UI with
+   * the persisted message — never as an identity/authorization signal.
+   */
+  sendMessage(
+    consultationId: string,
+    senderId: string,
+    senderName: string,
+    text: string,
+    clientMsgId?: string,
+  ): boolean {
     return this.send({
       type: "message:send",
       consultationId,
@@ -197,6 +208,7 @@ export class MedikaSocket {
       senderName,
       text,
       messageType: "text",
+      ...(clientMsgId ? { clientMsgId } : {}),
     });
   }
 
@@ -205,6 +217,7 @@ export class MedikaSocket {
     senderId: string,
     senderName: string,
     meta: SendFileMeta,
+    clientMsgId?: string,
   ): boolean {
     return this.send({
       type: "message:send",
@@ -216,11 +229,20 @@ export class MedikaSocket {
       fileUrl: meta.fileUrl,
       duration: meta.duration ?? null,
       fileSize: meta.fileSize ?? null,
+      ...(clientMsgId ? { clientMsgId } : {}),
     });
   }
 
   sendTyping(consultationId: string, senderId: string, isTyping: boolean): boolean {
     return this.send({ type: "typing", consultationId, senderId, isTyping });
+  }
+
+  /** Ask the server for the counterpart's CURRENT presence in one
+   *  consultation (membership-checked server-side; reply arrives as a
+   *  presence:update event). Used when a chat view mounts after the socket
+   *  already authenticated, and after reconnects. */
+  sendPresenceSubscribe(consultationId: string): boolean {
+    return this.send({ type: "presence:subscribe", consultationId });
   }
 
   startCall(consultationId: string, callerName: string, callType: "voice" | "video", roomName: string): boolean {
@@ -246,7 +268,11 @@ export class MedikaSocket {
   }
 }
 
-/** Normalize a message:new WS event into the REST message shape. */
+/** Normalize a message:new WS event into the REST message shape.
+ *  `timestamp` is milliseconds of the PERSISTED creation time; converted to
+ *  seconds exactly ONCE here. Read state is not part of the envelope —
+ *  callers must not let an echo overwrite an existing message's read_at
+ *  (dedup by id happens at the page level). */
 export function wsEventToServerMessage(event: {
   id: number;
   consultationId: string;
@@ -258,6 +284,7 @@ export function wsEventToServerMessage(event: {
   fileUrl?: string | null;
   duration?: number | null;
   fileSize?: number | null;
+  clientMsgId?: string;
 }): ServerMessage {
   return {
     id: event.id,
@@ -270,5 +297,6 @@ export function wsEventToServerMessage(event: {
     file_url: event.fileUrl ?? null,
     duration: event.duration ?? null,
     file_size: event.fileSize ?? null,
+    read_at: null,
   };
 }

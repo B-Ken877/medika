@@ -261,7 +261,7 @@ router.post('/consultations/:id/messages', authenticate, async (req, res, next) 
     }
     const { text, messageType, fileUrl, duration, fileSize } = req.body || {};
     const type = messageType || 'text';
-    if (!text && type !== 'voice' && type !== 'image' && type !== 'video') {
+    if (!text && type !== 'voice' && type !== 'image' && type !== 'video' && type !== 'file') {
       return res.status(400).json({ error: 'Message text required' });
     }
     const msg = await consultationsRepo.createMessage({

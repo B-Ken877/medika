@@ -176,6 +176,7 @@ describe("wsEventToServerMessage", () => {
       file_url: null,
       duration: null,
       file_size: null,
+      read_at: null, // additive: read state arrives via REST bootstrap / messages:read
     });
   });
 });

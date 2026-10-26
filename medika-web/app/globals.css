@@ -922,6 +922,182 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 .typing-dots i:nth-child(2) { animation-delay: 0.18s; }
 .typing-dots i:nth-child(3) { animation-delay: 0.36s; }
 @keyframes typing { 0%, 60%, 100% { transform: translateY(0); opacity: 0.5; } 30% { transform: translateY(-4px); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .typing-dots i { animation: none; opacity: 0.6; }
+}
+
+/* ── Messaging upgrade: presence, receipts, media, voice, emoji ────────── */
+
+/* Presence dot + avatar wrapper */
+.presence-avatar { position: relative; display: inline-flex; flex-shrink: 0; }
+.presence-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  background: var(--gray-300);
+}
+.presence-dot.online { background: var(--green-500, #16a34a); }
+.presence-dot.offline { background: var(--gray-300); }
+
+/* Read receipts */
+.receipt { display: inline-flex; align-items: center; gap: 3px; margin-left: 5px; vertical-align: middle; }
+.receipt.pending { opacity: 0.6; }
+.receipt.read { color: var(--green-100, #bbf7d0); }
+.bubble-row:not(.mine) .receipt { display: none; }
+.receipt-text { font-size: 10px; }
+
+/* Optimistic (unconfirmed) bubbles */
+.bubble-row.optimistic .bubble { opacity: 0.65; border-style: dashed; }
+
+/* Secure media fallbacks + documents */
+.media-fallback {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--gray-100);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.bubble-video { max-width: 100%; border-radius: 10px; display: block; }
+.doc-chip {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--gray-100);
+  border-radius: 10px;
+  padding: 9px 12px;
+  min-width: 0;
+}
+.bubble-row.mine .doc-chip { background: rgba(255,255,255,0.18); color: #fff; }
+.doc-chip-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.doc-chip-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-chip-meta { opacity: 0.75; }
+.doc-chip-action {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 6px 10px;
+  border-radius: var(--radius-full);
+  background: var(--green-600);
+  color: #fff;
+  font-size: 12px; font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* Attachment menu (composer) */
+.attach-wrap, .emoji-wrap { position: relative; display: inline-flex; flex-shrink: 0; }
+.attach-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  min-width: 172px;
+  background: var(--surface);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.attach-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  border: none; background: none; border-radius: var(--radius-sm);
+  font-size: 14px; font-weight: 600;
+  color: var(--text-primary);
+  text-align: left;
+  min-height: 44px;
+}
+.attach-item:hover { background: var(--gray-50); }
+
+/* Upload progress */
+.upload-progress {
+  flex: 1;
+  display: flex; align-items: center; gap: 10px;
+  min-width: 0;
+  padding: 6px 4px;
+}
+.upload-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upload-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--gray-200);
+  overflow: hidden;
+}
+.upload-bar span {
+  display: block; height: 100%;
+  background: var(--green-600);
+  border-radius: var(--radius-full);
+  transition: width 0.2s ease;
+}
+
+/* Voice recorder */
+.voice-bar {
+  flex: 1;
+  display: flex; align-items: center; gap: 10px;
+  min-width: 0;
+  padding: 4px 0;
+}
+.voice-bar.preview { gap: 8px; }
+.voice-rec-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #dc2626;
+  animation: voice-pulse 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes voice-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) {
+  .voice-rec-dot { animation: none; }
+}
+.voice-timer { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 14px; }
+.voice-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.voice-actions { display: inline-flex; gap: 4px; margin-left: auto; flex-shrink: 0; }
+.composer-btn.danger { color: #dc2626; }
+.voice-preview-audio { height: 36px; max-width: 180px; min-width: 120px; }
+.voice-error { position: absolute; left: 12px; bottom: calc(100% + 4px); color: var(--red-600, #dc2626); }
+
+/* Emoji picker */
+.emoji-picker {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  width: min(320px, calc(100vw - 24px));
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 8px;
+}
+.emoji-cats {
+  display: flex; gap: 2px;
+  border-bottom: 1px solid var(--gray-100);
+  padding-bottom: 6px; margin-bottom: 6px;
+}
+.emoji-cat {
+  border: none; background: none;
+  font-size: 17px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border-bottom: 2px solid transparent;
+}
+.emoji-cat.active { border-bottom-color: var(--green-600); background: var(--gray-50); }
+.emoji-section-label { padding: 2px 6px 4px; color: var(--text-secondary); }
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  gap: 2px;
+}
+.emoji-btn {
+  border: none; background: none;
+  font-size: 21px;
+  padding: 5px 0;
+  border-radius: var(--radius-sm);
+  min-height: 38px;
+  line-height: 1;
+}
+.emoji-btn:hover, .emoji-btn:focus-visible { background: var(--gray-100); outline: 2px solid var(--green-600); outline-offset: -2px; }
 
 .chat-composer {
   display: flex;

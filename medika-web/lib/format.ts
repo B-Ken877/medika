@@ -2,9 +2,70 @@
  * Formatting helpers — Haitian Creole display, mirroring the web app's
  * Kreyòl copy. Statuses/urgency raw values stay backend-owned (see
  * lib/labels.ts for the display-label contract).
+ *
+ * TIMEZONE POLICY (canonical): every chat timestamp, day separator, receipt
+ * time and last-seen label is rendered in Medika's canonical IANA timezone
+ * America/Port-au-Prince — never the device's local timezone, never a
+ * hardcoded UTC offset (the IANA database supplies DST/historical rules).
+ * Backend timestamps are Unix SECONDS; WS envelopes are milliseconds of the
+ * SAME persisted instant (converted exactly once in wsEventToServerMessage).
  */
 import type { Consultation, ConsultationStatus } from "./api/types";
 import { consultationStatusLabel, genderDisplayLabel } from "./labels";
+
+/** Medika's canonical display timezone (Haiti, EST year-round per IANA db). */
+export const MEDIKA_TIMEZONE = "America/Port-au-Prince";
+
+const KREYOL_MONTHS = [
+  "janvye", "fevriye", "mas", "avril", "me", "jen",
+  "jiyè", "out", "septanm", "oktòb", "novanm", "desanm",
+];
+
+/** Haitian Creole month names (short form). */
+const KREYOL_MONTHS_SHORT = [
+  "jan", "fev", "mas", "avr", "me", "jen",
+  "jiy", "out", "sep", "okt", "nov", "des",
+];
+
+/** True for a usable epoch-seconds value (rejects null/0/NaN/negative). */
+function isValidTs(ts: number | null | undefined): ts is number {
+  return typeof ts === "number" && Number.isFinite(ts) && ts > 0;
+}
+
+// Cached formatters — Intl construction is expensive per call. The timezone
+// is explicit in the options, so no accidental server/device fallback.
+const TIME_FMT = new Intl.DateTimeFormat("fr-FR", {
+  timeZone: MEDIKA_TIMEZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+const DATETIME_FMT = new Intl.DateTimeFormat("fr-FR", {
+  timeZone: MEDIKA_TIMEZONE,
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+// en-CA yields the sortable "YYYY-MM-DD" shape directly.
+const DATE_KEY_FMT = new Intl.DateTimeFormat("en-CA", {
+  timeZone: MEDIKA_TIMEZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** Calendar day of an epoch value in the canonical timezone ("YYYY-MM-DD"). */
+export function haitiDateKey(tsMs: number): string {
+  return DATE_KEY_FMT.format(tsMs);
+}
+
+function dateKeyToParts(key: string): { y: number; m: number; d: number } {
+  const [y, m, d] = key.split("-").map(Number);
+  return { y, m, d };
+}
 
 export function statusLabel(status: string): string {
   return consultationStatusLabel(status);
@@ -30,58 +91,47 @@ export function formatCurrency(amount: number | null | undefined): string {
   );
 }
 
-/** Backend timestamps are Unix seconds. */
+/** Backend timestamps are Unix seconds; displayed in the canonical timezone. */
 export function formatDateTime(ts: number | null | undefined): string {
-  if (!ts) return "N/A";
-  return new Date(ts * 1000).toLocaleDateString("fr-FR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  if (!isValidTs(ts)) return "N/A";
+  return DATETIME_FMT.format(ts * 1000);
 }
 
 export function formatDateShort(ts: number | null | undefined): string {
-  if (!ts) return "N/A";
-  const d = new Date(ts * 1000);
-  return `${String(d.getDate()).padStart(2, "0")} ${KREYOL_MONTHS_SHORT[d.getMonth()]}`;
+  if (!isValidTs(ts)) return "N/A";
+  const { m, d } = dateKeyToParts(haitiDateKey(ts * 1000));
+  return `${String(d).padStart(2, "0")} ${KREYOL_MONTHS_SHORT[m - 1]}`;
 }
 
-/** Chat-style day separators — Haitian Creole. */
-export function formatDaySeparator(ts: number | null | undefined): string {
-  if (!ts) return "";
-  const date = new Date(ts * 1000);
-  const today = new Date();
-  const yesterday = new Date();
-  yesterday.setDate(today.getDate() - 1);
-  const sameDay = (a: Date, b: Date) =>
-    a.getDate() === b.getDate() && a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
-  if (sameDay(date, today)) return "Jodi a";
-  if (sameDay(date, yesterday)) return "Yè";
-  return `${date.getDate()} ${KREYOL_MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+/**
+ * Chat-style day separators — Haitian Creole, calendar days compared in the
+ * CANONICAL timezone (never the device's local getters). `now` is injectable
+ * for deterministic tests; default is the current time.
+ */
+export function formatDaySeparator(ts: number | null | undefined, now: number = Date.now()): string {
+  if (!isValidTs(ts)) return "";
+  const dayKey = haitiDateKey(ts * 1000);
+  const todayKey = haitiDateKey(now);
+  if (dayKey === todayKey) return "Jodi a";
+  // Yesterday = today's Haiti wall-clock date minus one calendar day (pure
+  // calendar arithmetic on UTC-constructed parts — DST/rule safe).
+  const { y, m, d } = dateKeyToParts(todayKey);
+  const yst = new Date(Date.UTC(y, m - 1, d - 1));
+  const yesterdayKey = `${yst.getUTCFullYear()}-${String(yst.getUTCMonth() + 1).padStart(2, "0")}-${String(yst.getUTCDate()).padStart(2, "0")}`;
+  if (dayKey === yesterdayKey) return "Yè";
+  const p = dateKeyToParts(dayKey);
+  return `${p.d} ${KREYOL_MONTHS[p.m - 1]} ${p.y}`;
 }
 
-/** Haitian Creole month names (long form). */
-const KREYOL_MONTHS = [
-  "janvye", "fevriye", "mas", "avril", "me", "jen",
-  "jiyè", "out", "septanm", "oktòb", "novanm", "desanm",
-];
-
-/** Haitian Creole month names (short form). */
-const KREYOL_MONTHS_SHORT = [
-  "jan", "fev", "mas", "avr", "me", "jen",
-  "jiy", "out", "sep", "okt", "nov", "des",
-];
-
+/** Time of day in the canonical timezone (24-hour, HH:MM). */
 export function formatTime(ts: number | null | undefined): string {
-  if (!ts) return "";
-  return new Date(ts * 1000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  if (!isValidTs(ts)) return "";
+  return TIME_FMT.format(ts * 1000);
 }
 
 /** "Kounye a" / "X min" / "X è" / "X jou" — relative timestamps in Kreyòl. */
 export function relativeTime(ts: number | null | undefined): string {
-  if (!ts) return "N/A";
+  if (!isValidTs(ts)) return "N/A";
   const seconds = Math.floor(Date.now() / 1000 - ts);
   if (seconds < 60) return "Kounye a";
   const minutes = Math.floor(seconds / 60);

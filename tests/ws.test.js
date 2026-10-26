@@ -308,4 +308,21 @@ describe('WS messaging — messaging upgrade contracts', () => {
     const evt = await doctorRecv;
     expect(evt.senderId).toBe(users.patient.id); // authenticated identity, not the frame
   });
+
+  it('keeps emoji (incl. ZWJ families and skin tones) intact end-to-end', async () => {
+    const emojiText = 'Santé 👨‍👩‍👧‍👦 👍🏽 🇭🇹 ❤️ 🩺 bonjou 😀';
+    const echoP = nextMessage(patientWs, 5000, (e) => e.type === 'message:new' && e.text === emojiText);
+    patientWs.send(JSON.stringify({
+      type: 'message:send', consultationId: consId,
+      senderId: users.patient.id, senderName: 'Pat Test',
+      text: emojiText, messageType: 'text',
+    }));
+    const echo = await echoP;
+    expect(echo.text).toBe(emojiText); // WS delivery intact
+    // Persistence + REST bootstrap intact (PostgreSQL UTF-8, no stripping).
+    const list = await r.get(`/api/consultations/${consId}/messages`)
+      .set('Authorization', `Bearer ${token.patient}`);
+    const stored = list.body.find((m) => m.id === echo.id);
+    expect(stored.text).toBe(emojiText);
+  });
 });
