@@ -22,6 +22,52 @@ const { v4: uuidv4 } = require('uuid');
 const { config, isProduction } = require('./config');
 const { badRequest, serviceUnavailable } = require('./errors');
 
+/** Short correlation id for SAFE upload diagnostics — never derived from,
+ * or containing, file content, tokens or URLs. */
+function newUploadRequestId() {
+  return crypto.randomUUID().substring(0, 8);
+}
+
+/** Structured, SAFE diagnostic line. Fields are operational metadata only:
+ * stage (where), category (why, sanitized), size/mime-kind (validation
+ * context). Never logs file bytes, message contents, storage URLs, tokens or
+ * user identifiers. */
+function logUploadDiagnostic(reqId, stage, fields = {}) {
+  const parts = [`[upload] reqId=${reqId}`, `stage=${stage}`];
+  for (const [k, v] of Object.entries(fields)) {
+    if (v === undefined || v === null) continue;
+    parts.push(`${k}=${String(v)}`);
+  }
+  console.error(parts.join(' '));
+}
+
+/** Map a @vercel/blob failure to a stable sanitized category (for logs) and
+ * a user-safe HTTP status. The error NAME is safe to log; messages can embed
+ * store ids/URLs so they never reach the client or the logs. */
+function classifyStorageError(err) {
+  const name = err && err.constructor ? err.constructor.name : '';
+  switch (name) {
+    case 'BlobAccessError':
+    case 'BlobStoreNotFoundError':
+    case 'BlobStoreSuspendedError':
+    case 'BlobClientTokenExpiredError':
+    case 'BlobPathnameMismatchError':
+      return { category: 'storage_auth', status: 503 };
+    case 'BlobFileTooLargeError':
+      return { category: 'storage_too_large', status: 413 };
+    case 'BlobServiceRateLimited':
+      return { category: 'storage_rate_limited', status: 503 };
+    case 'BlobServiceNotAvailable':
+      return { category: 'storage_unavailable', status: 503 };
+    case 'BlobRequestAbortedError':
+      return { category: 'storage_aborted', status: 400 };
+    default:
+      // Base BlobError (e.g. an unparseable/invalid read-write token) and
+      // anything unexpected: configuration-class failure, opaque to clients.
+      return { category: 'storage_error', status: 503 };
+  }
+}
+
 const EXT_TO_MIME = {
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
   '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
@@ -153,20 +199,33 @@ function createAttachmentMiddleware() {
 /**
  * Store an accepted upload. Prefers Vercel Blob; falls back to a local disk
  * directory ONLY outside production (dev parity with the legacy server).
- * Returns the legacy response shape.
+ * Returns the legacy response shape. The read-write token is passed
+ * EXPLICITLY so behavior never depends on implicit env detection.
  */
-async function storeUpload({ file, consultationId }) {
+async function storeUpload({ file, consultationId, reqId = '-' }) {
+  if (!file.buffer || file.size === 0) {
+    throw badRequest('Fichye a vid');
+  }
   const filename = `${Date.now()}_${uuidv4().substring(0, 8)}${path.extname(file.originalname) || '.bin'}`;
   const key = `${safeConsultationId(consultationId)}/${filename}`;
 
   if (config.blobReadWriteToken) {
     const { put } = require('@vercel/blob');
-    const blob = await put(key, file.buffer, {
-      access: 'public',
-      contentType: file.mimetype,
-      addRandomSuffix: false,
-    });
-    return { url: blob.url, filename, mimetype: file.mimetype, size: file.size };
+    try {
+      const blob = await put(key, file.buffer, {
+        access: 'public',
+        contentType: file.mimetype,
+        addRandomSuffix: false,
+        token: config.blobReadWriteToken,
+      });
+      return { url: blob.url, filename, mimetype: file.mimetype, size: file.size };
+    } catch (err) {
+      const { category } = classifyStorageError(err);
+      logUploadDiagnostic(reqId, 'legacy_blob_put', {
+        category, sizeBytes: file.size, mimeKind: String(file.mimetype || '').split('/')[0] || 'unknown',
+      });
+      throw serviceUnavailable('Stockage de fichiers indisponible. Tanpri, eseye ankò pi ta.');
+    }
   }
 
   if (!isProduction() && config.localUploadsDir) {
@@ -178,6 +237,7 @@ async function storeUpload({ file, consultationId }) {
     return { url: `/uploads/${key}`, filename, mimetype: file.mimetype, size: file.size };
   }
 
+  logUploadDiagnostic(reqId, 'legacy_no_storage', {});
   throw serviceUnavailable('Stockage de fichiers non configuré (BLOB_READ_WRITE_TOKEN requis)');
 }
 
@@ -196,11 +256,17 @@ const SIGNED_URL_TTL_SECONDS = 300;
  *  - local-dev disk under LOCAL_UPLOADS_DIR/private/… (never statically
  *    served; only reachable through the signed /file endpoint).
  */
-async function storePrivateAttachment({ file, consultationId, attachmentId }) {
+async function storePrivateAttachment({ file, consultationId, attachmentId, reqId = '-' }) {
+  if (!file.buffer || file.size === 0) {
+    throw badRequest('Fichye a vid');
+  }
   // Defense in depth: the multer filter already allow-listed the declared
   // MIME; re-verify the actual bytes (never trust filename or browser MIME).
   const family = sniffContainerFamily(file.buffer);
   if (!family || !mimeMatchesContainer(file.mimetype, family)) {
+    logUploadDiagnostic(reqId, 'attachment_sniff_rejected', {
+      sizeBytes: file.size, mimeKind: String(file.mimetype || '').split('/')[0] || 'unknown',
+    });
     throw badRequest('Type de fichier non valide ou non supporte');
   }
 
@@ -209,12 +275,20 @@ async function storePrivateAttachment({ file, consultationId, attachmentId }) {
 
   if (config.blobReadWriteToken) {
     const { put } = require('@vercel/blob');
-    await put(pathname, file.buffer, {
-      access: 'private',
-      contentType: file.mimetype,
-      addRandomSuffix: false,
-      token: config.blobReadWriteToken,
-    });
+    try {
+      await put(pathname, file.buffer, {
+        access: 'private',
+        contentType: file.mimetype,
+        addRandomSuffix: false,
+        token: config.blobReadWriteToken,
+      });
+    } catch (err) {
+      const { category } = classifyStorageError(err);
+      logUploadDiagnostic(reqId, 'attachment_blob_put', {
+        category, sizeBytes: file.size, mimeKind: String(file.mimetype || '').split('/')[0] || 'unknown',
+      });
+      throw serviceUnavailable('Stockage de fichiers indisponible. Tanpri, eseye ankò pi ta.');
+    }
     return { storage: 'blob', blobPathname: pathname };
   }
 
@@ -226,6 +300,7 @@ async function storePrivateAttachment({ file, consultationId, attachmentId }) {
     return { storage: 'local', blobPathname: pathname };
   }
 
+  logUploadDiagnostic(reqId, 'attachment_no_storage', {});
   throw serviceUnavailable('Stockage de fichiers non configuré (BLOB_READ_WRITE_TOKEN requis)');
 }
 
@@ -261,8 +336,29 @@ function localAttachmentPath(blobPathname) {
   return path.join(config.localUploadsDir, 'private', safe);
 }
 
+/** Best-effort removal of an already-stored private attachment — used when
+ * registry persistence fails AFTER the bytes reached storage, so a failed
+ * request never leaves an untracked private file behind. Failures are
+ * swallowed (the original DB error is the one that matters). */
+async function cleanupStoredAttachment({ storage, blobPathname, reqId = '-' }) {
+  try {
+    if (storage === 'blob' && config.blobReadWriteToken) {
+      const { del } = require('@vercel/blob');
+      await del(blobPathname, { token: config.blobReadWriteToken });
+    } else if (storage === 'local' && config.localUploadsDir) {
+      const fs = require('fs');
+      await fs.promises.unlink(localAttachmentPath(blobPathname)).catch(() => undefined);
+    }
+  } catch (err) {
+    logUploadDiagnostic(reqId, 'cleanup_failed', {
+      category: classifyStorageError(err).category,
+    });
+  }
+}
+
 /** Express handler for POST /api/upload (legacy contract preserved). */
 function uploadHandler(req, res, next) {
+  const reqId = newUploadRequestId();
   createUploadMiddleware()(req, res, async (err) => {
     try {
       if (err) {
@@ -276,7 +372,7 @@ function uploadHandler(req, res, next) {
       }
       if (!req.file) return res.status(400).json({ error: 'No file provided' });
       const consultationId = req.query.consultationId || req.body?.consultationId;
-      const result = await storeUpload({ file: req.file, consultationId });
+      const result = await storeUpload({ file: req.file, consultationId, reqId });
       res.json(result);
     } catch (e) {
       next(e);
@@ -299,8 +395,12 @@ module.exports = {
   sanitizeFilename,
   createAttachmentMiddleware,
   storePrivateAttachment,
+  cleanupStoredAttachment,
   signLocalAttachmentUrl,
   verifyLocalAttachmentSignature,
   localAttachmentPath,
+  classifyStorageError,
+  newUploadRequestId,
+  logUploadDiagnostic,
   SIGNED_URL_TTL_SECONDS,
 };

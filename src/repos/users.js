@@ -92,21 +92,23 @@ function publicDoctor(u) {
   return rest;
 }
 
-async function updateProfile(id, { name, email, phone, age, gender }) {
+async function updateProfile(id, { name, email, phone, age, gender, avatarUrl }) {
   const { rows } = await query(
     `UPDATE users SET
        name = COALESCE($2, name),
        email = CASE WHEN $3 THEN $4::text ELSE email END,
        phone = CASE WHEN $5 THEN $6::text ELSE phone END,
        age = CASE WHEN $7 THEN $8::int ELSE age END,
-       gender = COALESCE($9, gender)
+       gender = COALESCE($9, gender),
+       avatar_url = CASE WHEN $10 THEN $11::text ELSE avatar_url END
      WHERE id = $1 RETURNING *`,
     [id,
      name ?? null,
      email !== undefined, email ?? null,
      phone !== undefined, phone ?? null,
      age !== undefined, age ?? null,
-     gender ?? null]
+     gender ?? null,
+     avatarUrl !== undefined, avatarUrl ?? null]
   );
   return rows[0] || null;
 }

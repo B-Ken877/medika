@@ -47,6 +47,9 @@ function msgToApi(row) {
     // Persisted read receipt (epoch seconds, NULL = unread). Same instant for
     // REST and WS-derived views; never derived client-side.
     read_at: row.read_at ? Math.floor(new Date(row.read_at).getTime() / 1000) : null,
+    // Client correlation id (additive, migration 003). Present only when the
+    // sender supplied one; lets retries reconcile to the canonical row.
+    client_msg_id: row.client_msg_id ?? null,
   };
 }
 
@@ -156,13 +159,38 @@ async function listMessages(consultationId) {
   return rows.map(msgToApi);
 }
 
-async function createMessage({ consultation_id, sender_id, sender_name, text, message_type, file_url, duration, file_size }) {
+/** Insert one message. With `client_msg_id` the insert is IDEMPOTENT per
+ * (sender, client_msg_id) — a retry of the same logical send (WS frame lost
+ * after persistence, followed by a REST fallback or user retry) returns the
+ * ALREADY-PERSISTED row instead of duplicating it. Without it (legacy
+ * clients, system messages) the behavior is exactly the historical insert. */
+async function createMessage({ consultation_id, sender_id, sender_name, text, message_type, file_url, duration, file_size, client_msg_id = null }) {
+  const params = [consultation_id, sender_id, sender_name, text || '',
+    message_type || 'text', file_url ?? null, duration ?? null, file_size ?? null, client_msg_id];
+  if (client_msg_id) {
+    const { rows } = await query(
+      `INSERT INTO messages
+         (consultation_id, sender_id, sender_name, text, message_type, file_url, duration, file_size, client_msg_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (sender_id, client_msg_id) WHERE client_msg_id IS NOT NULL
+       DO NOTHING
+       RETURNING *`,
+      params
+    );
+    if (rows[0]) return rows[0];
+    // Conflict → this exact send was already persisted: hand back the
+    // canonical row so the caller acknowledges the ORIGINAL message.
+    const existing = await query(
+      `SELECT * FROM messages WHERE sender_id = $1 AND client_msg_id = $2`,
+      [sender_id, client_msg_id]
+    );
+    return existing.rows[0] || null;
+  }
   const { rows } = await query(
     `INSERT INTO messages
-       (consultation_id, sender_id, sender_name, text, message_type, file_url, duration, file_size)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-    [consultation_id, sender_id, sender_name, text || '',
-     message_type || 'text', file_url ?? null, duration ?? null, file_size ?? null]
+       (consultation_id, sender_id, sender_name, text, message_type, file_url, duration, file_size, client_msg_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+    params
   );
   return rows[0];
 }

@@ -31,10 +31,13 @@ const { badRequest, notFound, paymentRequired, conflict, serviceUnavailable } = 
 const {
   createAttachmentMiddleware,
   storePrivateAttachment,
+  cleanupStoredAttachment,
   signLocalAttachmentUrl,
   verifyLocalAttachmentSignature,
   localAttachmentPath,
   sanitizeFilename,
+  newUploadRequestId,
+  logUploadDiagnostic,
   SIGNED_URL_TTL_SECONDS,
 } = require('../uploads');
 
@@ -259,24 +262,33 @@ router.post('/consultations/:id/messages', authenticate, async (req, res, next) 
     if (c.patient_id !== req.user.id && c.doctor_id !== req.user.id) {
       return res.status(404).json({ error: 'Not found' });
     }
-    const { text, messageType, fileUrl, duration, fileSize } = req.body || {};
+    const { text, messageType, fileUrl, duration, fileSize, clientMsgId } = req.body || {};
     const type = messageType || 'text';
-    if (!text && type !== 'voice' && type !== 'image' && type !== 'video' && type !== 'file') {
+    const trimmedText = typeof text === 'string' ? text.trim() : '';
+    if (!trimmedText && type !== 'voice' && type !== 'image' && type !== 'video' && type !== 'file') {
       return res.status(400).json({ error: 'Message text required' });
     }
+    // Client correlation id (migration 003): same validation as the WS frame —
+    // a string of 1..64 chars. Invalid shapes are IGNORED (treated as absent),
+    // matching hub behavior; no new error paths for legacy clients.
+    const correlationId =
+      typeof clientMsgId === 'string' && clientMsgId.length > 0 && clientMsgId.length <= 64
+        ? clientMsgId
+        : null;
     const msg = await consultationsRepo.createMessage({
       consultation_id: req.params.id,
       sender_id: req.user.id,
       sender_name: req.user.name,
-      text: text || '',
+      text: trimmedText,
       message_type: type,
       file_url: fileUrl || null,
       duration: duration ?? null,
       file_size: fileSize ?? null,
+      client_msg_id: correlationId,
     });
     const hub = req.app.locals.hub;
     if (hub) {
-      const envelope = require('../realtime/hub').messageEnvelope(msg);
+      const envelope = require('../realtime/hub').messageEnvelope(msg, { clientMsgId: correlationId || undefined });
       hub.publishToUser(req.user.id, envelope);
       const recipientId = c.patient_id === req.user.id ? c.doctor_id : c.patient_id;
       if (recipientId) hub.publishToUser(recipientId, envelope);
@@ -349,6 +361,7 @@ async function loadConsultationForAttachment(req, res) {
  * the client receives only an opaque API path to put in the message.
  */
 router.post('/consultations/:id/attachments', authenticate, (req, res, next) => {
+  const reqId = newUploadRequestId();
   createAttachmentMiddleware()(req, res, async (err) => {
     try {
       if (err) {
@@ -369,21 +382,34 @@ router.post('/consultations/:id/attachments', authenticate, (req, res, next) => 
       }
 
       const attachmentId = 'att_' + uuidv4().substring(0, 12);
-      const { storage, blobPathname } = await storePrivateAttachment({
+      const stored = await storePrivateAttachment({
         file: req.file,
         consultationId: req.params.id,
         attachmentId,
+        reqId,
       });
-      const row = await attachmentsRepo.create({
-        id: attachmentId,
-        consultation_id: req.params.id,
-        uploader_id: req.user.id,
-        storage,
-        blob_pathname: blobPathname,
-        filename: sanitizeFilename(req.file.originalname),
-        mimetype: req.file.mimetype,
-        size: req.file.size,
-      });
+      let row;
+      try {
+        row = await attachmentsRepo.create({
+          id: attachmentId,
+          consultation_id: req.params.id,
+          uploader_id: req.user.id,
+          storage: stored.storage,
+          blob_pathname: stored.blobPathname,
+          filename: sanitizeFilename(req.file.originalname),
+          mimetype: req.file.mimetype,
+          size: req.file.size,
+        });
+      } catch (dbErr) {
+        // The bytes reached storage but the registry insert failed: remove
+        // the now-UNTRACKED private file so no orphaned medical media stays
+        // behind, then surface the original failure.
+        await cleanupStoredAttachment({ storage: stored.storage, blobPathname: stored.blobPathname, reqId });
+        logUploadDiagnostic(reqId, 'attachment_registry_failed', {
+          category: dbErr && dbErr.constructor ? dbErr.constructor.name : 'unknown',
+        });
+        throw dbErr;
+      }
       res.status(201).json({
         attachmentId: row.id,
         url: `/api/consultations/${encodeURIComponent(row.consultation_id)}/attachments/${encodeURIComponent(row.id)}`,

@@ -214,7 +214,8 @@ class RealtimeHub {
     const { consultationId, senderId, senderName, text, messageType, fileUrl, duration, fileSize } = data;
     if (!consultationId) return;
     const type = messageType || 'text';
-    if (!text && type !== 'voice' && type !== 'image' && type !== 'video' && type !== 'file') return;
+    const trimmedText = typeof text === 'string' ? text.trim() : '';
+    if (!trimmedText && type !== 'voice' && type !== 'image' && type !== 'video' && type !== 'file') return;
 
     const consultation = await consultationsRepo.findById(consultationId);
     if (!consultation ||
@@ -223,22 +224,26 @@ class RealtimeHub {
       return;
     }
 
-    const msg = await consultationsRepo.createMessage({
-      consultation_id: consultationId,
-      sender_id: user.id, // authoritative: never trust client-supplied senderId
-      sender_name: senderName || user.name,
-      text: text || '',
-      message_type: type,
-      file_url: fileUrl || null,
-      duration: duration ?? null,
-      file_size: fileSize ?? null,
-    });
-
     // Optional client correlation id (additive, validated, echoed to sender).
+    // ALSO persisted (migration 003) so a retry of the same logical send —
+    // e.g. the client's REST fallback after this frame was lost post-
+    // persistence — resolves to the already-stored row instead of duplicating.
     const clientMsgId =
       typeof data.clientMsgId === 'string' && data.clientMsgId.length > 0 && data.clientMsgId.length <= 64
         ? data.clientMsgId
         : undefined;
+    const msg = await consultationsRepo.createMessage({
+      consultation_id: consultationId,
+      sender_id: user.id, // authoritative: never trust client-supplied senderId
+      sender_name: senderName || user.name,
+      text: trimmedText,
+      message_type: type,
+      file_url: fileUrl || null,
+      duration: duration ?? null,
+      file_size: fileSize ?? null,
+      client_msg_id: clientMsgId || null,
+    });
+
     const envelope = messageEnvelope(msg, { clientMsgId });
     this.publishToUser(user.id, envelope);
     const recipientId =

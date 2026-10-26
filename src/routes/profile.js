@@ -20,15 +20,33 @@ router.get('/profile', authenticate, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * Avatar URL validation for PUT /api/profile. Accepts ONLY:
+ *  - absolute http(s) URLs (Vercel Blob legacy public uploads), or
+ *  - site-relative /uploads/… paths (local-dev storage)
+ * Anything else (data:, javascript:, file:, arbitrary paths) is rejected —
+ * the value is rendered in <img src> on every client.
+ */
+function isValidAvatarUrl(value) {
+  if (typeof value !== 'string') return false;
+  const v = value.trim();
+  if (v.length < 1 || v.length > 500) return false;
+  return /^https?:\/\/[^\s]+$/i.test(v) || /^\/uploads\/[^"]*$/i.test(v);
+}
+
 router.put('/profile', authenticate, async (req, res, next) => {
   try {
-    const { name, email, phone, age, gender } = req.body || {};
+    const { name, email, phone, age, gender, avatarUrl } = req.body || {};
+    if (avatarUrl !== undefined && !isValidAvatarUrl(avatarUrl)) {
+      return res.status(400).json({ error: 'URL avatar non valide' });
+    }
     const user = await usersRepo.updateProfile(req.user.id, {
       name: typeof name === 'string' && name ? name : undefined,
       email,
       phone,
       age: age === undefined ? undefined : (parseInt(age, 10) || null),
       gender,
+      avatarUrl,
     });
     if (!user) return res.status(404).json({ error: 'Not found' });
     res.json(usersRepo.safe(user));
