@@ -26,31 +26,63 @@ const { verifyToken } = require('../auth');
 const consultationsRepo = require('../repos/consultations');
 const usersRepo = require('../repos/users');
 const { createRedisBus, createLocalBus } = require('./redis-bus');
+const { createPresence } = require('./presence');
 
 const MAX_CATCHUP = 50;
 
-/** WS event envelope (camelCase, ms timestamps) — legacy shape. */
-function messageEnvelope(msg) {
-  return {
+/** Persisted message creation time → milliseconds (exactly one conversion).
+ * Accepts both shapes that reach the envelope: raw DB rows (created_at is a
+ * Date) and msgToApi-mapped rows (created_at is epoch SECONDS). A safe
+ * clock fallback is used only when no persisted timestamp exists. */
+function persistedTimestampMs(msg) {
+  const ca = msg && msg.created_at;
+  if (ca instanceof Date) {
+    const t = ca.getTime();
+    return Number.isFinite(t) ? t : null;
+  }
+  if (typeof ca === 'number' && Number.isFinite(ca)) return ca * 1000;
+  if (typeof ca === 'string' && ca) {
+    const t = Date.parse(ca);
+    if (Number.isFinite(t)) return t;
+  }
+  return null;
+}
+
+/** WS event envelope (camelCase, ms timestamps) — legacy shape. The event
+ * timestamp is the PERSISTED creation time, truncated to whole seconds so
+ * REST (epoch seconds) and WS (epoch ms) describe the EXACT same instant for
+ * one saved message; the server clock is only a fallback. `clientMsgId` is
+ * an ADDITIVE, optional correlation id echoed back to the sender (web
+ * optimistic-UI reconciliation; legacy clients ignore it). */
+function messageEnvelope(msg, { clientMsgId } = {}) {
+  const persistedMs = persistedTimestampMs(msg);
+  const envelope = {
     type: 'message:new',
     id: Number(msg.id),
     consultationId: msg.consultation_id,
     senderId: msg.sender_id,
     senderName: msg.sender_name,
     text: msg.text || '',
-    timestamp: Math.floor(new Date().getTime()), // legacy behavior: server clock, ms
+    timestamp: persistedMs !== null ? Math.floor(persistedMs / 1000) * 1000 : Date.now(),
     messageType: msg.message_type || 'text',
     fileUrl: msg.file_url || null,
     duration: msg.duration ?? null,
     fileSize: msg.file_size === null ? null : Number(msg.file_size),
   };
+  if (clientMsgId) envelope.clientMsgId = clientMsgId;
+  return envelope;
 }
 
 class RealtimeHub {
-  constructor({ bus = null } = {}) {
+  constructor({ bus = null, presence = null } = {}) {
     this.sockets = new Map(); // userId -> Set<ws>
     this.instanceId = uuidv4();
     this.bus = bus || createLocalBus();
+    this.presence = presence || createPresence();
+    // Last presence view THIS instance emitted/evaluated per user. Used to
+    // detect transitions (and, on heartbeat, to catch lease-expired users
+    // whose owning instance died without a clean disconnect).
+    this.presenceState = new Map(); // userId -> boolean
     this.bus.onMessage(({ userId, event, originInstance }) => {
       if (originInstance === this.instanceId) return; // already delivered locally
       this.deliverLocal(userId, event);
@@ -90,9 +122,10 @@ class RealtimeHub {
             await this.handleMessageSend(ws, user, data);
             break;
           case 'typing':
-            await this.handleEphemeral(user, data, (recipientId) => ({
-              type: 'typing', consultationId: data.consultationId, senderId: user.id, isTyping: Boolean(data.isTyping),
-            }));
+            await this.handleTyping(user, data);
+            break;
+          case 'presence:subscribe':
+            await this.handlePresenceSubscribe(user, data, ws);
             break;
           case 'call:start':
             await this.handleEphemeral(user, data, (recipientId) => ({
@@ -130,6 +163,12 @@ class RealtimeHub {
     ws.on('close', () => {
       if (user) this.unregister(user.id, ws);
     });
+
+    // Dead-socket safety net beyond the close event (heartbeat terminate,
+    // dropped connections): sweep any socket the registry still holds.
+    ws.on('error', () => {
+      try { ws.terminate(); } catch { /* already dead */ }
+    });
   }
 
   async handleAuth(ws, data) {
@@ -153,6 +192,8 @@ class RealtimeHub {
     this.register(user.id, ws);
     ws.send(JSON.stringify({ type: 'auth:ok', userId: user.id }));
     await this.sendCatchUp(ws, user.id);
+    // Presence of the counterparts the new connection may care about.
+    await this.sendInitialPresence(ws, user.id);
     return user;
   }
 
@@ -173,7 +214,7 @@ class RealtimeHub {
     const { consultationId, senderId, senderName, text, messageType, fileUrl, duration, fileSize } = data;
     if (!consultationId) return;
     const type = messageType || 'text';
-    if (!text && type !== 'voice' && type !== 'image' && type !== 'video') return;
+    if (!text && type !== 'voice' && type !== 'image' && type !== 'video' && type !== 'file') return;
 
     const consultation = await consultationsRepo.findById(consultationId);
     if (!consultation ||
@@ -193,11 +234,60 @@ class RealtimeHub {
       file_size: fileSize ?? null,
     });
 
-    const envelope = messageEnvelope(msg);
+    // Optional client correlation id (additive, validated, echoed to sender).
+    const clientMsgId =
+      typeof data.clientMsgId === 'string' && data.clientMsgId.length > 0 && data.clientMsgId.length <= 64
+        ? data.clientMsgId
+        : undefined;
+    const envelope = messageEnvelope(msg, { clientMsgId });
     this.publishToUser(user.id, envelope);
     const recipientId =
       consultation.patient_id === user.id ? consultation.doctor_id : consultation.patient_id;
     if (recipientId) this.publishToUser(recipientId, envelope);
+  }
+
+  /** typing — membership-checked relay to the other participant, gated on the
+   * consultation lifecycle: a closed (TERMINE/REFUSE/…) conversation must not
+   * show active-chat typing activity. Identity always comes from the
+   * authenticated socket; typing is ephemeral (never persisted). */
+  async handleTyping(user, data) {
+    if (!data.consultationId) return;
+    const consultation = await consultationsRepo.findById(data.consultationId);
+    if (!consultation ||
+        (consultation.patient_id !== user.id && consultation.doctor_id !== user.id)) {
+      return; // legacy behavior: silent drop
+    }
+    if (consultation.status !== 'EN_COURS') return; // closed → no typing relay
+    const recipientId =
+      consultation.patient_id === user.id ? consultation.doctor_id : consultation.patient_id;
+    if (recipientId) {
+      this.publishToUser(recipientId, {
+        type: 'typing',
+        consultationId: data.consultationId,
+        senderId: user.id, // authenticated identity, never client-supplied
+        isTyping: Boolean(data.isTyping),
+      });
+    }
+  }
+
+  /** presence:subscribe — reply with the counterpart's CURRENT presence for
+   * one consultation (membership-checked). Lets a client that mounted after
+   * its socket authenticated learn the partner status without a reconnect.
+   * The reply goes only to the requesting, authenticated user. */
+  async handlePresenceSubscribe(user, data, ws) {
+    if (!data.consultationId) return;
+    const consultation = await consultationsRepo.findById(data.consultationId);
+    if (!consultation ||
+        (consultation.patient_id !== user.id && consultation.doctor_id !== user.id)) {
+      return; // silent drop: no existence leak
+    }
+    const counterpartId =
+      consultation.patient_id === user.id ? consultation.doctor_id : consultation.patient_id;
+    if (!counterpartId) return;
+    const online = await this.isUserOnline(counterpartId);
+    this.presenceState.set(counterpartId, online);
+    const event = { type: 'presence:update', userId: counterpartId, online };
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(event));
   }
 
   /** typing / call:* — membership-checked relay to the other participant. */
@@ -216,8 +306,10 @@ class RealtimeHub {
   // ─── Delivery ────────────────────────────────────────────────────────────
 
   register(userId, ws) {
+    ws.__connId = uuidv4();
     if (!this.sockets.has(userId)) this.sockets.set(userId, new Set());
     this.sockets.get(userId).add(ws);
+    this.updatePresenceAndNotify(userId, ws.__connId, true);
   }
 
   unregister(userId, ws) {
@@ -225,6 +317,7 @@ class RealtimeHub {
     if (!set) return;
     set.delete(ws);
     if (set.size === 0) this.sockets.delete(userId);
+    this.updatePresenceAndNotify(userId, ws.__connId, false);
   }
 
   deliverLocal(userId, event) {
@@ -251,6 +344,89 @@ class RealtimeHub {
     const ids = await usersRepo.listByRole(role);
     for (const id of ids) this.publishToUser(id, event);
   }
+
+  // ─── Presence ─────────────────────────────────────────────────────────────
+
+  /** True when the user has a live socket on THIS instance or a live lease
+   *  (Redis mode) anywhere. Local mode: the in-instance registry IS the
+   *  truth (single-instance deployments — documented limitation). */
+  async isUserOnline(userId) {
+    if ((this.sockets.get(userId)?.size ?? 0) > 0) return true;
+    if (this.presence._localOnly) return false;
+    try {
+      return await this.presence.isOnline(userId);
+    } catch (err) {
+      console.error('[WS] presence lookup failed:', err.code || err.constructor?.name);
+      return false; // fail closed: no false "online"
+    }
+  }
+
+  /** Connection bookkeeping + transition detection. Emits presence:update
+   *  ONLY on a change of this instance's view, and only to consultation
+   *  counterparts (never a global broadcast). */
+  async updatePresenceAndNotify(userId, connId, added) {
+    try {
+      if (added) await this.presence.add(userId, connId);
+      else await this.presence.remove(userId, connId);
+      const online = await this.isUserOnline(userId);
+      const prev = this.presenceState.get(userId);
+      this.presenceState.set(userId, online);
+      if (prev === undefined || prev === online) return;
+      await this.broadcastPresence(userId, online);
+    } catch (err) {
+      // Category only — never user data.
+      console.error('[WS] presence update failed:', err.code || err.constructor?.name);
+    }
+  }
+
+  /** presence:update to every user sharing a consultation with `userId`. */
+  async broadcastPresence(userId, online) {
+    const counterparts = await consultationsRepo.listCounterpartIds(userId);
+    const event = { type: 'presence:update', userId, online };
+    for (const cid of counterparts) this.publishToUser(cid, event);
+  }
+
+  /** After auth: tell the new connection the CURRENT status of each of its
+   *  consultation counterparts (seeds this instance's presence view so the
+   *  heartbeat can later detect their offline transitions). */
+  async sendInitialPresence(ws, userId) {
+    try {
+      const counterparts = await consultationsRepo.listCounterpartIds(userId);
+      for (const cid of counterparts) {
+        const online = await this.isUserOnline(cid);
+        this.presenceState.set(cid, online);
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'presence:update', userId: cid, online }));
+        }
+      }
+    } catch (err) {
+      console.error('[WS] initial presence failed:', err.code || err.constructor?.name);
+    }
+  }
+
+  /** Heartbeat hook: renew this instance's leases and re-evaluate previously
+   *  seen users so a lease that expired elsewhere (crashed instance) turns
+   *  into an offline event within ~lease TTL + one heartbeat. */
+  async recheckPresence() {
+    try {
+      const renewals = [];
+      for (const [userId, set] of this.sockets) {
+        for (const ws of set) {
+          if (ws.__connId) renewals.push(this.presence.refresh(userId, ws.__connId));
+        }
+      }
+      await Promise.all(renewals);
+      for (const [userId, prev] of this.presenceState) {
+        const online = await this.isUserOnline(userId);
+        if (online !== prev) {
+          this.presenceState.set(userId, online);
+          await this.broadcastPresence(userId, online);
+        }
+      }
+    } catch (err) {
+      console.error('[WS] presence recheck failed:', err.code || err.constructor?.name);
+    }
+  }
 }
 
 /**
@@ -261,7 +437,9 @@ function attachRealtime(server, opts = {}) {
   const hub = new RealtimeHub(opts);
   hub.attach(server);
   // Heartbeat: same 30s ping/terminate cycle as the legacy server. On Vercel
-  // this doubles as dead-socket cleanup within the instance lifetime.
+  // this doubles as dead-socket cleanup within the instance lifetime, and
+  // renews presence leases / re-evaluates known presence so expired leases
+  // (crashed instances) surface as offline events.
   const interval = setInterval(() => {
     if (hub.wss) {
       hub.wss.clients.forEach((ws) => {
@@ -270,6 +448,7 @@ function attachRealtime(server, opts = {}) {
         ws.ping();
       });
     }
+    hub.recheckPresence();
   }, 30_000);
   interval.unref?.();
   return hub;

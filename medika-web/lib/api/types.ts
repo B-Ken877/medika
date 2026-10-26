@@ -65,7 +65,7 @@ export interface Consultation {
   orderId?: string | null;
 }
 
-export type MessageType = "text" | "voice" | "image" | "video";
+export type MessageType = "text" | "voice" | "image" | "video" | "file";
 
 export interface ServerMessage {
   id: number;
@@ -78,6 +78,35 @@ export interface ServerMessage {
   file_url?: string | null;
   duration?: number | null;
   file_size?: number | null;
+  /** Persisted read receipt (epoch seconds, NULL = unread). */
+  read_at?: number | null;
+}
+
+/** Result of POST /api/consultations/:id/read — persisted receipt state. */
+export interface ReadReceiptResult {
+  consultationId: string;
+  readerId: string;
+  messageIds: number[];
+  readAt: number | null;
+}
+
+/** POST /api/consultations/:id/attachments response — opaque private media. */
+export interface AttachmentUploadResponse {
+  attachmentId: string;
+  /** Opaque API path to reference from the message's file_url. */
+  url: string;
+  filename: string;
+  mimetype: string;
+  size: number;
+}
+
+/** GET /api/consultations/:id/attachments/:aid/url — short-lived grant. */
+export interface AttachmentUrlResponse {
+  url: string;
+  expiresIn: number;
+  filename: string;
+  mimetype: string;
+  size: number;
 }
 
 export interface SpecialtyPrice {
@@ -267,6 +296,8 @@ export interface WsNewMessageEvent {
   fileUrl?: string | null;
   duration?: number | null;
   fileSize?: number | null;
+  /** Additive correlation id echoed back to the sending client. */
+  clientMsgId?: string;
 }
 
 export interface WsConsultationUpdatedEvent {
@@ -293,6 +324,23 @@ export interface WsTypingEvent {
   isTyping: boolean;
 }
 
+/** Compact read-receipt event (one per mark-read request, not per message). */
+export interface WsMessagesReadEvent {
+  type: "messages:read";
+  consultationId: string;
+  readerId: string;
+  messageIds: number[];
+  /** Epoch seconds — the persisted read instant. */
+  readAt: number;
+}
+
+/** Participant presence (consultation-scoped delivery only). */
+export interface WsPresenceEvent {
+  type: "presence:update";
+  userId: string;
+  online: boolean;
+}
+
 export interface WsIncomingCallEvent {
   type: "call:incoming";
   from: string;
@@ -315,6 +363,8 @@ export type WsServerEvent =
   | WsConsultationUpdatedEvent
   | WsNewConsultationEvent
   | WsTypingEvent
+  | WsMessagesReadEvent
+  | WsPresenceEvent
   | WsIncomingCallEvent
   | WsCallResponseEvent
   | { type: string; [key: string]: unknown };

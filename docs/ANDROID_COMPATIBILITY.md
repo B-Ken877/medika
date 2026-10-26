@@ -78,3 +78,31 @@ inherent to fixing critical security findings.
 3. Direct-to-storage uploads for large media.
 4. Raise the client password minimum from 4 characters in coordination with
    the backend.
+
+## Messaging upgrade (additive WebSocket/REST changes — 2026)
+
+The web messaging upgrade keeps every existing Android contract intact and
+adds new, purely additive events/endpoints. Android clients ignore unknown
+WS event types and unknown JSON fields, so nothing breaks without an app
+update:
+
+- **`message:new` envelope**: now carries the persisted `created_at`
+  (truncated to whole seconds) instead of the delivery-clock time, plus an
+  optional `clientMsgId` echo when the sender supplied one. Both are
+  backward-compatible (same field names/units; extra field ignored by Gson).
+- **New server events** (ignored by current Android builds): `messages:read`
+  (compact read receipts) and `presence:update` (participant presence).
+- **New client frame** (optional): `presence:subscribe` for one
+  consultation; the server answers with a `presence:update` for the
+  counterpart.
+- **New REST endpoints** (additive): `POST /api/consultations/{id}/read`,
+  `POST /api/consultations/{id}/attachments` (private media),
+  `GET .../attachments/{aid}/url` (short-lived signed access).
+- **Textless `file` messages**: `message:send` and the REST messages
+  endpoint now also accept `messageType: "file"` without text (PDF
+  attachments) — previously only voice/image/video.
+- **Private attachments**: new consultation media is stored privately and
+  referenced by the opaque API path `/api/consultations/{cid}/attachments/{aid}`
+  in `file_url`. Android builds that render `file_url` directly will show
+  these as non-loadable until updated to fetch a signed URL via
+  `GET .../url` first. Historical public Blob URLs keep working unchanged.

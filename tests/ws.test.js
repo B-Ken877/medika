@@ -26,13 +26,21 @@ function connect() {
   });
 }
 
-function nextMessage(ws, timeoutMs = 5000) {
+function nextMessage(ws, timeoutMs = 5000, filter = null) {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('ws message timeout')), timeoutMs);
-    ws.on('message', (raw) => {
+    const onMessage = (raw) => {
+      let evt;
+      try { evt = JSON.parse(raw.toString()); } catch (e) { reject(e); return; }
+      if (filter && !filter(evt)) return; // skip non-matching frames
       clearTimeout(timer);
-      try { resolve(JSON.parse(raw.toString())); } catch (e) { reject(e); }
-    });
+      ws.off('message', onMessage);
+      resolve(evt);
+    };
+    const timer = setTimeout(() => {
+      ws.off('message', onMessage);
+      reject(new Error('ws message timeout'));
+    }, timeoutMs);
+    ws.on('message', onMessage);
   });
 }
 
@@ -202,5 +210,119 @@ describe('WS messaging', () => {
     await done;
     expect(events.some((e) => e.text === 'Bonjour docteur via WS')).toBe(true);
     ws.close();
+  });
+});
+
+describe('WS messaging — messaging upgrade contracts', () => {
+  let consId, closedConsId;
+
+  beforeAll(async () => {
+    const cons = await h.createConsultationFixture({
+      patientId: users.patient.id, doctorId: users.doctor.id, status: 'EN_COURS',
+    });
+    consId = cons.id;
+    const repo = (await import('../src/repos/consultations.js')).default;
+    const closed = await h.createConsultationFixture({
+      patientId: users.patient.id, doctorId: users.doctor.id, status: 'EN_COURS',
+    });
+    closedConsId = (await repo.prescribe(closed.id, users.doctor.id, 'òrdònans')).id;
+    patientWs = await authSocket('patient');
+    doctorWs = await authSocket('doctor');
+    await drain(patientWs);
+    await drain(doctorWs);
+  });
+
+  afterAll(() => {
+    patientWs?.close();
+    doctorWs?.close();
+  });
+
+  it('echoes an additive clientMsgId for optimistic-UI reconciliation', async () => {
+    const echoP = nextMessage(patientWs, 5000, (e) => e.type === 'message:new' && e.clientMsgId === 'web-abc-1');
+    const doctorP = nextMessage(doctorWs, 5000, (e) => e.type === 'message:new' && e.clientMsgId === 'web-abc-1');
+    patientWs.send(JSON.stringify({
+      type: 'message:send', consultationId: consId,
+      senderId: users.patient.id, senderName: 'Pat Test',
+      text: 'ak id kliyan', messageType: 'text', clientMsgId: 'web-abc-1',
+    }));
+    const [echo, delivered] = await Promise.all([echoP, doctorP]);
+    expect(echo.clientMsgId).toBe('web-abc-1');
+    expect(delivered.clientMsgId).toBe('web-abc-1');
+  });
+
+  it('omits clientMsgId when the client sent none (legacy shape untouched)', async () => {
+    const echoP = nextMessage(patientWs, 5000, (e) => e.type === 'message:new' && e.text === 'san id kliyan');
+    patientWs.send(JSON.stringify({
+      type: 'message:send', consultationId: consId,
+      senderId: users.patient.id, senderName: 'Pat Test',
+      text: 'san id kliyan', messageType: 'text',
+    }));
+    const echo = await echoP;
+    expect(echo.clientMsgId).toBeUndefined();
+    expect(Object.keys(echo).sort()).toEqual([
+      'consultationId', 'duration', 'fileSize', 'fileUrl', 'id', 'messageType',
+      'senderId', 'senderName', 'text', 'timestamp', 'type',
+    ]);
+  });
+
+  it('uses the PERSISTED created_at (not the delivery clock) as event timestamp', async () => {
+    const echoP = nextMessage(patientWs, 5000, (e) => e.type === 'message:new' && e.text === 'tan pèsepte');
+    patientWs.send(JSON.stringify({
+      type: 'message:send', consultationId: consId,
+      senderId: users.patient.id, senderName: 'Pat Test',
+      text: 'tan pèsepte', messageType: 'text',
+    }));
+    const echo = await echoP;
+
+    const list = await r.get(`/api/consultations/${consId}/messages`)
+      .set('Authorization', `Bearer ${token.patient}`);
+    const rest = list.body.find((m) => m.id === echo.id);
+    // REST gives epoch seconds; the WS envelope is the same instant in ms.
+    expect(rest.created_at).toBeGreaterThan(0);
+    expect(echo.timestamp).toBe(rest.created_at * 1000);
+  });
+
+  it('does NOT relay typing for a closed consultation (lifecycle gate)', async () => {
+    patientWs.send(JSON.stringify({
+      type: 'typing', consultationId: closedConsId, isTyping: true,
+    }));
+    await expect(nextMessage(doctorWs, 700, (e) =>
+      e.type === 'typing' && e.consultationId === closedConsId)).rejects.toThrow('timeout');
+  });
+
+  it('still relays typing for an active consultation (no regression)', async () => {
+    const doctorRecv = nextMessage(doctorWs, 5000, (e) =>
+      e.type === 'typing' && e.consultationId === consId);
+    patientWs.send(JSON.stringify({ type: 'typing', consultationId: consId, isTyping: true }));
+    const evt = await doctorRecv;
+    expect(evt.senderId).toBe(users.patient.id);
+    expect(evt.isTyping).toBe(true);
+  });
+
+  it('derives the typing sender from the authenticated socket (spoofed ids ignored)', async () => {
+    const doctorRecv = nextMessage(doctorWs, 5000, (e) =>
+      e.type === 'typing' && e.consultationId === consId && e.isTyping === false);
+    patientWs.send(JSON.stringify({
+      type: 'typing', consultationId: consId, isTyping: false, senderId: users.doctor.id,
+    }));
+    const evt = await doctorRecv;
+    expect(evt.senderId).toBe(users.patient.id); // authenticated identity, not the frame
+  });
+
+  it('keeps emoji (incl. ZWJ families and skin tones) intact end-to-end', async () => {
+    const emojiText = 'Santé 👨‍👩‍👧‍👦 👍🏽 🇭🇹 ❤️ 🩺 bonjou 😀';
+    const echoP = nextMessage(patientWs, 5000, (e) => e.type === 'message:new' && e.text === emojiText);
+    patientWs.send(JSON.stringify({
+      type: 'message:send', consultationId: consId,
+      senderId: users.patient.id, senderName: 'Pat Test',
+      text: emojiText, messageType: 'text',
+    }));
+    const echo = await echoP;
+    expect(echo.text).toBe(emojiText); // WS delivery intact
+    // Persistence + REST bootstrap intact (PostgreSQL UTF-8, no stripping).
+    const list = await r.get(`/api/consultations/${consId}/messages`)
+      .set('Authorization', `Bearer ${token.patient}`);
+    const stored = list.body.find((m) => m.id === echo.id);
+    expect(stored.text).toBe(emojiText);
   });
 });

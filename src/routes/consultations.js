@@ -16,8 +16,10 @@ function simulatedTransactionId(orderId) {
 }
 
 const express = require('express');
+const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const consultationsRepo = require('../repos/consultations');
+const attachmentsRepo = require('../repos/attachments');
 const usersRepo = require('../repos/users');
 const paymentsRepo = require('../repos/payments');
 const specialtiesRepo = require('../repos/specialties');
@@ -26,6 +28,15 @@ const moncash = require('../moncash');
 const { config, simulationAllowed } = require('../config');
 const { authenticate, requireRole } = require('../auth');
 const { badRequest, notFound, paymentRequired, conflict, serviceUnavailable } = require('../errors');
+const {
+  createAttachmentMiddleware,
+  storePrivateAttachment,
+  signLocalAttachmentUrl,
+  verifyLocalAttachmentSignature,
+  localAttachmentPath,
+  sanitizeFilename,
+  SIGNED_URL_TTL_SECONDS,
+} = require('../uploads');
 
 const router = express.Router();
 
@@ -250,7 +261,7 @@ router.post('/consultations/:id/messages', authenticate, async (req, res, next) 
     }
     const { text, messageType, fileUrl, duration, fileSize } = req.body || {};
     const type = messageType || 'text';
-    if (!text && type !== 'voice' && type !== 'image' && type !== 'video') {
+    if (!text && type !== 'voice' && type !== 'image' && type !== 'video' && type !== 'file') {
       return res.status(400).json({ error: 'Message text required' });
     }
     const msg = await consultationsRepo.createMessage({
@@ -271,6 +282,203 @@ router.post('/consultations/:id/messages', authenticate, async (req, res, next) 
       if (recipientId) hub.publishToUser(recipientId, envelope);
     }
     res.status(201).json(consultationsRepo.msgToApi(msg));
+  } catch (err) { next(err); }
+});
+
+// ─── Read receipts ─────────────────────────────────────────────────────────
+
+/**
+ * POST /api/consultations/:id/read — mark the OTHER participant's unread,
+ * non-system messages as read (authenticated caller = reader, never the
+ * payload). Atomic + idempotent in PostgreSQL; answers with the persisted
+ * state and relays ONE compact `messages:read` event to the original sender
+ * through the hub (authorized participant only — cross-instance via Redis
+ * when configured, exactly like message:new).
+ */
+router.post('/consultations/:id/read', authenticate, async (req, res, next) => {
+  try {
+    const c = await consultationsRepo.findById(req.params.id);
+    if (!c) return res.status(404).json({ error: 'Not found' });
+    if (c.patient_id !== req.user.id && c.doctor_id !== req.user.id) {
+      // Legacy hiding convention: participants-only resources answer 404.
+      return res.status(404).json({ error: 'Not found' });
+    }
+    const counterpartId = c.patient_id === req.user.id ? c.doctor_id : c.patient_id;
+    if (!counterpartId) {
+      return res.json({ consultationId: req.params.id, readerId: req.user.id, messageIds: [], readAt: null });
+    }
+    const { messageIds, readAt } = await consultationsRepo.markIncomingRead({
+      consultationId: req.params.id,
+      readerId: req.user.id,
+      counterpartId,
+    });
+    if (messageIds.length) {
+      const hub = req.app.locals.hub;
+      if (hub) {
+        hub.publishToUser(counterpartId, {
+          type: 'messages:read',
+          consultationId: req.params.id,
+          readerId: req.user.id,
+          messageIds,
+          readAt,
+        });
+      }
+    }
+    res.json({ consultationId: req.params.id, readerId: req.user.id, messageIds, readAt });
+  } catch (err) { next(err); }
+});
+
+// ─── Private consultation attachments ───────────────────────────────────────
+
+/** Participant-or-404 consultation guard shared by the attachment routes. */
+async function loadConsultationForAttachment(req, res) {
+  const c = await consultationsRepo.findById(req.params.id);
+  if (!c) { res.status(404).json({ error: 'Not found' }); return null; }
+  if (c.patient_id !== req.user.id && c.doctor_id !== req.user.id) {
+    res.status(404).json({ error: 'Not found' });
+    return null;
+  }
+  return c;
+}
+
+/**
+ * POST /api/consultations/:id/attachments — private, consultation-scoped
+ * upload for medical media. Authenticated participants only; the
+ * consultation must be EN_COURS (the same permission that gates sending
+ * messages). Stored PRIVATELY (Blob access:'private' / opaque dev path);
+ * the client receives only an opaque API path to put in the message.
+ */
+router.post('/consultations/:id/attachments', authenticate, (req, res, next) => {
+  createAttachmentMiddleware()(req, res, async (err) => {
+    try {
+      if (err) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(413).json({ error: `Fichye a twò gwo (maksimòm ${config.maxUploadMb}Mo)` });
+        }
+        if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+          return res.status(400).json({ error: 'Type de fichier non autorisé' });
+        }
+        return res.status(400).json({ error: 'Upload invalide' });
+      }
+      if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+      const c = await loadConsultationForAttachment(req, res);
+      if (!c) return;
+      if (c.status !== 'EN_COURS') {
+        return res.status(409).json({ error: 'Consultation non active' });
+      }
+
+      const attachmentId = 'att_' + uuidv4().substring(0, 12);
+      const { storage, blobPathname } = await storePrivateAttachment({
+        file: req.file,
+        consultationId: req.params.id,
+        attachmentId,
+      });
+      const row = await attachmentsRepo.create({
+        id: attachmentId,
+        consultation_id: req.params.id,
+        uploader_id: req.user.id,
+        storage,
+        blob_pathname: blobPathname,
+        filename: sanitizeFilename(req.file.originalname),
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+      });
+      res.status(201).json({
+        attachmentId: row.id,
+        url: `/api/consultations/${encodeURIComponent(row.consultation_id)}/attachments/${encodeURIComponent(row.id)}`,
+        filename: row.filename,
+        mimetype: row.mimetype,
+        size: Number(row.size),
+      });
+    } catch (e) {
+      next(e);
+    }
+  });
+});
+
+/**
+ * GET /api/consultations/:id/attachments/:aid/url — participant-authorized,
+ * short-lived signed access. Membership is re-checked on EVERY request; the
+ * answer carries only the expiring grant, never storage keys or tokens.
+ */
+router.get('/consultations/:id/attachments/:aid/url', authenticate, async (req, res, next) => {
+  try {
+    const c = await loadConsultationForAttachment(req, res);
+    if (!c) return;
+    const row = await attachmentsRepo.findById(req.params.aid);
+    if (!row || row.consultation_id !== req.params.id) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    if (row.storage === 'blob') {
+      const { issueSignedToken, presignUrl } = require('@vercel/blob');
+      const validUntil = Date.now() + SIGNED_URL_TTL_SECONDS * 1000;
+      const signedToken = await issueSignedToken({
+        pathname: row.blob_pathname,
+        operations: ['get'],
+        validUntil,
+        token: config.blobReadWriteToken,
+      });
+      const { presignedUrl } = await presignUrl(signedToken, {
+        operation: 'get',
+        pathname: row.blob_pathname,
+        validUntil,
+        access: 'private',
+      });
+      return res.json({
+        url: presignedUrl,
+        expiresIn: SIGNED_URL_TTL_SECONDS,
+        filename: row.filename,
+        mimetype: row.mimetype,
+        size: Number(row.size),
+      });
+    }
+
+    // Local-dev storage: HMAC-signed, expiring API grant (dev parity for the
+    // production signed-URL model — the static /uploads route never serves it).
+    const { url } = signLocalAttachmentUrl({ consultationId: req.params.id, attachmentId: row.id });
+    res.json({
+      url,
+      expiresIn: SIGNED_URL_TTL_SECONDS,
+      filename: row.filename,
+      mimetype: row.mimetype,
+      size: Number(row.size),
+    });
+  } catch (err) { next(err); }
+});
+
+/**
+ * GET /api/consultations/:id/attachments/:aid/file — streams a LOCAL-dev
+ * attachment for holders of the short-lived HMAC grant. Blob-stored
+ * attachments are served by the presigned Blob URL instead (this route
+ * 404s for them by construction: the grant is only issued for local rows).
+ */
+router.get('/consultations/:id/attachments/:aid/file', async (req, res, next) => {
+  try {
+    const { exp, sig } = req.query;
+    if (!verifyLocalAttachmentSignature({
+      consultationId: req.params.id,
+      attachmentId: req.params.aid,
+      exp: String(exp || ''),
+      sig: String(sig || ''),
+    })) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    const row = await attachmentsRepo.findById(req.params.aid);
+    if (!row || row.consultation_id !== req.params.id || row.storage !== 'local') {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    const fp = localAttachmentPath(row.blob_pathname);
+    await fs.promises.access(fp).catch(() => {
+      throw notFound('Not found');
+    });
+    res.setHeader('Content-Type', row.mimetype);
+    res.setHeader('Cache-Control', `private, max-age=${SIGNED_URL_TTL_SECONDS}`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    fs.createReadStream(fp)
+      .on('error', () => { if (!res.headersSent) res.status(404).json({ error: 'Not found' }); else res.end(); })
+      .pipe(res);
   } catch (err) { next(err); }
 });
 
