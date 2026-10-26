@@ -69,7 +69,7 @@ export function EmptyState({
 export function ErrorAlert({
   error,
   onRetry,
-  retryLabel = "Réessayer",
+  retryLabel = "Eseye ankò",
 }: {
   error: unknown;
   onRetry?: () => void;
@@ -80,8 +80,8 @@ export function ErrorAlert({
     error instanceof ApiError
       ? error.message
       : error instanceof Error
-        ? "Une erreur inattendue est survenue. Réessayez."
-        : "Une erreur inattendue est survenue. Réessayez.";
+        ? "Gen yon pwoblèm. Tanpri, eseye ankò."
+        : "Gen yon pwoblèm. Tanpri, eseye ankò.";
   return (
     <div className="alert alert-error" role="alert">
       <AlertTriangle size={17} aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
@@ -114,7 +114,7 @@ export function Spinner({ label }: { label?: string }) {
         }}
         aria-hidden
       />
-      {label ?? "Chargement…"}
+      {label ?? "N ap chaje..."}
     </div>
   );
 }

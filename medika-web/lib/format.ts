@@ -1,18 +1,13 @@
 /**
- * Formatting helpers — French (Haiti) locale, mirroring the admin panel's
- * conventions in medika-admin/lib/api.js so the whole platform formats
- * statuses, currencies and dates identically.
+ * Formatting helpers — Haitian Creole display, mirroring the web app's
+ * Kreyòl copy. Statuses/urgency raw values stay backend-owned (see
+ * lib/labels.ts for the display-label contract).
  */
 import type { Consultation, ConsultationStatus } from "./api/types";
+import { consultationStatusLabel, genderDisplayLabel } from "./labels";
 
 export function statusLabel(status: string): string {
-  const map: Record<string, string> = {
-    RECHERCHE_MEDECIN: "En attente",
-    EN_COURS: "En cours",
-    TERMINE: "Terminée",
-    REFUSE: "Refusée",
-  };
-  return map[status] ?? status;
+  return consultationStatusLabel(status);
 }
 
 export function statusBadgeClass(status: string): string {
@@ -49,13 +44,11 @@ export function formatDateTime(ts: number | null | undefined): string {
 
 export function formatDateShort(ts: number | null | undefined): string {
   if (!ts) return "N/A";
-  return new Date(ts * 1000).toLocaleDateString("fr-FR", {
-    day: "2-digit",
-    month: "short",
-  });
+  const d = new Date(ts * 1000);
+  return `${String(d.getDate()).padStart(2, "0")} ${KREYOL_MONTHS_SHORT[d.getMonth()]}`;
 }
 
-/** Chat-style day separators, matching the Android ChatScreen. */
+/** Chat-style day separators — Haitian Creole. */
 export function formatDaySeparator(ts: number | null | undefined): string {
   if (!ts) return "";
   const date = new Date(ts * 1000);
@@ -64,27 +57,39 @@ export function formatDaySeparator(ts: number | null | undefined): string {
   yesterday.setDate(today.getDate() - 1);
   const sameDay = (a: Date, b: Date) =>
     a.getDate() === b.getDate() && a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
-  if (sameDay(date, today)) return "Aujourd'hui";
-  if (sameDay(date, yesterday)) return "Hier";
-  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+  if (sameDay(date, today)) return "Jodi a";
+  if (sameDay(date, yesterday)) return "Yè";
+  return `${date.getDate()} ${KREYOL_MONTHS[date.getMonth()]} ${date.getFullYear()}`;
 }
+
+/** Haitian Creole month names (long form). */
+const KREYOL_MONTHS = [
+  "janvye", "fevriye", "mas", "avril", "me", "jen",
+  "jiyè", "out", "septanm", "oktòb", "novanm", "desanm",
+];
+
+/** Haitian Creole month names (short form). */
+const KREYOL_MONTHS_SHORT = [
+  "jan", "fev", "mas", "avr", "me", "jen",
+  "jiy", "out", "sep", "okt", "nov", "des",
+];
 
 export function formatTime(ts: number | null | undefined): string {
   if (!ts) return "";
   return new Date(ts * 1000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 }
 
-/** "À l'instant" / "Xmin" / "Xh" — matching the Android doctor dashboard. */
+/** "Kounye a" / "X min" / "X è" / "X jou" — relative timestamps in Kreyòl. */
 export function relativeTime(ts: number | null | undefined): string {
   if (!ts) return "N/A";
   const seconds = Math.floor(Date.now() / 1000 - ts);
-  if (seconds < 60) return "À l'instant";
+  if (seconds < 60) return "Kounye a";
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}min`;
+  if (minutes < 60) return `${minutes} min`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
+  if (hours < 24) return `${hours} è`;
   const days = Math.floor(hours / 24);
-  return `${days}j`;
+  return `${days} jou`;
 }
 
 export function isConsultationActive(c: Consultation): boolean {
@@ -114,9 +119,7 @@ export function initialsOf(name: string | null | undefined): string {
 }
 
 export function genderLabel(gender: string | null | undefined): string {
-  if (gender === "Femme") return "Femme";
-  if (gender === "Homme") return "Homme";
-  return gender ?? "—";
+  return genderDisplayLabel(gender);
 }
 
 export function fileSizeLabel(bytes: number | null | undefined): string {
