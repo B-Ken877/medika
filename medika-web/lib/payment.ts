@@ -33,6 +33,15 @@ export interface CreatePaymentResult {
   orderId: string;
   amount: number;
   redirectUrl: string;
+  /** True only when the SERVER executed its simulated-payment path (test
+   * mode). Display/flow signal from the server — never client-asserted. */
+  simulated: boolean;
+}
+
+export interface PaymentMode {
+  /** Server-authoritative test-mode flag (display only — authorization is
+   * still enforced per-request at /create and /verify). */
+  simulated: boolean;
 }
 
 export function buildOrderId(doctorId: string): string {
@@ -80,12 +89,36 @@ export async function createPayment(order: PaymentOrder): Promise<CreatePaymentR
   const data = (await paymentFetch("/api/payment/create", {
     orderId: order.orderId,
     amount: order.amount,
-  })) as { success?: boolean; redirectUrl?: string } | null;
+  })) as { success?: boolean; redirectUrl?: string; simulated?: boolean } | null;
 
   if (!data || data.success !== true || !data.redirectUrl) {
     throw new PaymentError("create", "Nou pa t kapab kòmanse peman an. Tanpri, eseye ankò.");
   }
-  return { orderId: order.orderId, amount: order.amount, redirectUrl: data.redirectUrl };
+  return {
+    orderId: order.orderId,
+    amount: order.amount,
+    redirectUrl: data.redirectUrl,
+    simulated: data.simulated === true,
+  };
+}
+
+/** Discover the payment mode so the payment step can label itself honestly
+ * (simulated test vs real MonCash) BEFORE the patient clicks anything.
+ * Fails CLOSED: any error, non-200 or malformed body → { simulated: false }.
+ * The response carries only a boolean test-mode flag — no payment settings. */
+export async function fetchPaymentMode(timeoutMs = 10_000): Promise<PaymentMode> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new DOMException("timeout", "TimeoutError")), timeoutMs);
+  try {
+    const res = await fetch(`${PAYMENT_BASE_URL}/api/payment/config`, { signal: controller.signal });
+    if (!res.ok) return { simulated: false };
+    const data = (await res.json().catch(() => null)) as { simulated?: boolean } | null;
+    return { simulated: data?.simulated === true };
+  } catch {
+    return { simulated: false };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export interface VerifyPaymentResult {

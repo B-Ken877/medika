@@ -5,7 +5,11 @@
  *
  * Step 1: describe symptoms + pick a specialty (prices from /api/specialties/prices)
  * Step 2: choose a doctor from the filtered list (GET /api/doctors?specialty=)
- * Step 3: MonCash payment (create → gateway tab → verify) — same protocol as Android
+ * Step 3: payment — real mode: MonCash (create → gateway tab → verify), same
+ *   protocol as Android. Simulated mode (server-discovered via
+ *   /api/payment/config, only on authorized testing deployments): a
+ *   server-verified simulated payment — no MonCash redirect, explicit test
+ *   notice, success only after backend confirmation.
  * Step 4: POST /api/consultations (with payment metadata) → redirect to the chat
  *
  * Directory entry (?doctor=<id>): the doctor is resolved and kept selected, his
@@ -26,6 +30,7 @@ import {
   ChevronRight,
   CreditCard,
   ExternalLink,
+  FlaskConical,
   Search,
   ShieldCheck,
   Stethoscope,
@@ -34,7 +39,7 @@ import { useAuth } from "@/lib/auth/context";
 import { createConsultation, getDoctors, getSpecialtyPrices } from "@/lib/api/endpoints";
 import type { SpecialtyPrice, User } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
-import { buildOrderId, createPayment, openPaymentGateway, verifyPayment, PaymentError } from "@/lib/payment";
+import { buildOrderId, createPayment, fetchPaymentMode, openPaymentGateway, verifyPayment, PaymentError } from "@/lib/payment";
 import { formatCurrency } from "@/lib/format";
 import { specialtyLabel, urgencyLabel } from "@/lib/labels";
 import { Avatar, ErrorAlert, Spinner } from "@/components/ui/primitives";
@@ -63,9 +68,17 @@ function ConsultFlow() {
   // Payment state
   const [payState, setPayState] = useState<"idle" | "creating" | "gateway" | "verifying" | "done" | "error">("idle");
   const [payError, setPayError] = useState<string | null>(null);
-  const [payUnreachable, setPayUnreachable] = useState(false);
   const [transactionId, setTransactionId] = useState<string | null>(null);
   const orderIdRef = useRef<string>("");
+  /** Server-discovered payment mode — "simulated" only when the backend runs
+   * its isolated test-payment path (PAYMENT_SIMULATION on an authorized
+   * non-production deployment). Display signal from the server; the backend
+   * still authorizes every create/verify on its own. */
+  const [payMode, setPayMode] = useState<"loading" | "real" | "simulated">("loading");
+  /** True once the server accepted the simulated order for the current
+   * doctor selection — lets a retry re-verify the SAME order instead of
+   * creating orphan payment rows. */
+  const simOrderReadyRef = useRef(false);
 
   // Internal values sent to the backend (DB default: "Moyenne") — display
   // labels come from urgencyLabel(); the raw values must never change.
@@ -95,6 +108,22 @@ function ConsultFlow() {
       })),
     [prices],
   );
+
+  // Discover the server's payment mode when the payment step is reached, so
+  // the step labels itself honestly (test simulation vs real MonCash) before
+  // the patient clicks anything. Server-authoritative signal; authorization
+  // is still enforced per-request. Fails closed to the real-mode UI.
+  useEffect(() => {
+    if (step !== "payment") return;
+    let cancelled = false;
+    setPayMode("loading");
+    fetchPaymentMode().then((mode) => {
+      if (!cancelled) setPayMode(mode.simulated ? "simulated" : "real");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [step]);
 
   const findDoctors = useCallback(
     (specialtyName: string) => {
@@ -174,6 +203,7 @@ function ConsultFlow() {
       setPayState("idle");
       setPayError(null);
       setTransactionId(null);
+      simOrderReadyRef.current = false;
     } else {
       findDoctors(specialty);
     }
@@ -185,6 +215,7 @@ function ConsultFlow() {
     setPayState("idle");
     setPayError(null);
     setTransactionId(null);
+    simOrderReadyRef.current = false;
   };
 
   const startPayment = async () => {
@@ -213,7 +244,6 @@ function ConsultFlow() {
       setPayState("gateway");
     } catch (err) {
       setPayState("error");
-      setPayUnreachable(err instanceof PaymentError && err.stage === "network");
       setPayError(
         err instanceof PaymentError
           ? err.message
@@ -222,13 +252,54 @@ function ConsultFlow() {
     }
   };
 
-  /** Mirrors the Android PaymentActivity sandbox mode: a clearly-labelled
-   * simulation used only when the payment server is unreachable, so the
-   * consultation can still proceed for testing/verification purposes. */
-  const simulateSandboxPayment = () => {
-    setTransactionId(`SANDBOX_TEST_${Date.now()}`);
-    setPayState("done");
+  /** Simulated test payment (authorized testing deployments only — the
+   * SERVER decides via PAYMENT_SIMULATION; this handler never fakes
+   * anything locally). One click runs the server-verified flow: create a
+   * clearly-identified simulated order → confirm it server-side. Success is
+   * shown ONLY after the backend confirms; a server that refuses simulation
+   * (mode changed, production guard) surfaces as an error, never as success. */
+  const startSimulatedPayment = async () => {
+    if (!selectedDoctor || payState === "creating" || payState === "verifying") return;
+    const amount = priceOf(selectedDoctor.specialty ?? specialty);
+    if (!amount || amount <= 0) {
+      setPayState("error");
+      setPayError("Montan an pa valab. Tanpri, eseye ankò.");
+      return;
+    }
     setPayError(null);
+    try {
+      if (!simOrderReadyRef.current) {
+        // No accepted simulated order yet for this doctor selection → create
+        // one (retries after a verify failure reuse it — no orphan rows).
+        setPayState("creating");
+        const orderId = buildOrderId(selectedDoctor.id);
+        orderIdRef.current = orderId;
+        const res = await createPayment({ orderId, amount });
+        if (res.simulated !== true) {
+          // The server did NOT run its simulated path — never fake success.
+          setPayState("error");
+          setPayError("Nou pa t kapab konfime peman tès la. Tanpri, eseye ankò.");
+          return;
+        }
+        simOrderReadyRef.current = true;
+      }
+      setPayState("verifying");
+      const result = await verifyPayment(orderIdRef.current);
+      if (result.success) {
+        setTransactionId(result.transactionId);
+        setPayState("done");
+      } else {
+        setPayState("error");
+        setPayError("Nou pa t kapab konfime peman tès la. Tanpri, eseye ankò.");
+      }
+    } catch (err) {
+      setPayState("error");
+      setPayError(
+        err instanceof PaymentError
+          ? err.message
+          : "Nou pa t kapab konfime peman tès la. Tanpri, eseye ankò.",
+      );
+    }
   };
 
   const confirmPayment = async () => {
@@ -283,6 +354,7 @@ function ConsultFlow() {
     setPayState("idle");
     setPayError(null);
     setTransactionId(null);
+    simOrderReadyRef.current = false;
     // Reload the filtered doctor list (covers both the directory entry path
     // and the normal intake path — doctors is null when we skipped step 2).
     findDoctors(specialty);
@@ -458,7 +530,7 @@ function ConsultFlow() {
 
       <div>
         <h1 className="page-title">Peman</h1>
-        <p className="muted small">Etap sekirize MonCash</p>
+        <p className="muted small">{payMode === "simulated" ? "Mòd tès — peman simile" : "Etap sekirize MonCash"}</p>
       </div>
 
       <ErrorAlert error={error} />
@@ -482,10 +554,23 @@ function ConsultFlow() {
           <span className="small">{urgencyLabel(urgency)}</span>
         </div>
         <hr className="divider" />
-        <p className="tiny muted" style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <ShieldCheck size={14} aria-hidden /> Peman an trete pa MonCash. Medika pa kenbe enfòmasyon kat w yo.
-        </p>
+        {payMode === "simulated" ? (
+          <p className="tiny muted" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <FlaskConical size={14} aria-hidden /> Peman tès — trete pa sèvis tès Medika a, pa pa MonCash.
+          </p>
+        ) : (
+          <p className="tiny muted" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <ShieldCheck size={14} aria-hidden /> Peman an trete pa MonCash. Medika pa kenbe enfòmasyon kat w yo.
+          </p>
+        )}
       </div>
+
+      {payMode === "simulated" && (
+        <div className="alert alert-info" role="status">
+          <FlaskConical size={16} aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
+          <span>Mòd tès la aktive. Peman sa a se yon simulation; pa gen okenn lajan k ap deplase.</span>
+        </div>
+      )}
 
       {payError && (
         <div className="alert alert-warning" role="alert">
@@ -494,13 +579,27 @@ function ConsultFlow() {
       )}
       {!payError && payState === "error" && (
         <div className="alert alert-error" role="alert">
-          Gen yon pwoblèm ak peman an. Tanpri, eseye ankò.
+          {payMode === "simulated"
+            ? "Nou pa t kapab konfime peman tès la. Tanpri, eseye ankò."
+            : "Gen yon pwoblèm ak peman an. Tanpri, eseye ankò."}
         </div>
       )}
 
-      {payState === "idle" && (
+      {payState === "idle" && payMode === "loading" && (
+        <button className="btn btn-primary btn-block btn-lg" disabled>
+          <span className="spin" aria-hidden /> N ap chaje peman an...
+        </button>
+      )}
+
+      {payState === "idle" && payMode === "real" && (
         <button className="btn btn-primary btn-block btn-lg" onClick={startPayment}>
           <CreditCard size={17} aria-hidden /> Peye {formatCurrency(amount)} ak MonCash
+        </button>
+      )}
+
+      {payState === "idle" && payMode === "simulated" && (
+        <button className="btn btn-primary btn-block btn-lg" onClick={startSimulatedPayment}>
+          <FlaskConical size={17} aria-hidden /> Simile peman an
         </button>
       )}
 
@@ -527,10 +626,13 @@ function ConsultFlow() {
       {payState === "verifying" && (
         <div className="stack">
           <div className="alert alert-info" role="status">
-            Peman an poko konfime. Si w fin peye sou MonCash, tann yon ti moman epi verifye ankò.
+            {payMode === "simulated"
+              ? "N ap konfime peman tès la..."
+              : "Peman an poko konfime. Si w fin peye sou MonCash, tann yon ti moman epi verifye ankò."}
           </div>
           <button className="btn btn-primary btn-block btn-lg" disabled>
-            <span className="spin" aria-hidden /> N ap verifye peman an...
+            <span className="spin" aria-hidden />{" "}
+            {payMode === "simulated" ? "N ap konfime peman tès la..." : "N ap verifye peman an..."}
           </button>
         </div>
       )}
@@ -540,7 +642,9 @@ function ConsultFlow() {
           <div className="alert alert-success" role="status">
             <CheckCircle2 size={16} aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
             <span>
-              Peman an konfime.
+              {payMode === "simulated"
+                ? "Peman tès la reyisi. Konsiltasyon ou a konfime."
+                : "Peman an konfime."}
               {transactionId ? <span className="tiny muted" style={{ display: "block" }}>Idantifyan: {transactionId}</span> : null}
             </span>
           </div>
@@ -560,20 +664,12 @@ function ConsultFlow() {
 
       {payState === "error" && (
         <div className="stack">
-          <button className="btn btn-primary btn-block btn-lg" onClick={startPayment}>
+          <button
+            className="btn btn-primary btn-block btn-lg"
+            onClick={payMode === "simulated" ? startSimulatedPayment : startPayment}
+          >
             Eseye ankò
           </button>
-          {payUnreachable && (
-            <div className="alert alert-warning">
-              <span>
-                Nou pa rive jwenn sèvis MonCash la. Ou ka kontinye an <strong>mode tès</strong> (peman
-                simile, menm jan ak aplikasyon Android an an sandbox).
-              </span>
-              <button className="btn btn-secondary btn-sm mt-1" onClick={simulateSandboxPayment}>
-                Mode tès: simile peman an
-              </button>
-            </div>
-          )}
           <button
             className="btn btn-secondary btn-block"
             onClick={() => setPayState("idle")}
