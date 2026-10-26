@@ -44,7 +44,7 @@ function LoginForm() {
     if (submitting) return; // anti double-submit
     setError(null);
     if (!username.trim() || !password) {
-      setError(new ApiError("validation", 0, "Renseignez votre nom d'utilisateur et votre mot de passe."));
+      setError(new ApiError("validation", 0, "Tanpri, antre non itilizatè ou a ak modpas ou."));
       return;
     }
     setSubmitting(true);
@@ -52,7 +52,13 @@ function LoginForm() {
       await login(username.trim(), password);
       // Redirect happens via the auth status effect.
     } catch (err) {
-      setError(err);
+      setError(
+        err instanceof ApiError && err.code === "unauthorized"
+          ? new ApiError("unauthorized", 401, "Non itilizatè a oswa modpas la pa kòrèk.")
+          : err instanceof ApiError && err.code === "network"
+            ? new ApiError("network", 0, "Nou pa t kapab konekte w. Tanpri, eseye ankò.")
+            : err,
+      );
       setSubmitting(false);
     }
   };
@@ -65,9 +71,9 @@ function LoginForm() {
           <BrandMark />
           <span className="brand-word">Medika</span>
         </div>
-        <h2 className="auth-brand-title">Votre santé, plus proche de vous.</h2>
+        <h2 className="auth-brand-title">Sante w, tout prè ou.</h2>
         <p className="auth-brand-sub">
-          Accédez à vos consultations et suivez votre parcours de soins en toute simplicité.
+          Jwenn aksè konsiltasyon ou yo epi swiv swen sante w san difikilte.
         </p>
       </aside>
 
@@ -79,14 +85,14 @@ function LoginForm() {
         </div>
 
         <main className="auth-form">
-          <h1 className="auth-title">Bon retour</h1>
-          <p className="auth-sub">Connectez-vous à votre espace Medika.</p>
+          <h1 className="auth-title">Kontan wè w ankò</h1>
+          <p className="auth-sub">Konekte sou kont Medika ou.</p>
 
           <ErrorAlert error={error} />
 
           <form onSubmit={onSubmit} noValidate>
             <div className="field">
-              <label htmlFor="username">Nom d&apos;utilisateur</label>
+              <label htmlFor="username">Non itilizatè</label>
               <input
                 id="username"
                 className="input"
@@ -96,14 +102,14 @@ function LoginForm() {
                 spellCheck={false}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Nom d'utilisateur ou email"
+                placeholder="Non itilizatè oswa imèl"
                 required
                 maxLength={100}
               />
             </div>
 
             <div className="field">
-              <label htmlFor="password">Mot de passe</label>
+              <label htmlFor="password">Modpas</label>
               <div className="input-with-action">
                 <input
                   id="password"
@@ -112,7 +118,7 @@ function LoginForm() {
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Mot de passe"
+                  placeholder="Modpas"
                   required
                   maxLength={200}
                 />
@@ -120,7 +126,7 @@ function LoginForm() {
                   type="button"
                   className="toggle-btn"
                   onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? "Cacher le mot de passe" : "Montrer le mot de passe"}
+                  aria-label={showPassword ? "Kache modpas la" : "Montre modpas la"}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -130,20 +136,20 @@ function LoginForm() {
             <button className="btn btn-primary auth-submit" type="submit" disabled={submitting}>
               {submitting ? (
                 <>
-                  <span className="spin" aria-hidden /> Connexion…
+                  <span className="spin" aria-hidden /> N ap konekte w...
                 </>
               ) : (
                 <>
-                  <Lock size={16} aria-hidden /> Se connecter
+                  <Lock size={16} aria-hidden /> Konekte
                 </>
               )}
             </button>
           </form>
 
           <p className="auth-alt">
-            Pas encore de compte ? <Link href="/register">Créer un compte</Link>
+            Ou poko gen kont? <Link href="/register">Kreye kont</Link>
           </p>
-          <p className="auth-note">Connexion sécurisée · Chiffrement TLS</p>
+          <p className="auth-note">Koneksyon sekirize · Chifman TLS</p>
         </main>
       </div>
     </div>
@@ -154,7 +160,7 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <div style={{ minHeight: "100dvh", display: "grid", placeItems: "center" }}>Chargement…</div>
+        <div style={{ minHeight: "100dvh", display: "grid", placeItems: "center" }}>N ap chaje...</div>
       }
     >
       <LoginForm />

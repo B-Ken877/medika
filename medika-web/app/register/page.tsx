@@ -48,16 +48,16 @@ export default function RegisterPage() {
     setError(null);
 
     if (!name.trim() || !username.trim() || !password) {
-      setError(new ApiError("validation", 0, "Le nom complet, le nom d'utilisateur et le mot de passe sont requis."));
+      setError(new ApiError("validation", 0, "Tanpri, mete non konplè ou, non itilizatè ou a ak modpas ou."));
       return;
     }
     if (password.length < 4) {
-      setError(new ApiError("validation", 0, "Le mot de passe doit contenir au moins 4 caractères."));
+      setError(new ApiError("validation", 0, "Modpas la dwe gen omwen 4 karaktè."));
       return;
     }
     const ageNum = age.trim() === "" ? null : Number(age);
     if (ageNum !== null && (!Number.isFinite(ageNum) || ageNum < 0 || ageNum > 130)) {
-      setError(new ApiError("validation", 0, "Âge invalide."));
+      setError(new ApiError("validation", 0, "Laj la pa valab."));
       return;
     }
 
@@ -74,7 +74,11 @@ export default function RegisterPage() {
       });
       // Redirect happens via auth status effect.
     } catch (err) {
-      setError(err);
+      setError(
+        err instanceof ApiError && err.code === "conflict"
+          ? new ApiError("conflict", 409, "Gen yon kont ki deja itilize adrès imèl sa a.")
+          : err,
+      );
       setSubmitting(false);
     }
   };
@@ -87,9 +91,9 @@ export default function RegisterPage() {
           <BrandMark />
           <span className="brand-word">Medika</span>
         </div>
-        <h2 className="auth-brand-title">Votre santé, plus proche de vous.</h2>
+        <h2 className="auth-brand-title">Sante w, tout prè ou.</h2>
         <p className="auth-brand-sub">
-          Créez votre compte pour consulter des médecins et suivre vos soins.
+          Kreye kont ou pou w ka jwenn swen sante pi fasil.
         </p>
       </aside>
 
@@ -102,19 +106,19 @@ export default function RegisterPage() {
 
         <main className="auth-form" style={{ maxWidth: 440 }}>
           <Link href="/login" className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start", marginBottom: 14 }}>
-            <ArrowLeft size={16} aria-hidden /> Retour
+            <ArrowLeft size={16} aria-hidden /> Retounen
           </Link>
 
-          <h1 className="auth-title">Créer un compte</h1>
-          <p className="auth-sub">Rejoignez Medika pour accéder à des soins.</p>
+          <h1 className="auth-title">Kreye kont Medika ou</h1>
+          <p className="auth-sub">Kreye kont ou pou w ka jwenn swen sante pi fasil.</p>
 
           <ErrorAlert error={error} />
 
           <form onSubmit={onSubmit} noValidate>
             <fieldset className="form-section" style={{ border: "none" }}>
-              <legend className="form-section-title">Informations personnelles</legend>
+              <legend className="form-section-title">Enfòmasyon pèsonèl</legend>
               <div className="field">
-                <label htmlFor="reg-name">Nom complet</label>
+                <label htmlFor="reg-name">Non konplè</label>
                 <input
                   id="reg-name"
                   className="input"
@@ -122,14 +126,14 @@ export default function RegisterPage() {
                   autoComplete="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Ex: Sarah Joseph"
+                  placeholder="Egzanp: Sarah Joseph"
                   required
                   maxLength={120}
                 />
               </div>
               <div className="grid-2">
                 <div className="field">
-                  <label htmlFor="reg-age">Âge (optionnel)</label>
+                  <label htmlFor="reg-age">Laj (opsyonèl)</label>
                   <input
                     id="reg-age"
                     className="input"
@@ -139,28 +143,28 @@ export default function RegisterPage() {
                     inputMode="numeric"
                     value={age}
                     onChange={(e) => setAge(e.target.value)}
-                    placeholder="Ex: 28"
+                    placeholder="Egzanp: 28"
                   />
                 </div>
                 <div className="field">
-                  <label htmlFor="reg-gender">Genre</label>
+                  <label htmlFor="reg-gender">Sèks</label>
                   <select
                     id="reg-gender"
                     className="select"
                     value={gender}
                     onChange={(e) => setGender(e.target.value as "Homme" | "Femme")}
                   >
-                    <option value="Homme">Homme</option>
-                    <option value="Femme">Femme</option>
+                    <option value="Homme">Gason</option>
+                    <option value="Femme">Fi</option>
                   </select>
                 </div>
               </div>
             </fieldset>
 
             <fieldset className="form-section" style={{ border: "none" }}>
-              <legend className="form-section-title">Coordonnées</legend>
+              <legend className="form-section-title">Kontakte w</legend>
               <div className="field">
-                <label htmlFor="reg-email">Email (optionnel)</label>
+                <label htmlFor="reg-email">Imèl (opsyonèl)</label>
                 <input
                   id="reg-email"
                   className="input"
@@ -168,12 +172,12 @@ export default function RegisterPage() {
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="vous@exemple.com"
+                  placeholder="ou@egzanp.com"
                   maxLength={150}
                 />
               </div>
               <div className="field">
-                <label htmlFor="reg-phone">Téléphone (optionnel)</label>
+                <label htmlFor="reg-phone">Nimewo telefòn (opsyonèl)</label>
                 <input
                   id="reg-phone"
                   className="input"
@@ -188,9 +192,9 @@ export default function RegisterPage() {
             </fieldset>
 
             <fieldset className="form-section" style={{ border: "none" }}>
-              <legend className="form-section-title">Sécurité</legend>
+              <legend className="form-section-title">Sekirite</legend>
               <div className="field">
-                <label htmlFor="reg-username">Nom d&apos;utilisateur</label>
+                <label htmlFor="reg-username">Non itilizatè</label>
                 <input
                   id="reg-username"
                   className="input"
@@ -200,13 +204,13 @@ export default function RegisterPage() {
                   spellCheck={false}
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Ex: sarah.j"
+                  placeholder="Egzanp: sarah.j"
                   required
                   maxLength={60}
                 />
               </div>
               <div className="field">
-                <label htmlFor="reg-password">Mot de passe</label>
+                <label htmlFor="reg-password">Modpas</label>
                 <div className="input-with-action">
                   <input
                     id="reg-password"
@@ -215,7 +219,7 @@ export default function RegisterPage() {
                     autoComplete="new-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Au moins 4 caractères"
+                    placeholder="Omwen 4 karaktè"
                     required
                     minLength={4}
                     maxLength={200}
@@ -224,30 +228,30 @@ export default function RegisterPage() {
                     type="button"
                     className="toggle-btn"
                     onClick={() => setShowPassword((v) => !v)}
-                    aria-label={showPassword ? "Cacher le mot de passe" : "Montrer le mot de passe"}
+                    aria-label={showPassword ? "Kache modpas la" : "Montre modpas la"}
                   >
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
-                <p className="field-hint">4 caractères minimum (règle du serveur Medika).</p>
+                <p className="field-hint">Omwen 4 karaktè (règ sèvis Medika la).</p>
               </div>
             </fieldset>
 
             <button className="btn btn-primary auth-submit" type="submit" disabled={submitting}>
               {submitting ? (
                 <>
-                  <span className="spin" aria-hidden /> Création du compte…
+                  <span className="spin" aria-hidden /> N ap kreye kont ou...
                 </>
               ) : (
                 <>
-                  <UserPlus size={16} aria-hidden /> Créer mon compte
+                  <UserPlus size={16} aria-hidden /> Kreye kont
                 </>
               )}
             </button>
           </form>
 
           <p className="auth-alt">
-            Déjà inscrit ? <Link href="/login">Se connecter</Link>
+            Ou deja gen yon kont? <Link href="/login">Konekte</Link>
           </p>
         </main>
       </div>
