@@ -10,7 +10,7 @@ admin panel are untouched.
   ported from the Android palette (`#16A34A` primary), no heavyweight UI libraries
   (`lucide-react` icons, `livekit-client` for calls — lazy-loaded on the call page)
 - **Responsive**: verified from 320 px to desktop, bottom navigation on phones,
-  WCAG-minded contrast and focus states, French (Haïti) copy matching the Android app
+  WCAG-minded contrast and focus states, Haitian Creole copy matching the Android app
 - **PWA**: manifest + generated icons (regular & maskable), service worker with a
   security-first caching policy, offline fallback page, install prompt
 
@@ -102,7 +102,7 @@ nginx rules — the web app uses same-origin relative URLs for all of them.
   page are cached. Navigations are network-first so a logged-out user can never
   see a stale authenticated page.
 - **Error messages**: all backend errors are normalized client-side into
-  user-safe French messages (`lib/api/client.ts`) — no stack traces, server
+  user-safe Haitian Creole messages (`lib/api/client.ts`) — no stack traces, server
   paths or internal details ever reach the UI.
 - **LiveKit**: the browser only receives short-lived room tokens minted by the
   backend; the API key/secret stay server-side. When the app is served over
@@ -126,7 +126,7 @@ npm run build       # production build
    `/api/tickets*`, `/api/medical-history*` and `/api/consultations/:id/notes`,
    which exist in production but are **not in the repository's `server.js`**
    (commit `4467783` only committed the Android side). This PR deliberately
-   does not modify the backend; those screens degrade gracefully (French error
+   does not modify the backend; those screens degrade gracefully (Kreyòl error
    + retry) until the backend routes are committed.
 2. **Payments**: the MonCash payment server (`:9998`) is not part of this repo.
    The web client implements its documented protocol (`create` → gateway →

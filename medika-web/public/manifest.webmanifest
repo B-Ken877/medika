@@ -1,7 +1,7 @@
 {
-  "name": "Medika — Santé pour tous, partout",
+  "name": "Medika",
   "short_name": "Medika",
-  "description": "Téléconsultation avec des médecins haïtiens : chat, appel vidéo et suivi médical.",
+  "description": "Medika ede w jwenn doktè ann Ayiti pou konsiltasyon, swivi medikal ak echanj anliy.",
   "id": "/",
   "start_url": "/",
   "scope": "/",
@@ -9,7 +9,7 @@
   "orientation": "portrait-primary",
   "background_color": "#f5f8f7",
   "theme_color": "#145b50",
-  "lang": "fr",
+  "lang": "ht",
   "dir": "ltr",
   "categories": ["medical", "health", "lifestyle"],
   "icons": [
@@ -40,21 +40,21 @@
   ],
   "shortcuts": [
     {
-      "name": "Nouvelle consultation",
-      "short_name": "Consultation",
-      "description": "Décrire vos symptômes et trouver un médecin",
+      "name": "Nouvelle konsiltasyon",
+      "short_name": "Konsiltasyon",
+      "description": "Di nou sa w ap santi epi jwenn yon doktè",
       "url": "/app/consult"
     },
     {
-      "name": "Mes consultations",
-      "short_name": "Consultations",
-      "description": "Voir vos consultations en cours et passées",
+      "name": "Konsiltasyon yo",
+      "short_name": "Konsiltasyon",
+      "description": "Gade konsiltasyon k ap vini yo ak sa ki pase yo",
       "url": "/app/consultations"
     },
     {
-      "name": "Mon dossier médical",
-      "short_name": "Dossier",
-      "description": "Allergies, traitements et historique",
+      "name": "Dosisye medikal mwen",
+      "short_name": "Dosisye",
+      "description": "Alèji, tretman ak istwa medikal",
       "url": "/app/dossier"
     }
   ]

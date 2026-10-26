@@ -17,7 +17,7 @@ export default function HomePage() {
 
   return (
     <div style={{ minHeight: "100dvh", display: "grid", placeItems: "center" }}>
-      <Spinner label="Medika — Santé pour tous, partout" />
+      <Spinner label="Medika — Swen sante pou tout moun, tout kote" />
     </div>
   );
 }

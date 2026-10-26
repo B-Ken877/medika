@@ -27,17 +27,18 @@ import { useAuth } from "@/lib/auth/context";
 import { getConsultations } from "@/lib/api/endpoints";
 import type { Consultation } from "@/lib/api/types";
 import { relativeTime } from "@/lib/format";
+import { specialtyLabel } from "@/lib/labels";
 import { EmptyState, ErrorAlert, SkeletonRows, StatusBadge } from "@/components/ui/primitives";
 
 const HEALTH_TIPS: { icon: typeof Droplets; title: string; text: string }[] = [
-  { icon: Droplets, title: "Hydratez-vous", text: "Buvez au moins 8 verres d'eau par jour pour maintenir une bonne santé." },
-  { icon: Moon, title: "Sommeil réparateur", text: "Visez 7 à 8 heures de sommeil chaque nuit pour une récupération optimale." },
-  { icon: Activity, title: "Activité physique", text: "30 minutes de marche rapide par jour suffisent à améliorer votre santé cardiovasculaire." },
-  { icon: Salad, title: "Nutrition équilibrée", text: "Privilégiez les fruits, légumes et protéines maigres à chaque repas." },
-  { icon: Sun, title: "Soleil et vitamine D", text: "Exposez-vous au soleil 15 min par jour pour favoriser la vitamine D." },
-  { icon: HeartPulse, title: "Santé mentale", text: "Prenez du temps pour vous : méditation, lecture ou simple respiration profonde." },
-  { icon: ClipboardList, title: "Vaccination à jour", text: "Vérifiez vos vaccins et faites les rappels recommandés par votre médecin." },
-  { icon: Stethoscope, title: "Coeur en forme", text: "Surveillez votre tension artérielle régulièrement pour prévenir les risques." },
+  { icon: Droplets, title: "Bwè dlo", text: "Bwè omwen 8 vè dlo chak jou pou w kenbe kò w anfòm." },
+  { icon: Moon, title: "Dòmi ki repoze", text: "Eseye dòmi 7 a 8 lè chak swa pou kò w ka repoze byen." },
+  { icon: Activity, title: "Aktivite fizik", text: "30 minit mache rapid chak jour ase pou ameliore sante kè w." },
+  { icon: Salad, title: "Manje balanse", text: "Prefere fwi, legim ak pwotein ki pa gra chak repa." },
+  { icon: Sun, title: "Soley ak vitamin D", text: "Pase 15 minit nan solèy chak jou pou vitamin D." },
+  { icon: HeartPulse, title: "Sante mantal", text: "Pran tan pou tèt ou: meditasyon, lekti oswa respire fon." },
+  { icon: ClipboardList, title: "Vaksen ajou", text: "Verifye vaksen ou yo epi fè rapel yo doktè ou rekomande a." },
+  { icon: Stethoscope, title: "Kè anfòm", text: "Siveye tansyon atè w regilyèman pou evite risk." },
 ];
 
 export default function PatientDashboard() {
@@ -92,39 +93,39 @@ export default function PatientDashboard() {
       {/* Page heading */}
       <div className="page-head">
         <div>
-          <h1 className="page-title">Mon espace santé</h1>
-          <p className="page-desc">Retrouvez vos consultations et gérez votre suivi médical.</p>
+          <h1 className="page-title">Bonjou, {user?.name?.split(" ")[0] ?? ""}</h1>
+          <p className="page-desc">Men yon ti rezime sou swen sante ou.</p>
         </div>
         <div className="page-head-actions">
           <Link href="/app/consult" className="btn btn-primary">
-            <Plus size={18} aria-hidden /> Nouvelle consultation
+            <Plus size={18} aria-hidden /> Kòmanse yon konsiltasyon
           </Link>
         </div>
       </div>
 
       {/* Summary metrics (real counts) */}
-      <div className="stat-grid" role="group" aria-label="Résumé des consultations">
+      <div className="stat-grid" role="group" aria-label="Rezime konsiltasyon yo">
         <div className="stat-card">
           <div className="stat-label">
-            <span className="stat-dot gray" aria-hidden /> Consultations totales
+            <span className="stat-dot gray" aria-hidden /> Tout konsiltasyon yo
           </div>
           <div className="stat-value">{counts.total}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">
-            <span className="stat-dot yellow" aria-hidden /> En attente
+            <span className="stat-dot yellow" aria-hidden /> An atant
           </div>
           <div className="stat-value">{counts.pending}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">
-            <span className="stat-dot green" aria-hidden /> En cours
+            <span className="stat-dot green" aria-hidden /> K ap dewoule
           </div>
           <div className="stat-value">{counts.active}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">
-            <span className="stat-dot blue" aria-hidden /> Terminées
+            <span className="stat-dot blue" aria-hidden /> Fini
           </div>
           <div className="stat-value">{counts.done}</div>
         </div>
@@ -135,7 +136,7 @@ export default function PatientDashboard() {
         <section className="panel" aria-labelledby="current-title">
           <div className="panel-head">
             <h2 id="current-title" className="panel-title">
-              Consultation en cours
+              Konsiltasyon k ap dewoule
             </h2>
             <StatusBadge status={current.status} />
           </div>
@@ -145,13 +146,13 @@ export default function PatientDashboard() {
             </span>
             <div style={{ flex: 1, minWidth: 220 }}>
               <div className="row-title">
-                <span>{current.specialty_needed}</span>
+                <span>{specialtyLabel(current.specialty_needed)}</span>
               </div>
-              <div className="row-sub">{current.description || "Sans description"}</div>
-              <div className="row-meta">Demandée {relativeTime(current.created_at)}</div>
+              <div className="row-sub">{current.description || "Pa gen deskripsyon"}</div>
+              <div className="row-meta">Demann lan fèt {relativeTime(current.created_at)}</div>
             </div>
             <Link href={`/app/consultations/${encodeURIComponent(current.id)}`} className="btn btn-secondary">
-              Voir les détails <ChevronRight size={15} aria-hidden />
+              Gade detay yo <ChevronRight size={15} aria-hidden />
             </Link>
           </div>
         </section>
@@ -161,10 +162,10 @@ export default function PatientDashboard() {
       <section aria-labelledby="recent-title">
         <div className="flex-between mb-2">
           <h2 id="recent-title" className="section-title" style={{ marginBottom: 0 }}>
-            Mes consultations
+            Konsiltasyon ki pase yo
           </h2>
           <Link href="/app/consultations" className="btn btn-ghost btn-sm">
-            Voir tout <ChevronRight size={15} aria-hidden />
+            Gade tout <ChevronRight size={15} aria-hidden />
           </Link>
         </div>
 
@@ -175,11 +176,11 @@ export default function PatientDashboard() {
           <div className="panel">
             <EmptyState
               icon={<CalendarCheck size={24} />}
-              title="Aucune consultation pour le moment"
-              description="Décrivez vos symptômes pour démarrer votre première consultation avec un médecin."
+              title="Ou poko gen okenn konsiltasyon."
+              description="Di nou sa w ap santi pou w kòmanse premye konsiltasyon ou ak yon doktè."
               action={
                 <Link href="/app/consult" className="btn btn-primary">
-                  <Plus size={16} aria-hidden /> Nouvelle consultation
+                  <Plus size={16} aria-hidden /> Kòmanse yon konsiltasyon
                 </Link>
               }
             />
@@ -195,10 +196,10 @@ export default function PatientDashboard() {
                 </span>
                 <div className="row-body">
                   <div className="row-title">
-                    <span>{c.specialty_needed}</span>
+                    <span>{specialtyLabel(c.specialty_needed)}</span>
                     <StatusBadge status={c.status} />
                   </div>
-                  <div className="row-sub">{c.description || "Sans description"}</div>
+                  <div className="row-sub">{c.description || "Pa gen deskripsyon"}</div>
                   <div className="row-meta">{relativeTime(c.created_at)}</div>
                 </div>
                 <ChevronRight size={18} className="muted" aria-hidden />
@@ -211,7 +212,7 @@ export default function PatientDashboard() {
       {/* Compact quick links (existing routes only) */}
       <section aria-labelledby="quick-title">
         <h2 id="quick-title" className="section-title">
-          Accès rapides
+          Aksè rapid
         </h2>
         <div className="quick-links">
           <Link href="/app/doctors" className="quick-link">
@@ -219,8 +220,8 @@ export default function PatientDashboard() {
               <Stethoscope size={17} />
             </span>
             <span>
-              Trouver un médecin
-              <div className="quick-sub">Spécialités et disponibilités</div>
+              Jwenn yon doktè
+              <div className="quick-sub">Espesyalite ak disponibilite</div>
             </span>
           </Link>
           <Link href="/app/dossier" className="quick-link">
@@ -228,8 +229,8 @@ export default function PatientDashboard() {
               <FolderOpen size={17} />
             </span>
             <span>
-              Mon dossier médical
-              <div className="quick-sub">Allergies, traitements, historique</div>
+              Dosisye medikal mwen
+              <div className="quick-sub">Alèji, tretman, istwa medikal</div>
             </span>
           </Link>
           <Link href="/app/tickets" className="quick-link">
@@ -237,8 +238,8 @@ export default function PatientDashboard() {
               <LifeBuoy size={17} />
             </span>
             <span>
-              Assistance
-              <div className="quick-sub">Contacter le service client Medika</div>
+              Èd
+              <div className="quick-sub">Kontakte sèvis kliyan Medika a</div>
             </span>
           </Link>
         </div>
@@ -247,7 +248,7 @@ export default function PatientDashboard() {
       {/* Health tips carousel (static content, same as Android) */}
       <section aria-labelledby="tips-title">
         <h2 id="tips-title" className="section-title">
-          Conseils santé
+          Konsèy sante
         </h2>
         <div className="tips-track" role="list">
           {HEALTH_TIPS.map((tip) => (

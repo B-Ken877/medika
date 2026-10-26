@@ -11,6 +11,7 @@ import { useAuth } from "@/lib/auth/context";
 import { getDoctors, getSpecialtyPrices } from "@/lib/api/endpoints";
 import type { SpecialtyPrice, User } from "@/lib/api/types";
 import { formatCurrency } from "@/lib/format";
+import { specialtyLabel } from "@/lib/labels";
 import { Avatar, EmptyState, ErrorAlert, SkeletonRows } from "@/components/ui/primitives";
 
 export default function DoctorsPage() {
@@ -78,8 +79,8 @@ export default function DoctorsPage() {
   return (
     <div className="stack">
       <div>
-        <h1 className="page-title">Médecins</h1>
-        <p className="muted small">Recherchez un médecin par nom, spécialité ou hôpital.</p>
+        <h1 className="page-title">Doktè yo</h1>
+        <p className="muted small">Chèche yon doktè selon non li, espesyalite li oswa lopital kote li travay.</p>
       </div>
 
       <div className="field" style={{ marginBottom: 0 }}>
@@ -91,24 +92,24 @@ export default function DoctorsPage() {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Rechercher par nom, spécialité…"
-            aria-label="Rechercher un médecin"
+            placeholder="Chèche pa non, espesyalite..."
+            aria-label="Chèche yon doktè"
             maxLength={100}
           />
           {query && (
-            <button className="toggle-btn" onClick={() => setQuery("")} aria-label="Effacer la recherche">
+            <button className="toggle-btn" onClick={() => setQuery("")} aria-label="Efase rechèch la">
               <X size={16} />
             </button>
           )}
         </div>
       </div>
 
-      <div className="flex" style={{ gap: 8, overflowX: "auto", paddingBottom: 4 }} role="group" aria-label="Filtrer par spécialité">
+      <div className="flex" style={{ gap: 8, overflowX: "auto", paddingBottom: 4 }} role="group" aria-label="Filtre selon espesyalite">
         <button
           className={`btn btn-sm ${specialty === "" ? "btn-primary" : "btn-secondary"}`}
           onClick={() => setSpecialty("")}
         >
-          Toutes
+          Tout espesyalite
         </button>
         {specialties.map((s) => (
           <button
@@ -116,14 +117,16 @@ export default function DoctorsPage() {
             className={`btn btn-sm nowrap ${specialty === s ? "btn-primary" : "btn-secondary"}`}
             onClick={() => setSpecialty(specialty === s ? "" : s)}
           >
-            {s}
+            {specialtyLabel(s)}
             {priceOf(s) != null && <span className="tiny">· {formatCurrency(priceOf(s))}</span>}
           </button>
         ))}
       </div>
 
       <p className="small muted" role="status" aria-live="polite">
-        {filtered.length} médecin{filtered.length > 1 ? "s" : ""} trouvé{filtered.length > 1 ? "s" : ""}
+        {filtered.length === 0
+          ? "Nou pa jwenn doktè"
+          : `${filtered.length} doktè jwenn`}
       </p>
 
       {doctors === null && !error && <SkeletonRows count={4} />}
@@ -133,8 +136,8 @@ export default function DoctorsPage() {
         <div className="card">
           <EmptyState
             icon={<Stethoscope size={26} />}
-            title="Aucun médecin trouvé"
-            description="Essayez une autre spécialité ou modifiez votre recherche."
+            title="Nou pa jwenn doktè"
+            description="Eseye yon lòt espesyalite oswa chanje rechèch ou a."
           />
         </div>
       )}
@@ -145,20 +148,20 @@ export default function DoctorsPage() {
             key={d.id}
             href={`/app/consult?doctor=${encodeURIComponent(d.id)}`}
             className="row card-hover"
-            aria-label={`Consulter ${d.name}, ${d.specialty ?? ""}`}
+            aria-label={`Konsilte ${d.name}, ${d.specialty ?? ""}`}
           >
-            <Avatar name={d.name} src={d.avatar_url} size="md" alt={`Avatar de ${d.name}`} />
+            <Avatar name={d.name} src={d.avatar_url} size="md" alt={`Foto pwofil ${d.name}`} />
             <div className="row-body">
               <div className="row-title">
                 <span>{d.name}</span>
                 {d.is_available === 1 ? (
-                  <span className="badge badge-green">Disponible</span>
+                  <span className="badge badge-green">Disponib</span>
                 ) : (
-                  <span className="badge badge-gray">Indisponible</span>
+                  <span className="badge badge-gray">Pa disponib</span>
                 )}
               </div>
               <div className="row-sub doctor-specialty" style={{ WebkitLineClamp: 1 }}>
-                {d.specialty ?? "Médecine générale"}
+                {d.specialty ? specialtyLabel(d.specialty) : "Medsin Jeneral"}
               </div>
               <div className="row-meta flex" style={{ gap: 12, flexWrap: "wrap" }}>
                 {d.hospital && (
@@ -176,7 +179,7 @@ export default function DoctorsPage() {
             <div className="nowrap text-center">
               <div style={{ fontWeight: 700, color: "var(--green-700)" }}>{formatCurrency(priceOf(d.specialty))}</div>
               <span className="btn btn-primary btn-sm mt-1" style={{ pointerEvents: "none" }}>
-                Consulter
+                Konsilte
               </span>
             </div>
           </Link>

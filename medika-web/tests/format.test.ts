@@ -13,11 +13,11 @@ import {
 } from "@/lib/format";
 
 describe("statusLabel", () => {
-  it("maps backend statuses to the admin panel's French labels", () => {
-    expect(statusLabel("RECHERCHE_MEDECIN")).toBe("En attente");
-    expect(statusLabel("EN_COURS")).toBe("En cours");
-    expect(statusLabel("TERMINE")).toBe("Terminée");
-    expect(statusLabel("REFUSE")).toBe("Refusée");
+  it("maps backend statuses to Haitian Creole labels", () => {
+    expect(statusLabel("RECHERCHE_MEDECIN")).toBe("An atant");
+    expect(statusLabel("EN_COURS")).toBe("Ap dewoule");
+    expect(statusLabel("TERMINE")).toBe("Fini");
+    expect(statusLabel("REFUSE")).toBe("Refize");
   });
 
   it("passes unknown statuses through untouched", () => {
@@ -57,11 +57,11 @@ describe("formatCurrency", () => {
 });
 
 describe("formatDaySeparator", () => {
-  it("labels today and yesterday in French", () => {
+  it("labels today and yesterday in Haitian Creole", () => {
     const now = Math.floor(Date.now() / 1000);
     const yesterday = now - 24 * 3600;
-    expect(formatDaySeparator(now)).toBe("Aujourd'hui");
-    expect(formatDaySeparator(yesterday)).toBe("Hier");
+    expect(formatDaySeparator(now)).toBe("Jodi a");
+    expect(formatDaySeparator(yesterday)).toBe("Yè");
   });
   it("returns empty string for missing timestamps", () => {
     expect(formatDaySeparator(undefined)).toBe("");

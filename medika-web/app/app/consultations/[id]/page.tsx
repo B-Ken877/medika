@@ -25,6 +25,7 @@ import { getConsultation, getMessages, uploadFile } from "@/lib/api/endpoints";
 import type { Consultation, ServerMessage } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
 import { fileSizeLabel, formatDaySeparator, formatTime } from "@/lib/format";
+import { specialtyLabel, urgencyLabel } from "@/lib/labels";
 import { wsEventToServerMessage } from "@/lib/ws/socket";
 import { Avatar, ErrorAlert, Spinner } from "@/components/ui/primitives";
 import { PrescriptionModal } from "@/components/consultation/PrescriptionModal";
@@ -142,7 +143,7 @@ export default function ConsultationChatPage() {
       socket.sendTyping(consultationId, user.id, false);
     } else {
       setError(
-        new ApiError("network", 0, "Message non envoyé — reconnexion en cours. Réessayez dans un instant."),
+        new ApiError("network", 0, "Mesaj la pa t ale — n ap rekonekte. Tanpri, eseye ankò nan yon ti moman."),
       );
     }
     setSending(false);
@@ -164,7 +165,7 @@ export default function ConsultationChatPage() {
         });
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Envoi du fichier impossible. Réessayez.");
+      setError(err instanceof ApiError ? err.message : "Nou pa t kapab voye fichye a. Tanpri, eseye ankò.");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -185,16 +186,16 @@ export default function ConsultationChatPage() {
   if (notFound) {
     return (
       <div className="card" style={{ maxWidth: 480, margin: "40px auto" }}>
-        <ErrorAlert error={new ApiError("not_found", 404, "Consultation introuvable ou non autorisée.")} />
+        <ErrorAlert error={new ApiError("not_found", 404, "Nou pa jwenn konsiltasyon sa a, oswa ou pa gen otorizasyon pou wè l.")} />
         <Link href="/app/consultations" className="btn btn-secondary btn-block">
-          Retour à mes consultations
+          Retounen sou konsiltasyon yo
         </Link>
       </div>
     );
   }
 
   if (!consultation) {
-    return <Spinner label="Chargement de la consultation…" />;
+    return <Spinner label="N ap chaje konsiltasyon an..." />;
   }
 
   const partnerName = isDoctor ? consultation.patient_name : null;
@@ -210,26 +211,26 @@ export default function ConsultationChatPage() {
         <button
           className="icon-btn"
           onClick={() => router.push("/app/consultations")}
-          aria-label="Retour aux consultations"
+          aria-label="Retounen sou konsiltasyon yo"
         >
           <ArrowLeft size={20} />
         </button>
-        <Avatar name={partnerName ?? user?.name} size="sm" alt={`Avatar de ${partnerName ?? "l'interlocuteur"}`} />
+        <Avatar name={partnerName ?? user?.name} size="sm" alt={`Foto pwofil ${partnerName ?? "lòt moun nan"}`} />
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontWeight: 700, fontSize: "0.95rem" }} className="nowrap">
-            {partnerName ?? consultation.specialty_needed}
+            {partnerName ?? specialtyLabel(consultation.specialty_needed)}
           </div>
           <div className="tiny muted nowrap">
             {canChat
               ? partnerTyping
-                ? "écrit…"
-                : "Consultation active"
+                ? "n ap ekri..."
+                : "Konsiltasyon an ap dewoule"
               : waiting
-                ? "Recherche de médecin…"
+                ? "N ap tann doktè a."
                 : finished
-                  ? "Consultation clôturée"
+                  ? "Konsiltasyon an fini."
                   : refused
-                    ? "Demande refusée"
+                    ? "Demann lan refize"
                     : "—"}
           </div>
         </div>
@@ -238,8 +239,8 @@ export default function ConsultationChatPage() {
             <Link
               href={`/app/consultations/${encodeURIComponent(consultationId)}/notes`}
               className="icon-btn"
-              aria-label="Notes de consultation"
-              title="Notes de consultation"
+              aria-label="Nòt konsiltasyon"
+              title="Nòt konsiltasyon"
             >
               <NotebookPen size={19} />
             </Link>
@@ -249,16 +250,16 @@ export default function ConsultationChatPage() {
               <Link
                 href={`/app/consultations/${encodeURIComponent(consultationId)}/call?mode=voice`}
                 className="icon-btn"
-                aria-label="Appel vocal"
-                title="Appel vocal"
+                aria-label="Apèl vwa"
+                title="Apèl vwa"
               >
                 <Phone size={19} />
               </Link>
               <Link
                 href={`/app/consultations/${encodeURIComponent(consultationId)}/call?mode=video`}
                 className="icon-btn"
-                aria-label="Appel vidéo"
-                title="Appel vidéo"
+                aria-label="Apèl videyo"
+                title="Apèl videyo"
               >
                 <Video size={19} />
               </Link>
@@ -281,28 +282,27 @@ export default function ConsultationChatPage() {
         }}
       >
         <Info size={14} aria-hidden style={{ flexShrink: 0 }} />
-        <span className="nowrap">{consultation.specialty_needed}</span>
+        <span className="nowrap">{specialtyLabel(consultation.specialty_needed)}</span>
         <span>·</span>
-        <span>Urgence : {consultation.urgency_level}</span>
+        <span>Ijans: {urgencyLabel(consultation.urgency_level)}</span>
         {consultation.patient_age != null && consultation.patient_age !== "" && (
           <>
             <span>·</span>
-            <span>{consultation.patient_age} ans</span>
+            <span>{consultation.patient_age} an</span>
           </>
         )}
       </div>
 
       {waiting && (
         <div className="alert alert-warning" style={{ margin: 12, marginBottom: 0 }} role="status">
-          Votre demande est en attente d&apos;un médecin. Vous recevrez une notification dès qu&apos;elle sera
-          acceptée.
+          N ap tann doktè a. Ou ap resevwa yon notifikasyon le li aksepte demann lan.
         </div>
       )}
       {refused && (
         <div className="alert alert-error" style={{ margin: 12, marginBottom: 0 }} role="status">
-          Cette demande a été refusée. Vous pouvez{" "}
+          Demann sa a refize. Ou ka{" "}
           <Link href="/app/consult" className="nowrap">
-            créer une nouvelle consultation
+            kreye yon nouvo konsiltasyon
           </Link>
           .
         </div>
@@ -312,12 +312,12 @@ export default function ConsultationChatPage() {
       {finished && consultation.prescription && !isDoctor && <PrescriptionPanel consultation={consultation} />}
 
       {/* Chat log */}
-      <div className="chat-log" ref={logRef} role="log" aria-label="Messages de la consultation" aria-live="polite">
+      <div className="chat-log" ref={logRef} role="log" aria-label="Mesaj konsiltasyon an" aria-live="polite">
         {messages === null && <Spinner />}
         {messages !== null && (messages ?? []).length === 0 && (
           <div className="empty-state">
-            <h3>Commencez la conversation</h3>
-            <p className="small">Vos messages apparaîtront ici.</p>
+            <h3>Kòmanse konvèsasyon an</h3>
+            <p className="small">Mesaj ou yo ap parèt isit.</p>
           </div>
         )}
         {days.map((group) => (
@@ -341,7 +341,7 @@ export default function ConsultationChatPage() {
                     {m.message_type === "image" && m.file_url && (
                       <a href={m.file_url} target="_blank" rel="noopener noreferrer">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={m.file_url} alt="Image partagée" className="bubble-image" loading="lazy" />
+                        <img src={m.file_url} alt="Imaj pataje" className="bubble-image" loading="lazy" />
                       </a>
                     )}
                     {m.message_type === "video" && m.file_url && (
@@ -349,7 +349,7 @@ export default function ConsultationChatPage() {
                     )}
                     {m.message_type === "voice" && m.file_url && (
                       <span className="audio-chip">
-                        <Phone size={14} aria-hidden /> Message vocal
+                        <Phone size={14} aria-hidden /> Mesaj vwa
                         <audio src={m.file_url} controls preload="metadata" />
                       </span>
                     )}
@@ -368,9 +368,9 @@ export default function ConsultationChatPage() {
           <div
             className="typing-row"
             role="status"
-            aria-label="Votre interlocuteur est en train d'écrire"
+            aria-label="Lòt moun nan ap ekri"
           >
-            <span className="typing-label">Votre interlocuteur écrit</span>
+            <span className="typing-label">Lòt moun nan ap ekri</span>
             <div className="typing-dots" aria-hidden="true">
               <i />
               <i />
@@ -401,8 +401,8 @@ export default function ConsultationChatPage() {
             className="composer-btn"
             onClick={onPickImage}
             disabled={uploading}
-            aria-label="Joindre une image ou une vidéo"
-            title="Joindre une image ou une vidéo"
+            aria-label="Vwayaje yon imaj oswa yon videyo"
+            title="Vwayaje yon imaj oswa yon videyo"
           >
             {uploading ? (
               <span
@@ -420,15 +420,15 @@ export default function ConsultationChatPage() {
               setDraft(e.target.value);
               notifyTyping(e.target.value);
             }}
-            placeholder="Écrivez votre message…"
-            aria-label="Votre message"
+            placeholder="Ekri mesaj ou..."
+            aria-label="Mesaj ou"
             maxLength={4000}
           />
           <button
             type="submit"
             className="composer-btn send"
             disabled={!draft.trim() || sending}
-            aria-label="Envoyer"
+            aria-label="Voye"
           >
             <Send size={19} />
           </button>
@@ -439,10 +439,10 @@ export default function ConsultationChatPage() {
           style={{ justifyContent: "center", color: "var(--text-secondary)", fontSize: "0.85rem" }}
         >
           {finished
-            ? "Consultation clôturée — la conversation est en lecture seule."
+            ? "Konsiltasyon an fini — konvèsasyon an an lekti sèlman."
             : waiting
-              ? "La conversation s'ouvrira dès qu'un médecin aura accepté."
-              : "Conversation indisponible."}
+              ? "Konvèsasyon an ap louvri le yon doktè fin aksepte l."
+              : "Konvèsasyon an pa disponib."}
         </div>
       )}
 
@@ -456,7 +456,7 @@ export default function ConsultationChatPage() {
           }}
         >
           <button className="btn btn-secondary btn-block" onClick={() => setShowRx(true)}>
-            <ClipboardList size={16} aria-hidden /> Rédiger l&apos;ordonnance et clôturer
+            <ClipboardList size={16} aria-hidden /> Ekri òrdònans lan epi fèmen konsiltasyon an
           </button>
         </div>
       )}

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { WifiOff } from "lucide-react";
 
-export const metadata = { title: "Hors ligne — Medika" };
+export const metadata = { title: "Pa gen koneksyon — Medika" };
 
 export default function OfflinePage() {
   return (
@@ -10,13 +10,13 @@ export default function OfflinePage() {
         <div className="empty-icon" style={{ margin: "0 auto 16px", width: 72, height: 72 }}>
           <WifiOff size={30} />
         </div>
-        <h1 style={{ fontSize: "1.3rem", marginBottom: 8 }}>Vous êtes hors ligne</h1>
+        <h1 style={{ fontSize: "1.3rem", marginBottom: 8 }}>Ou pa gen koneksyon</h1>
         <p className="muted" style={{ marginBottom: 20 }}>
-          Medika nécessite une connexion internet pour afficher vos données médicales. Les informations de
-          santé ne sont jamais mises en cache sur votre appareil.
+          Medika bezwen yon koneksyon entènèt pou w ka gade enfòmasyon medikal ou yo. Enfòmasyon sante yo
+          pa janm kenbe nan kachèt sou aparèy ou a.
         </p>
         <Link href="/app" className="btn btn-primary btn-block">
-          Réessayer
+          Eseye ankò
         </Link>
       </div>
     </div>

@@ -10,7 +10,7 @@
  *
  * The payment server itself is not part of this repository; the contract
  * above is taken verbatim from PaymentActivity.kt. All failures surface as
- * PaymentError with user-safe French messages (no backend internals).
+ * PaymentError with user-safe Haitian Creole messages (no backend internals).
  */
 
 export const PAYMENT_BASE_URL = (process.env.NEXT_PUBLIC_PAYMENT_BASE_URL ?? "/payment").replace(/\/+$/, "");
@@ -53,9 +53,9 @@ async function paymentFetch(path: string, body: unknown, timeoutMs = 20_000): Pr
   } catch (err) {
     clearTimeout(timer);
     if (err instanceof DOMException && (err.name === "TimeoutError" || err.name === "AbortError")) {
-      throw new PaymentError("network", "Le serveur de paiement ne répond pas. Réessayez.");
+      throw new PaymentError("network", "Nou pa rive konekte ak sèvis peman an. Verifye koneksyon entènèt ou epi eseye ankò.");
     }
-    throw new PaymentError("network", "Connexion au serveur de paiement impossible.");
+    throw new PaymentError("network", "Nou pa rive konekte ak sèvis peman an. Verifye koneksyon entènèt ou epi eseye ankò.");
   }
   clearTimeout(timer);
   let data: unknown = null;
@@ -69,9 +69,9 @@ async function paymentFetch(path: string, body: unknown, timeoutMs = 20_000): Pr
   // Next.js rewrite answers 500. Both are infrastructure failures, not
   // client errors, so they map to the "network" stage.
   if (res.status >= 500) {
-    throw new PaymentError("network", "Le serveur de paiement est injoignable. Réessayez plus tard.");
+    throw new PaymentError("network", "Nou pa rive konekte ak sèvis peman an. Verifye koneksyon entènèt ou epi eseye ankò.");
   }
-  if (!res.ok) throw new PaymentError("create", "Le paiement n'a pas pu être initialisé. Réessayez.");
+  if (!res.ok) throw new PaymentError("create", "Nou pa t kapab kòmanse peman an. Tanpri, eseye ankò.");
   return data;
 }
 
@@ -83,7 +83,7 @@ export async function createPayment(order: PaymentOrder): Promise<CreatePaymentR
   })) as { success?: boolean; redirectUrl?: string } | null;
 
   if (!data || data.success !== true || !data.redirectUrl) {
-    throw new PaymentError("create", "Le paiement n'a pas pu être initialisé. Réessayez.");
+    throw new PaymentError("create", "Nou pa t kapab kòmanse peman an. Tanpri, eseye ankò.");
   }
   return { orderId: order.orderId, amount: order.amount, redirectUrl: data.redirectUrl };
 }

@@ -19,6 +19,7 @@ import {
 } from "@/lib/api/endpoints";
 import type { Consultation, MedicalHistorySnapshot, PrescriptionItem } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
+import { specialtyLabel } from "@/lib/labels";
 import { ErrorAlert, Spinner } from "@/components/ui/primitives";
 
 interface NoteDraft {
@@ -130,69 +131,69 @@ export default function DoctorNotesPage() {
   if (user?.role !== "doctor") {
     return (
       <div className="card" style={{ maxWidth: 480, margin: "40px auto" }}>
-        <ErrorAlert error={new ApiError("forbidden", 403, "Réservé aux médecins.")} />
+        <ErrorAlert error={new ApiError("forbidden", 403, "Paj sa a rezève pou doktè yo.")} />
         <Link href="/app" className="btn btn-secondary btn-block">
-          Retour à l&apos;accueil
+          Retounen sou tablo travay la
         </Link>
       </div>
     );
   }
 
   if (!consultation || !draft) {
-    return <Spinner label="Chargement des notes…" />;
+    return <Spinner label="N ap chaje nòt yo..." />;
   }
 
   return (
     <div className="stack" style={{ maxWidth: 720, margin: "0 auto" }}>
       <div className="flex-between">
         <button className="btn btn-ghost btn-sm" onClick={() => router.back()}>
-          <ArrowLeft size={16} aria-hidden /> Retour
+          <ArrowLeft size={16} aria-hidden /> Retounen
         </button>
         {saved && (
           <span className="badge badge-green" role="status">
-            Notes enregistrées
+            Nòt yo anrejistre
           </span>
         )}
       </div>
 
       <div>
-        <h1 className="page-title">Notes de consultation</h1>
+        <h1 className="page-title">Nòt medikal</h1>
         <p className="muted small">
-          Patient : {consultation.patient_name} · {consultation.specialty_needed}
+          Pasyan: {consultation.patient_name} · {specialtyLabel(consultation.specialty_needed)}
         </p>
       </div>
 
       {/* Patient medical snapshot (context) */}
       {snapshot && (
-        <div className="card" aria-label="Aperçu du dossier patient">
-          <h2 className="section-title">Aperçu du dossier patient</h2>
+        <div className="card" aria-label="Aperçu dosisye pasyan an">
+          <h2 className="section-title">Aperçu dosisye pasyan an</h2>
           {snapshot.has_allergies && (
             <div className="alert alert-error" style={{ marginBottom: 10 }}>
               <AlertTriangle size={16} aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
-                <strong>Allergies :</strong>{" "}
-                {snapshot.allergies.map((a) => a.name).filter(Boolean).join(", ") || "oui"}
+                <strong>Alèji:</strong>{" "}
+                {snapshot.allergies.map((a) => a.name).filter(Boolean).join(", ") || "wi"}
               </div>
             </div>
           )}
           {snapshot.chronic_conditions.length > 0 && (
             <p className="small mb-1">
-              <strong>Conditions chroniques :</strong>{" "}
+              <strong>Maladi kwonik:</strong>{" "}
               {snapshot.chronic_conditions.map((c) => c.name).filter(Boolean).join(", ")}
             </p>
           )}
           {snapshot.current_medications.length > 0 && (
             <p className="small mb-1">
-              <strong>Médications actuelles :</strong>{" "}
+              <strong>Medikaman k ap pran kounye a:</strong>{" "}
               {snapshot.current_medications.map((m) => [m.name, m.dosage].filter(Boolean).join(" ")).join(", ")}
             </p>
           )}
-          <p className="tiny muted">{snapshot.recent_consultations} consultation(s) récente(s)</p>
+          <p className="tiny muted">{snapshot.recent_consultations} konsiltasyon ki pase resamman</p>
         </div>
       )}
       {snapshotError && (
         <div className="alert alert-warning">
-          Le dossier médical du patient n&apos;est pas disponible actuellement.
+          Dosisye medikal pasyan an pa disponib pou kounye a.
         </div>
       )}
 
@@ -200,42 +201,42 @@ export default function DoctorNotesPage() {
 
       <form onSubmit={onSubmit} className="card stack">
         <div className="field">
-          <label htmlFor="note-diagnosis">Diagnostic</label>
+          <label htmlFor="note-diagnosis">Dyagnostik</label>
           <input
             id="note-diagnosis"
             className="input"
             value={draft.diagnosis}
             onChange={(e) => setField({ diagnosis: e.target.value })}
-            placeholder="Ex : Paludisme simple"
+            placeholder="Egzanp: Paludis senp"
             maxLength={500}
           />
         </div>
         <div className="field">
-          <label htmlFor="note-symptoms">Symptômes</label>
+          <label htmlFor="note-symptoms">Sa pasyan an ap santi</label>
           <input
             id="note-symptoms"
             className="input"
             value={draft.symptoms}
             onChange={(e) => setField({ symptoms: e.target.value })}
-            placeholder="Ex : Fièvre, céphalées, frissons"
+            placeholder="Egzanp: Lafyèv, tèt fè mal, frison"
             maxLength={500}
           />
         </div>
         <div className="field">
-          <label htmlFor="note-notes">Notes cliniques</label>
+          <label htmlFor="note-notes">Nòt klinik</label>
           <textarea
             id="note-notes"
             className="textarea"
             value={draft.notes}
             onChange={(e) => setField({ notes: e.target.value })}
-            placeholder="Observations, examen physique, conduite à tenir…"
+            placeholder="Obsèvasyon, egzamen fizik, sa yo dwe fè..."
             maxLength={4000}
           />
         </div>
 
         <fieldset style={{ border: "none" }}>
           <legend style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--gray-700)", marginBottom: 6 }}>
-            Prescriptions
+            Òrdònans
           </legend>
           <div className="stack">
             {draft.prescriptions.map((rx, i) => (
@@ -245,8 +246,8 @@ export default function DoctorNotesPage() {
                     className="input"
                     value={rx.medication}
                     onChange={(e) => setRx(i, { medication: e.target.value })}
-                    placeholder="Médicament"
-                    aria-label={`Médicament ${i + 1}`}
+                    placeholder="Medikaman"
+                    aria-label={`Medikaman ${i + 1}`}
                     maxLength={200}
                   />
                 </div>
@@ -255,8 +256,8 @@ export default function DoctorNotesPage() {
                     className="input"
                     value={rx.dosage}
                     onChange={(e) => setRx(i, { dosage: e.target.value })}
-                    placeholder="Dosage (ex : 500 mg)"
-                    aria-label={`Dosage ${i + 1}`}
+                    placeholder="Dòz (egzanp: 500 mg)"
+                    aria-label={`Dòz ${i + 1}`}
                     maxLength={200}
                   />
                 </div>
@@ -265,8 +266,8 @@ export default function DoctorNotesPage() {
                     className="input"
                     value={rx.duration}
                     onChange={(e) => setRx(i, { duration: e.target.value })}
-                    placeholder="Durée (ex : 5 jours)"
-                    aria-label={`Durée ${i + 1}`}
+                    placeholder="Dire (egzanp: 5 jou)"
+                    aria-label={`Dire ${i + 1}`}
                     maxLength={200}
                   />
                 </div>
@@ -277,9 +278,9 @@ export default function DoctorNotesPage() {
                     onClick={() =>
                       setField({ prescriptions: draft.prescriptions.filter((_, j) => j !== i) })
                     }
-                    aria-label={`Supprimer la prescription ${i + 1}`}
+                    aria-label={`Retire òrdònans ${i + 1}`}
                   >
-                    <Trash2 size={14} aria-hidden /> Retirer
+                    <Trash2 size={14} aria-hidden /> Retire
                   </button>
                 </div>
               </div>
@@ -290,19 +291,19 @@ export default function DoctorNotesPage() {
               style={{ alignSelf: "flex-start" }}
               onClick={() => setField({ prescriptions: [...draft.prescriptions, { ...EMPTY_RX }] })}
             >
-              <Plus size={14} aria-hidden /> Ajouter une prescription
+              <Plus size={14} aria-hidden /> Ajoute yon òrdònans
             </button>
           </div>
         </fieldset>
 
         <div className="field">
-          <label htmlFor="note-followup">Suivi recommandé</label>
+          <label htmlFor="note-followup">Swivan ki rekomande</label>
           <input
             id="note-followup"
             className="input"
             value={draft.followUp}
             onChange={(e) => setField({ followUp: e.target.value })}
-            placeholder="Ex : Contrôle dans 7 jours"
+            placeholder="Egzanp: Kontwòl nan 7 jou"
             maxLength={300}
           />
         </div>
@@ -314,22 +315,22 @@ export default function DoctorNotesPage() {
             onChange={(e) => setField({ flagAllergy: e.target.checked })}
             style={{ width: 18, height: 18 }}
           />
-          Signaler une allergie détectée pendant cette consultation
+          Siyale yon alèji ki te detekte pandan konsiltasyon sa a
         </label>
 
         <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={submitting}>
           {submitting ? (
             <>
-              <span className="spin" aria-hidden /> Enregistrement…
+              <span className="spin" aria-hidden /> N ap anrejistre...
             </>
           ) : (
             <>
-              <Save size={16} aria-hidden /> Enregistrer les notes
+              <Save size={16} aria-hidden /> Anrejistre nòt yo
             </>
           )}
         </button>
         <p className="tiny muted">
-          Les prescriptions enregistrées alimentent automatiquement le dossier médical du patient.
+          Òrdònans ki anrejistre yo ale otomatikman nan dosisye medikal pasyan an.
         </p>
       </form>
     </div>

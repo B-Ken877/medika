@@ -45,7 +45,7 @@ function CallScreen() {
   const router = useRouter();
 
   const [phase, setPhase] = useState<CallPhase>("connecting");
-  const [statusText, setStatusText] = useState("Connexion à l'appel…");
+  const [statusText, setStatusText] = useState("N ap konekte ak apèl la...");
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(mode === "video");
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +72,7 @@ function CallScreen() {
         // ignore
       }
       setPhase("ended");
-      setStatusText(reason ?? "Appel terminé.");
+      setStatusText(reason ?? "Apèl la fini.");
       setTimeout(() => router.replace(`/app/consultations/${encodeURIComponent(consultationId)}`), 900);
     },
     [socket, consultationId, router],
@@ -102,19 +102,19 @@ function CallScreen() {
         attachRemote(track);
         connectedOnceRef.current = true;
         setPhase("active");
-        setStatusText("Appel en cours");
+        setStatusText("Apèl la ap pase");
       })
       .on(RoomEvent.ParticipantConnected, () => {
-        setStatusText("Votre interlocuteur est connecté");
+        setStatusText("Lòt moun nan konekte");
       })
       .on(RoomEvent.ParticipantDisconnected, () => {
-        setStatusText("Votre interlocuteur a quitté l'appel");
+        setStatusText("Lòt moun nan kite apèl la");
       })
       .on(RoomEvent.Disconnected, () => {
         // Only treat as a lost call if the connection had actually been
         // established — a failed initial connect is handled by the catch
         // below (which shows the error screen instead of bouncing back).
-        if (!endedRef.current && connectedOnceRef.current) endCall("Connexion perdue.");
+        if (!endedRef.current && connectedOnceRef.current) endCall("Koneksyon an koupe. N ap eseye rekonekte.");
       })
       .on(RoomEvent.TrackUnsubscribed, (track) => {
         try {
@@ -131,7 +131,7 @@ function CallScreen() {
         if (disposed) return;
 
         // Notify the partner via the Medika WS channel (same as Android).
-        socket?.startCall(consultationId, user?.name ?? "Appel", mode, res.roomName);
+        socket?.startCall(consultationId, user?.name ?? "Apèl", mode, res.roomName);
 
         // Mixed-content guard: when this app is served over HTTPS, an
         // insecure ws:// LiveKit URL would be blocked by the browser.
@@ -144,7 +144,7 @@ function CallScreen() {
         await room.connect(url, res.token);
         if (disposed) return;
         connectedOnceRef.current = true;
-        setStatusText("En attente de votre interlocuteur…");
+        setStatusText("N ap tann lòt moun nan konekte...");
 
         // Publish local mic (and camera for video mode).
         await room.localParticipant.setMicrophoneEnabled(true);
@@ -175,7 +175,7 @@ function CallScreen() {
         setError(
           err instanceof ApiError
             ? err.message
-            : "Impossible de joindre le serveur d'appel. Réessayez plus tard.",
+            : "Nou pa rive jwenn sèvis apèl la. Tanpri, eseye ankò pita.",
         );
       }
     })();
@@ -202,7 +202,7 @@ function CallScreen() {
         (event.type === "call:ended" || event.type === "call:rejected") &&
         (event as { consultationId?: string }).consultationId === consultationId
       ) {
-        endCall("Votre interlocuteur a raccroché.");
+        endCall("Lòt moun nan rakroche.");
       }
     });
   }, [socket, consultationId, endCall]);
@@ -223,19 +223,19 @@ function CallScreen() {
   };
 
   return (
-    <div className="call-shell" role="dialog" aria-label={`Appel ${mode === "video" ? "vidéo" : "vocal"} en cours`}>
+    <div className="call-shell" role="dialog" aria-label={`Apèl ${mode === "video" ? "videyo" : "vwa"} ap pase`}>
       <div className="call-videos">
         <div className="call-remote" ref={remoteVideoRef} aria-hidden={mode === "voice"} />
-        {mode === "video" && <div className="call-local" ref={localVideoRef} aria-label="Votre caméra" />}
+        {mode === "video" && <div className="call-local" ref={localVideoRef} aria-label="Kamera w" />}
         <div className="call-status" role="status" aria-live="polite">
-          {phase === "failed" ? (error ?? "Échec de l'appel") : statusText}
+          {phase === "failed" ? (error ?? "Apèl la pa reyisi") : statusText}
           {phase === "failed" && (
             <div style={{ marginTop: 6 }}>
               <button
                 className="btn btn-secondary btn-sm"
                 onClick={() => router.replace(`/app/consultations/${encodeURIComponent(consultationId)}`)}
               >
-                Retour à la conversation
+                Retounen sou konvèsasyon an
               </button>
             </div>
           )}
@@ -252,15 +252,15 @@ function CallScreen() {
       )}
 
       <div className="call-bar">
-        <button className={`call-btn ${micOn ? "" : "muted"}`} onClick={toggleMic} aria-label={micOn ? "Couper le micro" : "Activer le micro"} title={micOn ? "Couper le micro" : "Activer le micro"}>
+        <button className={`call-btn ${micOn ? "" : "muted"}`} onClick={toggleMic} aria-label={micOn ? "Etenn mikwo a" : "Aktive mikwo a"} title={micOn ? "Etenn mikwo a" : "Aktive mikwo a"}>
           {micOn ? <Mic size={22} /> : <MicOff size={22} />}
         </button>
         {mode === "video" && (
-          <button className={`call-btn ${camOn ? "" : "muted"}`} onClick={toggleCam} aria-label={camOn ? "Couper la caméra" : "Activer la caméra"} title={camOn ? "Couper la caméra" : "Activer la caméra"}>
+          <button className={`call-btn ${camOn ? "" : "muted"}`} onClick={toggleCam} aria-label={camOn ? "Etenn kamera" : "Aktive kamera"} title={camOn ? "Etenn kamera" : "Aktive kamera"}>
             {camOn ? <VideoIcon size={22} /> : <VideoOff size={22} />}
           </button>
         )}
-        <button className="call-btn end" onClick={() => endCall()} aria-label="Raccrocher" title="Raccrocher">
+        <button className="call-btn end" onClick={() => endCall()} aria-label="Fini apèl la" title="Fini apèl la">
           <PhoneOff size={22} />
         </button>
       </div>
@@ -270,7 +270,7 @@ function CallScreen() {
 
 export default function CallPage() {
   return (
-    <Suspense fallback={<Spinner label="Chargement de l'appel…" />}>
+    <Suspense fallback={<Spinner label="N ap chaje apèl la..." />}>
       <CallScreen />
     </Suspense>
   );

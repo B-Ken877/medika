@@ -12,9 +12,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Medika — Santé pour tous, partout",
+  title: "Medika — Swen sante ann Ayiti",
   description:
-    "Medika Haïti : téléconsultation avec des médecins haïtiens — chat, appel vidéo et suivi médical, depuis votre navigateur.",
+    "Medika ede w jwenn doktè ann Ayiti pou konsiltasyon, swivi medikal ak echanj anliy.",
   applicationName: "Medika",
   manifest: "/manifest.webmanifest",
   icons: {
@@ -42,7 +42,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="fr" className={inter.variable}>
+    <html lang="ht" className={inter.variable}>
       <body>
         <AuthProvider>
           {children}

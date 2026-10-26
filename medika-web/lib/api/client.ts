@@ -39,23 +39,23 @@ export class ApiError extends Error {
   }
 }
 
-/** French, user-safe messages — never expose backend internals. */
+/** Haitian Creole, user-safe messages — never expose backend internals. */
 function messageForStatus(status: number): string {
   switch (status) {
     case 400:
-      return "Requête invalide. Vérifiez les informations saisies.";
+      return "Demand lan pa valab. Verifye enfòmasyon ou antre yo.";
     case 401:
-      return "Session expirée ou identifiants incorrects. Reconnectez-vous.";
+      return "Sesyon ou a fini oswa idantifyan yo pa kòrèk. Tanpri, konekte ankò.";
     case 403:
-      return "Vous n'avez pas les droits pour effectuer cette action.";
+      return "Ou pa gen otorizasyon pou fè aksyon sa a.";
     case 404:
-      return "Ressource introuvable.";
+      return "Nou pa jwenn enfòmasyon sa a.";
     case 409:
-      return "Cette ressource existe déjà.";
+      return "Gen yon konfli — enfòmasyon sa a egziste deja.";
     case 413:
-      return "Fichier trop volumineux (max 4 Mo).";
+      return "Fichye a twò gwo (maksimòm 4 Mo).";
     default:
-      return "Le serveur est momentanément indisponible. Réessayez plus tard.";
+      return "Sèvis la pa disponib pou kounye a. Tanpri, eseye ankò pita.";
   }
 }
 
@@ -116,7 +116,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   if (callerSignal) {
     if (callerSignal.aborted) {
       clearTimeout(timer);
-      throw new ApiError("aborted", 0, "Requête annulée.");
+      throw new ApiError("aborted", 0, "Demand lan anile.");
     }
     callerSignal.addEventListener("abort", onCallerAbort, { once: true });
   }
@@ -147,12 +147,12 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
     clearTimeout(timer);
     callerSignal?.removeEventListener("abort", onCallerAbort);
     if (err instanceof DOMException && err.name === "TimeoutError") {
-      throw new ApiError("timeout", 0, "Délai dépassé. Vérifiez votre connexion et réessayez.");
+      throw new ApiError("timeout", 0, "Tan an ekoule. Verifye koneksyon entènèt ou epi eseye ankò.");
     }
     if (err instanceof DOMException && err.name === "AbortError") {
-      throw new ApiError("aborted", 0, "Requête annulée.");
+      throw new ApiError("aborted", 0, "Demand lan anile.");
     }
-    throw new ApiError("network", 0, "Connexion au serveur impossible. Vérifiez votre accès internet.");
+    throw new ApiError("network", 0, "Pa gen koneksyon entènèt. Verifye koneksyon ou epi eseye ankò.");
   }
   clearTimeout(timer);
   callerSignal?.removeEventListener("abort", onCallerAbort);

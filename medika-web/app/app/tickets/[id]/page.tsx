@@ -90,25 +90,25 @@ export default function TicketChatPage() {
     }
   };
 
-  if (!ticket && !error) return <Spinner label="Chargement de la demande…" />;
+  if (!ticket && !error) return <Spinner label="N ap chaje demann nan..." />;
 
   if (error && !ticket) {
     return (
       <div className="stack" style={{ maxWidth: 560, margin: "0 auto" }}>
         <Link href="/app/tickets" className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start" }}>
-          <ArrowLeft size={16} aria-hidden /> Retour à l&apos;assistance
+          <ArrowLeft size={16} aria-hidden /> Retounen sou èd la
         </Link>
         <ErrorAlert error={error} onRetry={load} />
       </div>
     );
   }
 
-  const title = String(ticket?.subject ?? ticket?.title ?? `Demande #${ticketId}`);
+  const title = String(ticket?.subject ?? ticket?.title ?? `Demann #${ticketId}`);
 
   return (
     <div className="chat-shell">
       <header className="app-header">
-        <Link href="/app/tickets" className="icon-btn" aria-label="Retour à l'assistance">
+        <Link href="/app/tickets" className="icon-btn" aria-label="Retounen sou èd la">
           <ArrowLeft size={20} />
         </Link>
         <span className="brand-mark" aria-hidden>
@@ -119,7 +119,7 @@ export default function TicketChatPage() {
             {title}
           </div>
           <div className="tiny muted">
-            {typeof ticket?.status === "string" ? ticket.status : "Assistance Medika"}
+            {typeof ticket?.status === "string" ? ticket.status : "Èd Medika"}
           </div>
         </div>
       </header>
@@ -128,11 +128,11 @@ export default function TicketChatPage() {
         <ErrorAlert error={error} onRetry={load} />
       </div>
 
-      <div className="chat-log" ref={logRef} role="log" aria-label="Messages de la demande d'assistance">
+      <div className="chat-log" ref={logRef} role="log" aria-label="Mesaj demann èd la">
         {messages.length === 0 && (
           <div className="empty-state">
-            <h3>Premier message</h3>
-            <p className="small">Décrivez votre problème, l&apos;équipe Medika vous répondra ici.</p>
+            <h3>Premye mesaj la</h3>
+            <p className="small">Deskribe pwoblèm ou a, ekip Medika a ap reponn w isit.</p>
           </div>
         )}
         {messages.map((m, i) => {
@@ -161,11 +161,11 @@ export default function TicketChatPage() {
           className="input"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Écrivez votre message…"
-          aria-label="Votre message d'assistance"
+          placeholder="Ekri mesaj ou..."
+          aria-label="Mesaj èd ou a"
           maxLength={4000}
         />
-        <button type="submit" className="composer-btn send" disabled={!draft.trim() || sending} aria-label="Envoyer">
+        <button type="submit" className="composer-btn send" disabled={!draft.trim() || sending} aria-label="Voye">
           <Send size={19} />
         </button>
       </form>

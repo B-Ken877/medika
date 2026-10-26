@@ -142,23 +142,23 @@ export function PwaBootstrap() {
         <div role="status" aria-live="polite" className="toast-stack">
           <div className="toast">
             <WifiOff size={18} aria-hidden />
-            <span>Vous êtes hors ligne. Certaines pages peuvent ne pas se charger.</span>
+            <span>Pa gen koneksyon entènèt. Gen kèk paj ki ka pa chaje.</span>
           </div>
         </div>
       )}
       {bannerVisible && (
-        <div className="install-banner" role="dialog" aria-label="Installer l'application Medika">
+        <div className="install-banner" role="dialog" aria-label="Enstale aplikasyon Medika a">
           <span className="brand-mark" aria-hidden>
             <Download size={17} />
           </span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <strong>Installer Medika</strong>
-            <div className="tiny muted">Accédez à vos consultations depuis votre écran d&apos;accueil.</div>
+            <strong>Enstale Medika</strong>
+            <div className="tiny muted">Jwenn aksè konsiltasyon ou yo depi ekranlakay ou.</div>
           </div>
           <button className="btn btn-primary btn-sm" onClick={install}>
-            Installer
+            Enstale
           </button>
-          <button className="icon-btn" onClick={dismissInstall} aria-label="Fermer la suggestion d'installation">
+          <button className="icon-btn" onClick={dismissInstall} aria-label="Fèmen sijesyon enstalasyon an">
             <X size={17} />
           </button>
         </div>
