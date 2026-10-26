@@ -64,6 +64,9 @@ export interface UpdateProfileInput {
   phone?: string;
   age?: number | string;
   gender?: string;
+  /** Uploaded avatar URL (from /api/upload) — validated server-side to be an
+   *  absolute http(s) URL or a site-relative /uploads/ path. */
+  avatarUrl?: string;
 }
 
 export function updateProfile(token: string, input: UpdateProfileInput, signal?: AbortSignal) {
@@ -146,7 +149,10 @@ export function markConsultationRead(token: string, consultationId: string, sign
 }
 
 /** REST message send — the WS-independent fallback path. The response is the
- *  PERSISTED message; only its arrival proves the message was stored. */
+ *  PERSISTED message; only its arrival proves the message was stored.
+ *  `clientMsgId` makes retries idempotent server-side ((sender, client_msg_id)
+ *  is unique): a retry after a lost-but-persisted WS frame returns the
+ *  ORIGINAL row instead of duplicating it. */
 export function sendConsultationMessage(
   token: string,
   consultationId: string,
@@ -156,6 +162,7 @@ export function sendConsultationMessage(
     fileUrl?: string | null;
     duration?: number | null;
     fileSize?: number | null;
+    clientMsgId?: string;
   },
   signal?: AbortSignal,
 ) {
