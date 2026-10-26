@@ -125,6 +125,32 @@ describe('POST /api/consultations/:id/messages — clientMsgId idempotency', () 
     expect(res.status).toBe(201);
     expect(res.body.text).toBe('bonjou doktè');
   });
+
+  it('degrades to the legacy insert when migration 003 is not yet applied (deploy-order safety)', async () => {
+    // Simulate the production state where this code ships BEFORE the operator
+    // runs migration 003: the column is absent. Sends must still succeed.
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const dbMod = await import('../src/db.js');
+    const query = dbMod.query ?? dbMod.default?.query;
+    await query('ALTER TABLE messages DROP COLUMN client_msg_id');
+    let status, body;
+    try {
+      const res = await r.post(`/api/consultations/${consId}/messages`)
+        .set('Authorization', `Bearer ${token.patient}`)
+        .send({ text: 'avan migrasyon', clientMsgId: 'cmp-premig' });
+      status = res.status;
+      body = res.body;
+    } finally {
+      // ALWAYS restore (003 is idempotent: column + unique index).
+      const sql003 = fs.readFileSync(
+        path.join(__dirname, '..', 'db', 'migrations', '003_message_client_id.sql'), 'utf8');
+      await query(sql003);
+    }
+    expect(status).toBe(201);
+    expect(body.text).toBe('avan migrasyon');
+    expect(body.client_msg_id).toBeNull(); // degraded: correlation not persisted
+  });
 });
 
 describe('WS message:send — idempotent retries over the socket', () => {
