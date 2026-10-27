@@ -32,8 +32,8 @@ describe("presenceFromEvent", () => {
 
 describe("presenceLabel (accessible text — color alone never communicates)", () => {
   it("labels each state in Kreyòl", () => {
-    expect(presenceLabel("online")).toBe("Sou entènèt");
-    expect(presenceLabel("offline")).toBe("Pa sou entènèt");
+    expect(presenceLabel("online")).toBe("Anliy");
+    expect(presenceLabel("offline")).toBe("Pa anliy");
     expect(presenceLabel("unknown")).toBe("");
   });
 });
