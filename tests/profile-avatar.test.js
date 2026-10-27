@@ -1,6 +1,7 @@
 /**
  * Avatar upload completion (profile route):
- *  - PUT /api/profile accepts a validated avatarUrl (http(s) or /uploads/)
+ *  - PUT /api/profile accepts a validated avatarUrl (http(s), /uploads/, or
+ *    the private-store capability shape /api/media/assets/ast_…)
  *  - the URL persists on the user row and is returned by GET /api/profile
  *  - omitting avatarUrl leaves it untouched (partial-update semantics)
  *  - dangerous schemes/shapes are rejected with 400 (never rendered in <img>)
@@ -48,6 +49,33 @@ describe('PUT /api/profile — avatarUrl', () => {
       .send({ avatarUrl: '/uploads/cons_test123/foto.png' });
     expect(res.status).toBe(200);
     expect(res.body.avatar_url).toBe('/uploads/cons_test123/foto.png');
+  });
+
+  it('persists the private-store capability shape (media asset URL)', async () => {
+    const url = '/api/media/assets/ast_1a2b3c4d5e6f.png';
+    const res = await r.put('/api/profile')
+      .set('Authorization', `Bearer ${token.patient}`)
+      .send({ avatarUrl: url });
+    expect(res.status).toBe(200);
+    expect(res.body.avatar_url).toBe(url);
+  });
+
+  it('rejects near-miss media-asset shapes (forged ids/prefixes)', async () => {
+    for (const bad of [
+      '/api/media/assets/ast_short.png',                     // truncated id
+      '/api/media/assets/AST_abcdef123456.png',               // case
+      '/api/media/assets/ast_abcdef123456.png/../../x',       // traversal
+      '/api/media/assets/att_abcdef123456.png',               // foreign prefix
+      '/api/media/assets/ast_abcdef123456.png?sig=forged',    // query
+      '/api/media/assets/',                                  // empty
+      '/api/media/attachments/ast_abcdef123456.png',         // wrong subpath
+    ]) {
+      const res = await r.put('/api/profile')
+        .set('Authorization', `Bearer ${token.patient}`)
+        .send({ avatarUrl: bad });
+      expect(res.status, `avatarUrl=${bad}`).toBe(400);
+      expect(res.body.error).toBe('URL avatar non valide');
+    }
   });
 
   it('leaves the avatar untouched when the field is omitted', async () => {
