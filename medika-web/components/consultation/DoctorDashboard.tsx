@@ -10,20 +10,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BellRing, CalendarCheck, Check, ChevronRight, RefreshCw, X } from "lucide-react";
+import { BellRing, CalendarCheck, Check, ChevronRight, RefreshCw, Wallet, X } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
 import { useSocket } from "@/lib/ws/socket-context";
 import {
   acceptConsultation,
   getConsultations,
+  getDoctorWallet,
   rejectConsultation,
   updateAvailability,
 } from "@/lib/api/endpoints";
-import type { Consultation } from "@/lib/api/types";
-import { formatDateTime, relativeTime } from "@/lib/format";
+import type { Consultation, DoctorWallet } from "@/lib/api/types";
+import { formatCurrency, formatDateTime, relativeTime } from "@/lib/format";
 import { specialtyLabel, urgencyLabel } from "@/lib/labels";
 import { ApiError } from "@/lib/api/client";
 import { Avatar, EmptyState, ErrorAlert, SkeletonRows, StatusBadge } from "@/components/ui/primitives";
+import OfferCountdown from "@/components/consultation/OfferCountdown";
 
 type Tab = "queue" | "active" | "done";
 
@@ -40,6 +42,7 @@ export default function DoctorDashboard() {
   const [availabilityBusy, setAvailabilityBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [confirmReject, setConfirmReject] = useState<Consultation | null>(null);
+  const [wallet, setWallet] = useState<DoctorWallet | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const showToast = useCallback((msg: string) => {
@@ -69,6 +72,14 @@ export default function DoctorDashboard() {
     return () => abortRef.current?.abort();
   }, [load]);
 
+  // Wallet summary (issue #24) — read-only, refreshed with the queue.
+  useEffect(() => {
+    if (!token) return;
+    getDoctorWallet(token)
+      .then((w) => setWallet(w))
+      .catch(() => setWallet(null)); // summary card simply stays hidden
+  }, [token, consultations]);
+
   // Live updates over WS
   useEffect(() => {
     if (!socket) return;
@@ -86,13 +97,16 @@ export default function DoctorDashboard() {
   const buckets = useMemo(() => {
     const list = consultations ?? [];
     return {
-      // Queue: requests awaiting acceptance — either broadcast (doctor_id
-      // null) or direct requests addressed to this doctor.
+      // Queue: requests awaiting THIS doctor's acceptance — either offers
+      // addressed to them (issue #25 routing) or legacy broadcast requests
+      // (doctor_id null, never routed).
       queue: list.filter(
         (c) => c.status === "RECHERCHE_MEDECIN" && (c.doctor_id == null || c.doctor_id === user?.id),
       ),
       active: list.filter((c) => c.status === "EN_COURS" && c.doctor_id === user?.id),
-      done: list.filter((c) => (c.status === "TERMINE" || c.status === "REFUSE") && c.doctor_id === user?.id),
+      done: list.filter(
+        (c) => (c.status === "TERMINE" || c.status === "REFUSE" || c.status === "EXPIRE") && c.doctor_id === user?.id,
+      ),
     };
   }, [consultations, user?.id]);
 
@@ -197,6 +211,35 @@ export default function DoctorDashboard() {
         </div>
       </div>
 
+      {/* Wallet summary (issue #24) — read-only, links to the full page */}
+      {wallet && (
+        <section className="panel" aria-labelledby="wallet-title">
+          <div className="panel-head">
+            <h2 id="wallet-title" className="panel-title">
+              Revni mwen
+            </h2>
+            <div className="panel-tools">
+              <Link className="btn btn-secondary btn-sm" href="/app/wallet">
+                <Wallet size={14} aria-hidden /> Detay
+              </Link>
+            </div>
+          </div>
+          <div className="panel-row" style={{ minHeight: 60 }}>
+            <div className="row-body">
+              <div className="row-title">
+                <span>Disponib pou peman</span>
+              </div>
+              <div className="row-meta">
+                Pwochen sik: {wallet.currentCycle.label} — peman yo fet chak 15 ak 30 mwa a.
+              </div>
+            </div>
+            <div className="row-actions">
+              <strong>{formatCurrency(wallet.available.amount)}</strong>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Consultation queue panel */}
       <section className="panel" aria-labelledby="queue-title">
         <div className="panel-head">
@@ -277,6 +320,18 @@ export default function DoctorDashboard() {
                   {relativeTime(c.created_at)}
                   {c.urgency_level ? ` · Ijans: ${urgencyLabel(c.urgency_level)}` : ""}
                 </div>
+                {/* Issue #25: acceptance-window countdown for the current offer */}
+                {isQueue && c.offer_deadline != null && (
+                  <div className="row-meta">
+                    <OfferCountdown deadline={c.offer_deadline} label="Tan pou aksepte:" compact />
+                  </div>
+                )}
+                {/* Issue #25: five-hour consultation deadline on active rows */}
+                {tab === "active" && c.expires_at != null && (
+                  <div className="row-meta">
+                    <OfferCountdown deadline={c.expires_at} label="Ekspire nan:" compact warnUnderSeconds={30 * 60} />
+                  </div>
+                )}
                 {tab === "done" && c.status === "TERMINE" && (
                   <div className="row-meta">Li fèmen {formatDateTime(c.updated_at)}</div>
                 )}

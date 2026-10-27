@@ -48,6 +48,7 @@ const STATUS_LABELS: Record<string, string> = {
   EN_COURS: "Ap dewoule",
   TERMINE: "Fini",
   REFUSE: "Refize",
+  EXPIRE: "Ekspire",
 };
 
 /** Gender values stored by the backend (free TEXT, default "Homme"). */

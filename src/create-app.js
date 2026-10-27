@@ -33,6 +33,8 @@ const adminRoutes = require('./routes/admin');
 const callRoutes = require('./routes/call');
 const uploadRoutes = require('./routes/upload');
 const mediaRoutes = require('./routes/media');
+const walletRoutes = require('./routes/wallet');
+const cronRoutes = require('./routes/crons');
 
 /**
  * CORS: native clients (Android/OkHttp) send no Origin header and pass
@@ -104,6 +106,8 @@ function createApp() {
   app.use('/api', ticketRoutes);
   app.use('/api', uploadRoutes); // /api/upload + /api/admin/upload
   app.use('/api', mediaRoutes); // /api/media/assets/:fileId (shared, capability-URL media)
+  app.use('/api', walletRoutes); // /api/doctor/wallet (doctor's own, read-only)
+  app.use('/api', cronRoutes); // /api/crons/* (deadline processor — auth guarded)
   app.use('/api/admin', adminRoutes); // router-level admin guard applies to /api/admin/* only
   app.use('/api', callRoutes);
 

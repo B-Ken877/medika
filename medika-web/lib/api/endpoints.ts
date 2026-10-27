@@ -11,6 +11,7 @@ import type {
   CallTokenResponse,
   Consultation,
   ConsultationNote,
+  DoctorWallet,
   MedicalHistory,
   MedicalHistorySnapshot,
   ReadReceiptResult,
@@ -209,6 +210,12 @@ export function updateAvailability(token: string, isAvailable: boolean, signal?:
     token,
     signal,
   });
+}
+
+// ─── Doctor wallet (issue #24: read-only — doctors never request payouts) ────
+
+export function getDoctorWallet(token: string, signal?: AbortSignal) {
+  return apiFetch<DoctorWallet>("/api/doctor/wallet", { token, signal });
 }
 
 // ─── Calls (LiveKit token generation) ─────────────────────────────────────────

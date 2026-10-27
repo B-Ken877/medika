@@ -14,7 +14,8 @@ export type ConsultationStatus =
   | "RECHERCHE_MEDECIN"
   | "EN_COURS"
   | "REFUSE"
-  | "TERMINE";
+  | "TERMINE"
+  | "EXPIRE";
 
 export type UrgencyLevel = "Faible" | "Moyenne" | "Haute" | "Critique";
 
@@ -63,6 +64,64 @@ export interface Consultation {
   transactionId?: string | null;
   paymentAmount?: number | null;
   orderId?: string | null;
+  /** Issue #25 lifecycle deadlines (server-persisted epoch seconds). */
+  offer_deadline?: number | null;
+  accepted_at?: number | null;
+  expires_at?: number | null;
+}
+
+// ─── Doctor wallet (issue #24) ─────────────────────────────────────────────
+
+/** One payout cycle window (backend computes dates in America/Port-au-Prince). */
+export interface PayoutCycleInfo {
+  startDate: string;
+  endDate: string;
+  label: string;
+  labelLong?: string;
+  due?: boolean;
+}
+
+export interface WalletEarning {
+  id: number;
+  consultation_id: string | null;
+  gross_amount: number;
+  platform_fee: number;
+  net_amount: number;
+  status: "AVAILABLE" | "PAID";
+  available_at: number | null;
+  payout_id: number | null;
+  patient_name?: string | null;
+  specialty?: string | null;
+}
+
+export interface WalletPayout {
+  id: number;
+  doctor_name: string;
+  cycle_start: string;
+  cycle_end: string;
+  amount: number;
+  earning_count: number;
+  status: string;
+  moncash_reference: string | null;
+  paid_at: number | null;
+  paid_by_admin_name: string;
+}
+
+export interface UnpaidCycle extends PayoutCycleInfo {
+  amount: number;
+  count: number;
+  due: boolean;
+}
+
+export interface DoctorWallet {
+  currency: string;
+  available: { amount: number; count: number };
+  pendingPayment: { amount: number; count: number };
+  paidOut: { amount: number; count: number };
+  currentCycle: PayoutCycleInfo;
+  unpaidCycles: UnpaidCycle[];
+  earnings: WalletEarning[];
+  payouts: WalletPayout[];
 }
 
 export type MessageType = "text" | "voice" | "image" | "video" | "file";

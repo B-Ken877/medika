@@ -27,7 +27,8 @@ async function setup() {
 async function resetDb() {
   const { query } = await importCjs('../src/db.js');
   await query(`TRUNCATE messages, ticket_messages, tickets, consultation_notes,
-               medical_histories, payments, consultations, users RESTART IDENTITY CASCADE`);
+               medical_histories, doctor_earnings, payouts, consultation_offers,
+               payments, consultations, users RESTART IDENTITY CASCADE`);
 }
 
 async function closeAll() {

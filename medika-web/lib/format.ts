@@ -77,8 +77,27 @@ export function statusBadgeClass(status: string): string {
     EN_COURS: "badge-green",
     TERMINE: "badge-green",
     REFUSE: "badge-red",
+    EXPIRE: "badge-red",
   };
   return map[status] ?? "badge-gray";
+}
+
+/**
+ * Human countdown for server-persisted deadlines (epoch seconds).
+ * Kreyòl: "54 min", "2 zè 10 min", "Ekspire" when past. Pure function —
+ * callers tick with their own timer and re-render.
+ */
+export function formatCountdown(deadlineEpochSeconds: number | null | undefined, nowMs: number = Date.now()): string {
+  if (!deadlineEpochSeconds) return "";
+  const remainingMs = deadlineEpochSeconds * 1000 - nowMs;
+  if (remainingMs <= 0) return "Ekspire";
+  const totalSeconds = Math.floor(remainingMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return minutes > 0 ? `${hours} zè ${minutes} min` : `${hours} zè`;
+  if (minutes > 0) return `${minutes} min`;
+  return `${seconds} s`;
 }
 
 export function formatCurrency(amount: number | null | undefined): string {

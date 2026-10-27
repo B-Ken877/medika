@@ -92,6 +92,17 @@ const config = {
   // ─── Business ──────────────────────────────────────────────────────────────
   platformFee: parseInt(env('PLATFORM_FEE', '250'), 10),
 
+  // ─── Consultation request lifecycle (issue #25) ────────────────────────────
+  // Server-authoritative deadlines. Values are minutes/hours so tests and
+  // staged rollouts can tune them; the product defaults are exactly the
+  // specified 1 hour and 5 hours.
+  offerWindowMinutes: parseInt(env('OFFER_WINDOW_MINUTES', '60'), 10),
+  consultationExpiryHours: parseInt(env('CONSULTATION_EXPIRY_HOURS', '5'), 10),
+  rerouteRetryMinutes: parseInt(env('REROUTE_RETRY_MINUTES', '15'), 10),
+  // NOTE: CRON_SECRET (the shared secret for /api/crons/* — the scheduled
+  // deadline processor) is deliberately NOT snapshotted here: the route reads
+  // the environment at request time so it can be rotated without a redeploy.
+
   // ─── Seeding ───────────────────────────────────────────────────────────────
   adminUsername: env('ADMIN_USERNAME', ''),
   adminPassword: env('ADMIN_PASSWORD', ''),
