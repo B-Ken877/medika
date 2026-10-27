@@ -1,3 +1,5 @@
+import { readSession } from "./auth/session";
+
 /**
  * MonCash payment flow — web port of the Android PaymentActivity protocol.
  *
@@ -55,7 +57,10 @@ async function paymentFetch(path: string, body: unknown, timeoutMs = 20_000): Pr
   try {
     res = await fetch(`${PAYMENT_BASE_URL}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(readSession()?.token ? { Authorization: `Bearer ${readSession()!.token}` } : {}),
+      },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
@@ -110,7 +115,11 @@ export async function fetchPaymentMode(timeoutMs = 10_000): Promise<PaymentMode>
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(new DOMException("timeout", "TimeoutError")), timeoutMs);
   try {
-    const res = await fetch(`${PAYMENT_BASE_URL}/api/payment/config`, { signal: controller.signal });
+    const token = readSession()?.token;
+    const res = await fetch(`${PAYMENT_BASE_URL}/api/payment/config`, {
+      signal: controller.signal,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
     if (!res.ok) return { simulated: false };
     const data = (await res.json().catch(() => null)) as { simulated?: boolean } | null;
     return { simulated: data?.simulated === true };
