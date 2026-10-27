@@ -1090,7 +1090,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
     background-image:
       linear-gradient(90deg, rgba(3, 48, 38, 0.96) 0%, rgba(3, 48, 38, 0.88) 40%, rgba(3, 48, 38, 0.52) 100%),
       linear-gradient(0deg, rgba(2, 33, 27, 0.3), rgba(2, 33, 27, 0.05)),
-      url("https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=1600&q=80");
+      url("https://images.pexels.com/photos/5452298/pexels-photo-5452298.jpeg?auto=compress&cs=tinysrgb&w=1600");
     background-size: cover;
     background-position: center 36%;
     color: #fff;
