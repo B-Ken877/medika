@@ -38,6 +38,7 @@ import {
   type RecorderSupport,
   type VoiceMode,
 } from "@/lib/chat/voice";
+import { publishRecordingEvent } from "@/lib/chat/recording-indicator";
 
 interface VoiceRecorderProps {
   disabled: boolean;
@@ -195,7 +196,11 @@ export function VoiceRecorder({
     if (!analyser) return;
     const buf = new Uint8Array(analyser.fftSize);
     analyser.getByteTimeDomainData(buf);
-    dispatch({ type: "SAMPLE", amplitude: normalizeAmplitude(rmsAmplitude(buf)) });
+    const amplitude = normalizeAmplitude(rmsAmplitude(buf));
+    dispatch({ type: "SAMPLE", amplitude });
+    // Chat-area recording bubble (issue #19) — its own subscription keeps
+    // the telemetry re-renders OUTSIDE the whole chat page.
+    publishRecordingEvent({ type: "sample", amplitude });
   }, []);
 
   const startSampler = useCallback(() => {
@@ -240,6 +245,8 @@ export function VoiceRecorder({
     timerRef.current = setInterval(() => {
       const total = accumulatedMsRef.current + (Date.now() - segmentStartRef.current);
       dispatch({ type: "TICK", recordedMs: total });
+      // Duration telemetry for the chat-area recording bubble (issue #19).
+      publishRecordingEvent({ type: "tick", recordedMs: total });
       if (total >= MAX_RECORDING_SECONDS * 1000) {
         // Cap reached: pause into preview automatically.
         pauseIntoPreview();

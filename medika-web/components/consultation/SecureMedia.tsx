@@ -16,6 +16,8 @@ import { Download, FileText } from "lucide-react";
 import type { ServerMessage } from "@/lib/api/types";
 import { isDirectMediaUrl, parseAttachmentPath, invalidateMediaGrant, resolveMediaUrl } from "@/lib/chat/media";
 import { fileSizeLabel } from "@/lib/format";
+import { ImageViewer } from "@/components/consultation/ImageViewer";
+import { VoiceMessageBubble } from "@/components/consultation/VoiceMessageBubble";
 
 interface SecureMediaProps {
   message: ServerMessage;
@@ -28,6 +30,7 @@ export function SecureMedia({ message, token }: SecureMediaProps) {
   const [resolvedUrl, setResolvedUrl] = useState<string>(direct ? fileUrl : "");
   const [failed, setFailed] = useState(false);
   const [retried, setRetried] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -79,14 +82,29 @@ export function SecureMedia({ message, token }: SecureMediaProps) {
   const sizeLabel = message.file_size ? fileSizeLabel(message.file_size) : "";
 
   if (kind === "image") {
-    if (failed || !resolvedUrl) {
+    if (failed) {
       return <div className="media-fallback">Imaj la pa disponib kounye a.</div>;
     }
+    if (!resolvedUrl) {
+      // Grant still resolving — a calm reserved-size placeholder instead of
+      // an error-looking fallback (issue #17).
+      return <div className="skeleton bubble-image-skeleton" role="status" aria-label="N ap chaje imaj la..." />;
+    }
     return (
-      <a href={resolvedUrl} target="_blank" rel="noopener noreferrer">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={resolvedUrl} alt="Imaj pataje" className="bubble-image" loading="lazy" onError={onMediaError} />
-      </a>
+      <>
+        <button
+          type="button"
+          className="bubble-image-btn"
+          onClick={() => setViewerOpen(true)}
+          aria-label="Ouvri imaj la an gran"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={resolvedUrl} alt="Imaj pataje" className="bubble-image" loading="lazy" onError={onMediaError} />
+        </button>
+        {viewerOpen && (
+          <ImageViewer src={resolvedUrl} alt="Imaj pataje" onClose={() => setViewerOpen(false)} />
+        )}
+      </>
     );
   }
 
@@ -106,18 +124,24 @@ export function SecureMedia({ message, token }: SecureMediaProps) {
   }
 
   if (kind === "voice") {
-    if (failed || !resolvedUrl) {
+    if (failed) {
       return (
         <span className="audio-chip">
           <span className="tiny">Mesaj vwa pa disponib kounye a.</span>
         </span>
       );
     }
+    if (!resolvedUrl) {
+      // Grant still resolving — reserved-size placeholder (issue #18).
+      return <span className="skeleton voice-msg-skeleton" role="status" aria-label="N ap chaje mesaj vwa a..." />;
+    }
     return (
-      <span className="audio-chip">
-        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-        <audio src={resolvedUrl} controls preload="metadata" onError={onMediaError} />
-      </span>
+      <VoiceMessageBubble
+        src={resolvedUrl}
+        seedKey={String(message.id ?? message.file_url ?? "voice")}
+        durationSeconds={message.duration}
+        onError={onMediaError}
+      />
     );
   }
 

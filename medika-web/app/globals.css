@@ -7,15 +7,18 @@
    ───────────────────────────────────────────────────────────────────────────── */
 
 :root {
-  /* Brand greens */
+  /* Brand greens — the SHARED source of truth for the whole site (issue #20).
+     --green-600/--green-700 are exactly the registration CTA green; the login
+     hero CTA keeps its own --auth-submit shade. visual-polish.css must never
+     redefine these (single source: this file). */
   --green-50: #f0f7f4;
   --green-100: #e5f2ed;
   --green-200: #c9e2d8;
   --green-300: #afd4c7;
   --green-400: #6fa79a;
   --green-500: #197568; /* interactive green — focus, links, switches */
-  --green-600: #145b50; /* primary dark green — main actions, identity */
-  --green-700: #10483f; /* hover green */
+  --green-600: #145b50; /* primary dark green — main actions, identity (= register CTA) */
+  --green-700: #10483f; /* hover green (= register CTA hover) */
   --green-800: #145b50; /* text on pale green surfaces */
   --green-900: #0d3a32;
 
@@ -116,8 +119,10 @@ body {
 img { max-width: 100%; display: block; }
 button { font-family: inherit; cursor: pointer; }
 input, textarea, select { font-family: inherit; font-size: inherit; }
-a { color: var(--green-500); text-decoration: none; }
-a:hover { text-decoration: underline; }
+/* Links use the approved auth link green (issue #20) — the same shade the
+   login/registration pages render for links on light surfaces. */
+a { color: var(--brand-link); text-decoration: none; }
+a:hover { color: var(--brand-link-hover); text-decoration: underline; }
 
 .num, .stat-value { font-variant-numeric: tabular-nums; }
 
@@ -1468,6 +1473,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 /* ── Chat ───────────────────────────────────────────────────────────────── */
 
 .chat-shell {
+  position: relative; /* anchors the jump-to-latest pill (issue #16) */
   display: flex;
   flex-direction: column;
   height: calc(100dvh - var(--header-h) - var(--bottomnav-h));
@@ -1517,7 +1523,41 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 }
 .bubble-meta { font-size: 11px; margin-top: 4px; opacity: 0.75; }
 .bubble-row.mine .bubble-meta { text-align: right; }
-.bubble-image { border-radius: 8px; max-width: 100%; cursor: pointer; }
+/* Compact image previews (issue #17): aspect ratio preserved via auto
+   dimensions + max clamps (no stretching, no cropping — object-fit: contain
+   as a belt-and-braces); long portrait/landscape images can never dominate
+   the conversation. */
+.bubble-image {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(100%, 340px);
+  max-height: 320px;
+  object-fit: contain;
+  border-radius: 12px;
+}
+.bubble-image-btn {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  max-width: 100%;
+  border-radius: 12px;
+  cursor: zoom-in;
+}
+.bubble-image-btn:focus-visible {
+  outline: 3px solid rgba(25, 117, 104, 0.45);
+  outline-offset: 2px;
+}
+.bubble-image-skeleton {
+  width: min(100%, 240px);
+  height: 150px;
+  border-radius: 12px;
+}
+@media (max-width: 640px) {
+  .bubble-image { max-width: min(100%, 264px); max-height: 264px; }
+  .bubble-image-skeleton { width: min(100%, 200px); height: 130px; }
+}
 .bubble .audio-chip {
   display: inline-flex; align-items: center; gap: 8px;
   background: var(--gray-100);
@@ -1747,6 +1787,196 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   display: flex; align-items: center; gap: 8px;
   justify-content: flex-end;
   margin: 2px 4px 6px 0;
+}
+
+/* ── Chat UX polish (issues #16–#19) ────────────────────────────────────── */
+
+/* Chat log inner wrapper — one resize-observed content root so late image
+   loads keep a bottom-pinned user pinned (issue #16). */
+.chat-log-inner { display: block; }
+
+/* Jump-to-latest pill (issue #16) — visible while reading history; counts
+   messages that arrived in the meantime. */
+.jump-latest {
+  position: absolute;
+  right: clamp(14px, 3vw, 24px);
+  bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  z-index: 35;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--green-700);
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 18px;
+  box-shadow: var(--shadow-md);
+}
+.jump-latest:hover { border-color: var(--green-200); background: var(--green-50); text-decoration: none; }
+
+/* Voice message player (issue #18) — replaces the raw native <audio>. */
+.voice-msg {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 216px;
+  max-width: 100%;
+}
+.voice-msg-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: var(--green-600);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.voice-msg-btn:hover { background: var(--green-700); }
+.voice-msg-btn:focus-visible { outline: 3px solid rgba(25, 117, 104, 0.45); outline-offset: 2px; }
+.bubble-row.mine .voice-msg-btn { background: rgba(255, 255, 255, 0.18); }
+.bubble-row.mine .voice-msg-btn:hover { background: rgba(255, 255, 255, 0.3); }
+.voice-msg-wave {
+  flex: 1 1 0;
+  min-width: 110px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.voice-msg-wave span {
+  flex: 1 1 0;
+  min-width: 2px;
+  max-width: 5px;
+  border-radius: 2px;
+  background: var(--green-200);
+  min-height: 3px;
+}
+.voice-msg-wave span.played { background: var(--green-600); }
+.bubble-row.mine .voice-msg-wave span { background: rgba(255, 255, 255, 0.4); }
+.bubble-row.mine .voice-msg-wave span.played { background: #fff; }
+.voice-msg-wave:focus-visible { outline: 3px solid rgba(25, 117, 104, 0.45); outline-offset: 2px; }
+.voice-msg-time {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.bubble-row.mine .voice-msg-time { color: rgba(255, 255, 255, 0.85); }
+.voice-msg-skeleton {
+  display: inline-block;
+  width: 210px;
+  height: 44px;
+  border-radius: var(--radius-full);
+}
+@media (max-width: 640px) {
+  .voice-msg { min-width: 168px; }
+  .voice-msg-wave { min-width: 84px; height: 28px; }
+  .voice-msg-skeleton { width: 172px; }
+}
+
+/* Recording status bubble (issue #19) — typing-indicator visual language,
+   own-side alignment, explicitly NOT a sent message. */
+.recording-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
+  margin: 4px 2px 10px 0;
+}
+.recording-row .voice-rec-dot { flex-shrink: 0; }
+.recording-wave {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 26px;
+  min-width: 96px;
+  max-width: 180px;
+  overflow: hidden;
+}
+.recording-wave span {
+  flex: 1 1 0;
+  min-width: 2px;
+  max-width: 5px;
+  border-radius: 2px;
+  background: var(--red-600);
+  opacity: 0.78;
+  min-height: 3px;
+  transition: height 0.08s linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .recording-wave span { transition: none; }
+}
+.recording-timer {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+/* Full-size image viewer (issue #17) — accessible lightbox. */
+.image-viewer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 85; /* above modal (80), below toasts (90) */
+  background: rgba(7, 24, 20, 0.86);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: image-viewer-in 0.16s ease;
+}
+@keyframes image-viewer-in { from { opacity: 0; } to { opacity: 1; } }
+.image-viewer-close {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  right: 14px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.image-viewer-close:hover { background: rgba(255, 255, 255, 0.26); }
+.image-viewer-close:focus-visible { outline: 3px solid rgba(255, 255, 255, 0.55); outline-offset: 2px; }
+.image-viewer-stage { position: relative; display: flex; align-items: center; justify-content: center; }
+.image-viewer-img {
+  max-width: min(94vw, 1200px);
+  max-height: 84dvh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+}
+.image-viewer-spinner {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+.image-viewer-error {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+  padding: 14px 20px;
+  font-size: 14px;
 }
 
 /* Emoji picker */
