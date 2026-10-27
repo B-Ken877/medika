@@ -6,16 +6,17 @@
  * endpoints — see PR notes). Defensive parsing: the ticket payload embeds
  * the thread under different keys depending on backend version.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, LifeBuoy, Send } from "lucide-react";
+import { ArrowDown, ArrowLeft, LifeBuoy, Send } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
 import { getTicket, sendTicketMessage } from "@/lib/api/endpoints";
 import type { Ticket, TicketMessage } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
 import { formatTime } from "@/lib/format";
 import { ErrorAlert, Spinner } from "@/components/ui/primitives";
+import { useChatScroll } from "@/components/consultation/useChatScroll";
 
 function extractMessages(ticket: Ticket | null): TicketMessage[] {
   if (!ticket) return [];
@@ -45,7 +46,6 @@ export default function TicketChatPage() {
   const [error, setError] = useState<unknown>(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
-  const logRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(() => {
     if (!token || !ticketId) return;
@@ -69,10 +69,14 @@ export default function TicketChatPage() {
 
   const messages = useMemo(() => extractMessages(ticket), [ticket]);
 
-  useEffect(() => {
-    const log = logRef.current;
-    if (log) log.scrollTop = log.scrollHeight;
-  }, [messages]);
+  // ── Chat scroll (issue #16): open on the latest message, stick to the
+  // bottom only while the user is there, jump affordance while reading up.
+  const { logRef, jumpVisible, jumpCount, jumpToLatest } = useChatScroll({
+    conversationId: ticketId,
+    ready: ticket !== null,
+    messageCount: messages.length,
+    contentVersion: `${ticketId}:${messages.length}:${messages.length ? String(messages[messages.length - 1].created_at ?? "") : ""}`,
+  });
 
   const onSend = async (e: FormEvent) => {
     e.preventDefault();
@@ -129,6 +133,7 @@ export default function TicketChatPage() {
       </div>
 
       <div className="chat-log" ref={logRef} role="log" aria-label="Mesaj demann èd la">
+       <div className="chat-log-inner">
         {messages.length === 0 && (
           <div className="empty-state">
             <h3>Premye mesaj la</h3>
@@ -154,7 +159,15 @@ export default function TicketChatPage() {
             </div>
           );
         })}
+       </div>
       </div>
+
+      {jumpVisible && (
+        <button type="button" className="jump-latest" onClick={jumpToLatest}>
+          <ArrowDown size={15} aria-hidden />
+          {jumpCount > 0 ? `${jumpCount} mesaj nouvo` : "Dènye mesaj yo"}
+        </button>
+      )}
 
       <form className="chat-composer" onSubmit={onSend}>
         <input

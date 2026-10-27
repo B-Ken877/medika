@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
+  ArrowDown,
   ArrowLeft,
   ClipboardList,
   Info,
@@ -43,6 +44,8 @@ import { ReceiptTick } from "@/components/consultation/ReceiptTick";
 import { AttachmentMenu } from "@/components/consultation/AttachmentMenu";
 import { EmojiPicker } from "@/components/consultation/EmojiPicker";
 import { VoiceRecorder } from "@/components/consultation/VoiceRecorder";
+import { RecordingBubble } from "@/components/consultation/RecordingBubble";
+import { useChatScroll } from "@/components/consultation/useChatScroll";
 
 /** Optimistic entry while a durable send is unresolved. `failed` marks a
  *  total delivery failure (WS echo timeout AND REST fallback failed) — the
@@ -93,7 +96,6 @@ export default function ConsultationChatPage() {
    *  recording / previewing / uploading a voice message. */
   const [voiceMode, setVoiceMode] = useState<VoiceMode>("idle");
 
-  const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const typingTrackerRef = useRef<PartnerTypingTracker | null>(null);
   const notifierRef = useRef<TypingNotifier | null>(null);
@@ -225,11 +227,19 @@ export default function ConsultationChatPage() {
     });
   }, [socket, consultationId, user, token, partnerId]);
 
-  // Auto-scroll to latest
-  useEffect(() => {
-    const log = logRef.current;
-    if (log) log.scrollTop = log.scrollHeight;
-  }, [messages, partnerTyping, pending.length]);
+  // ── Chat scroll (issue #16): open on the latest message, stick to the
+  // bottom only while the user is there, count what arrives while reading
+  // history, and offer a jump-to-latest affordance. The log content lives
+  // inside a single .chat-log-inner wrapper so resizes (late image loads)
+  // keep a pinned user pinned.
+  const lastMessageId = messages?.length ? messages[messages.length - 1].id : null;
+  const scrollContentVersion = `${consultationId}:${messages?.length ?? 0}:${lastMessageId ?? ""}:${pending.length}:${partnerTyping ? 1 : 0}`;
+  const { logRef, jumpVisible, jumpCount, jumpToLatest } = useChatScroll({
+    conversationId: consultationId,
+    ready: messages !== null,
+    messageCount: (messages?.length ?? 0) + pending.length,
+    contentVersion: scrollContentVersion,
+  });
 
   // ── Mark incoming as read (visible conversations only) ───────────────────
   useEffect(() => {
@@ -777,6 +787,7 @@ export default function ConsultationChatPage() {
 
       {/* Chat log */}
       <div className="chat-log" ref={logRef} role="log" aria-label="Mesaj konsiltasyon an" aria-live="polite">
+       <div className="chat-log-inner">
         {messages === null && <Spinner />}
         {messages !== null && (messages ?? []).length === 0 && pending.length === 0 && (
           <div className="empty-state">
@@ -880,6 +891,10 @@ export default function ConsultationChatPage() {
             )}
           </div>
         ))}
+        {/* Recording status (issue #19): a live in-conversation indicator —
+            NOT a sent message. Shown only while a recording is actually
+            active; removed immediately on stop / cancel / failure. */}
+        {voiceMode === "recording" && <RecordingBubble />}
         {partnerTyping && (
           <div
             className="typing-row"
@@ -894,7 +909,17 @@ export default function ConsultationChatPage() {
             </div>
           </div>
         )}
+       </div>
       </div>
+
+      {/* Jump to latest (issue #16): shown while the user is reading older
+          messages; counts what arrived in the meantime. */}
+      {jumpVisible && (
+        <button type="button" className="jump-latest" onClick={jumpToLatest}>
+          <ArrowDown size={15} aria-hidden />
+          {jumpCount > 0 ? `${jumpCount} mesaj nouvo` : "Dènye mesaj yo"}
+        </button>
+      )}
 
       <div style={{ padding: "0 12px" }}>
         <ErrorAlert error={error} />
