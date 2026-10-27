@@ -2,7 +2,9 @@
  * Upload tests:
  *  - contract shape preserved { url, filename, mimetype, size }
  *  - 4MB cap (Vercel function body limit) enforced with 413
- *  - dev disk fallback via LOCAL_UPLOADS_DIR
+ *  - private-store contract: url is a capability path /api/media/assets/ast_…
+ *    and the stored bytes are re-served through that route (dev disk mode)
+ *  - unservable types (svg…) rejected with 400
  *  - unauthenticated requests rejected
  *  - LiveKit token endpoint: contract shape + authorization + 503 when unset
  */
@@ -37,25 +39,49 @@ afterAll(async () => {
 });
 
 describe('POST /api/upload', () => {
-  it('stores a small image with the legacy response shape (dev disk fallback)', async () => {
+  it('stores a small image with the legacy response shape (capability URL)', async () => {
     const res = await r.post('/api/upload')
       .set('Authorization', `Bearer ${token.patient}`)
       .attach('file', Buffer.from('89504e470d0a1a0a', 'hex'), 'petite.png');
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('url');
-    expect(res.body.url).toMatch(/^\/uploads\//);
-    expect(res.body.filename).toMatch(/\.png$/);
+    expect(res.body.url).toMatch(/^\/api\/media\/assets\/ast_[a-f0-9]{12}\.png$/);
+    expect(res.body.filename).toBe('petite.png');
     expect(res.body.mimetype).toBe('image/png');
     expect(res.body.size).toBe(8);
+    // No absolute storage URL, no token, no store identifiers.
+    expect(JSON.stringify(res.body)).not.toMatch(/blob|token|vercel/i);
   });
 
-  it('associates the file with a consultation folder', async () => {
+  it('re-serves the stored bytes through the capability URL (upload → GET)', async () => {
+    const up = await r.post('/api/upload')
+      .set('Authorization', `Bearer ${token.patient}`)
+      .attach('file', Buffer.from('89504e470d0a1a0a', 'hex'), 'foto.png');
+    expect(up.status).toBe(200);
+    const res = await r.get(up.body.url); // capability URL — no auth header
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toBe('image/png');
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(Buffer.compare(res.body, Buffer.from('89504e470d0a1a0a', 'hex'))).toBe(0);
+  });
+
+  it('accepts the legacy consultationId query parameter (contract compat)', async () => {
     const res = await r.post('/api/upload')
       .set('Authorization', `Bearer ${token.patient}`)
       .query({ consultationId: 'cons_test123' })
       .attach('file', Buffer.from('89504e470d0a1a0a', 'hex'), 'x.png');
     expect(res.status).toBe(200);
-    expect(res.body.url).toMatch(/^\/uploads\/cons_test123\//);
+    expect(res.body.url).toMatch(/^\/api\/media\/assets\/ast_[a-f0-9]{12}\.png$/);
+  });
+
+  it('rejects types it cannot serve safely inline (svg) with 400', async () => {
+    const res = await r.post('/api/upload')
+      .set('Authorization', `Bearer ${token.patient}`)
+      .attach('file', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'), {
+        filename: 'malfezan.svg', contentType: 'image/svg+xml',
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Type de fichier non supporte');
   });
 
   it('rejects oversized files with 413 (Vercel body limit)', async () => {

@@ -32,6 +32,7 @@ const paymentRoutes = require('./routes/payments');
 const adminRoutes = require('./routes/admin');
 const callRoutes = require('./routes/call');
 const uploadRoutes = require('./routes/upload');
+const mediaRoutes = require('./routes/media');
 
 /**
  * CORS: native clients (Android/OkHttp) send no Origin header and pass
@@ -102,6 +103,7 @@ function createApp() {
   app.use('/api', medicalHistoryRoutes);
   app.use('/api', ticketRoutes);
   app.use('/api', uploadRoutes); // /api/upload + /api/admin/upload
+  app.use('/api', mediaRoutes); // /api/media/assets/:fileId (shared, capability-URL media)
   app.use('/api/admin', adminRoutes); // router-level admin guard applies to /api/admin/* only
   app.use('/api', callRoutes);
 

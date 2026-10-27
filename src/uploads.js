@@ -71,6 +71,7 @@ function classifyStorageError(err) {
 const EXT_TO_MIME = {
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
   '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
+  '.avif': 'image/avif',
   '.mp4': 'video/mp4', '.3gp': 'video/3gp', '.webm': 'video/webm',
   '.mov': 'video/quicktime', '.avi': 'video/x-msvideo',
   '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.mp3': 'audio/mpeg',
@@ -78,6 +79,12 @@ const EXT_TO_MIME = {
   '.amr': 'audio/amr', '.flac': 'audio/flac',
   '.pdf': 'application/pdf',
 };
+
+/** Reverse map (mime → preferred servable extension) for the media route. */
+const MIME_TO_SERVABLE_EXT = {};
+for (const [e, m] of Object.entries(EXT_TO_MIME)) {
+  if (!MIME_TO_SERVABLE_EXT[m]) MIME_TO_SERVABLE_EXT[m] = e;
+}
 
 /**
  * Server-validated content types for CONSULTATION attachments (medical
@@ -178,6 +185,39 @@ function sanitizeFilename(name) {
   return cleaned.slice(0, 120) || 'fichye';
 }
 
+// ─── Shared (non-medial) media assets — capability URLs ────────────────────
+
+/** Blob/storage prefix for SHARED assets served through /api/media/assets/…
+ *  (avatar-class media). Deliberately distinct from the PRIVATE consultation
+ *  media prefix ("consultations/…") so the media route can never reach
+ *  medical files. */
+const MEDIA_ASSET_PREFIX = 'assets';
+
+/** Opaque, unguessable asset id — possession of the URL IS the grant. */
+function newMediaAssetId() {
+  return 'ast_' + uuidv4().replace(/-/g, '').substring(0, 12);
+}
+
+/** File-id shape accepted by GET /api/media/assets/:fileId (id + extension). */
+const MEDIA_ASSET_FILE_RE = /^ast_[a-f0-9]{12}\.([a-z0-9]{1,5})$/;
+
+/** True when `value` is a full site-relative media-asset URL (avatar shape). */
+function isMediaAssetUrl(value) {
+  return typeof value === 'string' && /^\/api\/media\/assets\/ast_[a-f0-9]{12}\.[a-z0-9]{1,5}$/.test(value.trim());
+}
+
+/** Extension (with dot) that /api/media/assets can serve SAFELY inline.
+ *  Derived from the original filename first (legacy behavior), then from the
+ *  declared MIME. Types outside this set (svg, tiff, heic, …) are rejected
+ *  with 400: the route must never emit an inline Content-Type it cannot
+ *  vouch for, and browsers cannot render an avatar it cannot serve. */
+function servableExtension(mimetype, originalname) {
+  const ext = path.extname(String(originalname || '')).toLowerCase();
+  if (ext && EXT_TO_MIME[ext]) return ext;
+  if (mimetype && MIME_TO_SERVABLE_EXT[mimetype]) return MIME_TO_SERVABLE_EXT[mimetype];
+  return null;
+}
+
 /** Memory storage — required for serverless (no writable disk in production). */
 function createUploadMiddleware() {
   return multer({
@@ -197,8 +237,13 @@ function createAttachmentMiddleware() {
 }
 
 /**
- * Store an accepted upload. Prefers Vercel Blob; falls back to a local disk
- * directory ONLY outside production (dev parity with the legacy server).
+ * Store an accepted upload. Storage is PRIVATE — the Blob store's access
+ * mode is private (audit finding: the historical access:'public' request was
+ * rejected by the store, surfacing as the production BlobError). The legacy
+ * response SHAPE is preserved: { url, filename, mimetype, size }; the `url`
+ * VALUE is now a site-relative capability URL (/api/media/assets/<id>.<ext>)
+ * streamed by routes/media.js. Non-medial, intentionally shared media only —
+ * consultation medical content goes through storePrivateAttachment().
  * Returns the legacy response shape. The read-write token is passed
  * EXPLICITLY so behavior never depends on implicit env detection.
  */
@@ -206,19 +251,28 @@ async function storeUpload({ file, consultationId, reqId = '-' }) {
   if (!file.buffer || file.size === 0) {
     throw badRequest('Fichye a vid');
   }
-  const filename = `${Date.now()}_${uuidv4().substring(0, 8)}${path.extname(file.originalname) || '.bin'}`;
-  const key = `${safeConsultationId(consultationId)}/${filename}`;
+  const ext = servableExtension(file.mimetype, file.originalname);
+  if (!ext) {
+    logUploadDiagnostic(reqId, 'legacy_unservable_type', {
+      mimeKind: String(file.mimetype || '').split('/')[0] || 'unknown',
+    });
+    throw badRequest('Type de fichier non supporte');
+  }
+  const fileId = `${newMediaAssetId()}${ext}`;
+  const pathname = `${MEDIA_ASSET_PREFIX}/${fileId}`;
+  const url = `/api/media/assets/${fileId}`;
+  const filename = sanitizeFilename(file.originalname);
 
   if (config.blobReadWriteToken) {
     const { put } = require('@vercel/blob');
     try {
-      const blob = await put(key, file.buffer, {
-        access: 'public',
+      await put(pathname, file.buffer, {
+        access: 'private', // matches the store's access mode — 'public' is rejected
         contentType: file.mimetype,
         addRandomSuffix: false,
         token: config.blobReadWriteToken,
       });
-      return { url: blob.url, filename, mimetype: file.mimetype, size: file.size };
+      return { url, filename, mimetype: file.mimetype, size: file.size };
     } catch (err) {
       const { category } = classifyStorageError(err);
       logUploadDiagnostic(reqId, 'legacy_blob_put', {
@@ -230,11 +284,10 @@ async function storeUpload({ file, consultationId, reqId = '-' }) {
 
   if (!isProduction() && config.localUploadsDir) {
     const fs = require('fs');
-    const dir = path.join(config.localUploadsDir, safeConsultationId(consultationId));
+    const dir = path.join(config.localUploadsDir, MEDIA_ASSET_PREFIX);
     fs.mkdirSync(dir, { recursive: true });
-    const fp = path.join(dir, filename);
-    fs.writeFileSync(fp, file.buffer);
-    return { url: `/uploads/${key}`, filename, mimetype: file.mimetype, size: file.size };
+    fs.writeFileSync(path.join(dir, fileId), file.buffer);
+    return { url, filename, mimetype: file.mimetype, size: file.size };
   }
 
   logUploadDiagnostic(reqId, 'legacy_no_storage', {});
@@ -403,4 +456,9 @@ module.exports = {
   newUploadRequestId,
   logUploadDiagnostic,
   SIGNED_URL_TTL_SECONDS,
+  EXT_TO_MIME,
+  MEDIA_ASSET_PREFIX,
+  MEDIA_ASSET_FILE_RE,
+  isMediaAssetUrl,
+  servableExtension,
 };

@@ -9,6 +9,7 @@ const express = require('express');
 const usersRepo = require('../repos/users');
 const { authenticate, requireRole } = require('../auth');
 const { notFound } = require('../errors');
+const { isMediaAssetUrl } = require('../uploads');
 
 const router = express.Router();
 
@@ -22,8 +23,10 @@ router.get('/profile', authenticate, async (req, res, next) => {
 
 /**
  * Avatar URL validation for PUT /api/profile. Accepts ONLY:
- *  - absolute http(s) URLs (Vercel Blob legacy public uploads), or
- *  - site-relative /uploads/… paths (local-dev storage)
+ *  - absolute http(s) URLs (historical public Blob uploads), or
+ *  - site-relative /uploads/… paths (legacy local/VPS storage), or
+ *  - the private-store capability shape /api/media/assets/ast_….… issued
+ *    by POST /api/upload since the store moved to private access
  * Anything else (data:, javascript:, file:, arbitrary paths) is rejected —
  * the value is rendered in <img src> on every client.
  */
@@ -31,7 +34,7 @@ function isValidAvatarUrl(value) {
   if (typeof value !== 'string') return false;
   const v = value.trim();
   if (v.length < 1 || v.length > 500) return false;
-  return /^https?:\/\/[^\s]+$/i.test(v) || /^\/uploads\/[^"]*$/i.test(v);
+  return /^https?:\/\/[^\s]+$/i.test(v) || /^\/uploads\/[^"]*$/i.test(v) || isMediaAssetUrl(v);
 }
 
 router.put('/profile', authenticate, async (req, res, next) => {

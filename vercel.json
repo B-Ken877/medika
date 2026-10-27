@@ -42,6 +42,13 @@
       ]
     },
     {
+      "source": "/api/media/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "private, max-age=86400" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    },
+    {
       "source": "/payment/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "no-store" },
