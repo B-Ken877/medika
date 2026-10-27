@@ -84,7 +84,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="auth-shell">
+    <div className="auth-shell auth-register-shell">
       {/* Brand panel — desktop only */}
       <aside className="auth-brand-pane" aria-hidden>
         <div className="auth-brand-logo">
