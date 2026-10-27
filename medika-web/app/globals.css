@@ -2157,3 +2157,129 @@ body.has-install-banner .app-main { padding-bottom: calc(var(--bottomnav-h) + 11
 }
 .divider { border: none; border-top: 1px solid var(--divider); margin: 18px 0; }
 .nowrap { white-space: nowrap; }
+
+
+/* Registration page — matched to the institutional login palette and layout. */
+.auth-register-shell {
+  min-height: 100vh;
+  min-height: 100svh;
+  background: #fff;
+  color: var(--text-primary);
+}
+.auth-register-shell .brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #0b594a, #239b7e);
+  color: #fff;
+}
+.auth-register-shell .auth-mobile-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 22px;
+  border-bottom: 1px solid #e8efec;
+  background: #fff;
+}
+.auth-register-shell .auth-mobile-brand .brand-word { color: #123a33; font-size: 23px; font-weight: 750; letter-spacing: -0.04em; }
+.auth-register-shell .auth-form-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  background: #fff;
+  padding: 24px 22px 36px;
+}
+.auth-register-shell .auth-form {
+  width: 100%;
+  max-width: 520px !important;
+  margin: 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.auth-register-shell .btn-ghost { color: #146b58; }
+.auth-register-shell .btn-ghost:hover { background: #f3f8f5; color: #0e4d40; }
+.auth-register-shell .auth-title {
+  color: #122d28;
+  font-size: clamp(27px, 3vw, 34px);
+  line-height: 1.2;
+  font-weight: 750;
+  letter-spacing: -0.045em;
+}
+.auth-register-shell .auth-sub { margin-top: 10px; color: #63736f; font-size: 14px; line-height: 22px; }
+.auth-register-shell .form-section { margin-top: 24px; }
+.auth-register-shell .form-section-title {
+  color: #225c4e;
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom-color: #d9e9e2;
+  padding-bottom: 10px;
+}
+.auth-register-shell .field label { color: #263b36; }
+.auth-register-shell .input:focus,
+.auth-register-shell .select:focus {
+  border-color: #197568;
+  box-shadow: 0 0 0 3px rgba(25, 117, 104, 0.16);
+}
+.auth-register-shell .auth-submit {
+  background: #145b50;
+  color: #fff;
+  border-radius: 9px;
+  min-height: 48px;
+  margin-top: 10px;
+}
+.auth-register-shell .auth-submit:hover:not(:disabled) { background: #10483f; }
+.auth-register-shell .auth-alt { margin-top: 22px; text-align: center; color: #63736f; }
+.auth-register-shell .auth-alt a { color: #146b58; font-weight: 650; }
+.auth-register-shell .auth-alt a:hover { color: #0e4d40; }
+.auth-register-shell .auth-form > .btn { margin-bottom: 10px !important; }
+@media (min-width: 900px) {
+  .auth-register-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1.04fr) minmax(0, 0.96fr);
+    gap: 0;
+    padding: 20px;
+    background: #eaf2ee;
+  }
+  .auth-register-shell .auth-mobile-brand { display: none; }
+  .auth-register-shell .auth-brand-pane {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    min-height: calc(100svh - 40px);
+    overflow: hidden;
+    border-radius: 22px 0 0 22px;
+    padding: clamp(30px, 4vw, 62px);
+    background-color: #073c31;
+    background-image:
+      linear-gradient(90deg, rgba(3, 48, 38, 0.96) 0%, rgba(3, 48, 38, 0.88) 40%, rgba(3, 48, 38, 0.52) 100%),
+      linear-gradient(0deg, rgba(2, 33, 27, 0.3), rgba(2, 33, 27, 0.05)),
+      url("https://images.pexels.com/photos/5452298/pexels-photo-5452298.jpeg?auto=compress&cs=tinysrgb&w=1600");
+    background-size: cover;
+    background-position: center 36%;
+    color: #fff;
+  }
+  .auth-register-shell .auth-brand-logo { display: flex; align-items: center; gap: 13px; margin-bottom: 54px; color: #fff; }
+  .auth-register-shell .auth-brand-logo .brand-mark { background: rgba(238,255,247,.95); color: #075a48; }
+  .auth-register-shell .auth-brand-logo .brand-word { color: #fff; font-size: 26px; font-weight: 750; }
+  .auth-register-shell .auth-brand-title { color: #fff; font-size: clamp(30px, 3vw, 42px); line-height: 1.15; font-weight: 750; max-width: 420px; }
+  .auth-register-shell .auth-brand-sub { color: rgba(255,255,255,.84); font-size: 15px; line-height: 25px; margin-top: 16px; max-width: 400px; }
+  .auth-register-shell .auth-form-pane { align-items: center; padding: 38px clamp(28px, 4vw, 64px); border-radius: 0 22px 22px 0; }
+  .auth-register-shell .auth-form { max-width: 520px !important; }
+}
+@media (max-width: 899px) {
+  .auth-register-shell .auth-brand-pane { display: none; }
+  .auth-register-shell .auth-form-pane { padding-top: 24px; }
+  .auth-register-shell .auth-form { max-width: 560px !important; }
+}
