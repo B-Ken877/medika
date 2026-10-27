@@ -88,7 +88,7 @@ export default function FinancePage() {
                   </div>
                   <div style={{
                     width: '100%', maxWidth: 50, height: Math.max(height, 4),
-                    background: isCurrentMonth ? 'var(--mk-brand)' : h.revenue > 0 ? '#6fa79a' : 'var(--mk-divider)',
+                    background: isCurrentMonth ? 'var(--mk-brand)' : h.revenue > 0 ? 'var(--mk-brand-400)' : 'var(--mk-divider)',
                     borderRadius: '6px 6px 0 0', opacity: isCurrentMonth ? 1 : 0.7
                   }} />
                   <div style={{ fontSize: 10, color: isCurrentMonth ? 'var(--mk-brand)' : 'var(--mk-text-secondary)', marginTop: 6, fontWeight: isCurrentMonth ? 700 : 400, textAlign: 'center' }}>

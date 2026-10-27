@@ -13,6 +13,7 @@
   --mk-brand-soft: #e5f2ed; /* pale green surface */
   --mk-brand-light: #f0f7f4;
   --mk-brand-border: #c9e2d8;
+  --mk-brand-400: #6fa79a; /* muted brand green — secondary chart bars */
 
   /* Neutrals */
   --mk-bg: #f5f8f7;
@@ -22,6 +23,7 @@
   --mk-text-muted: #788990;
   --mk-border: #dee7e4;
   --mk-divider: #eaf0ee;
+  --mk-gray-400: #c7d2ce; /* mid neutral — dividers on hover, disabled fills */
   --mk-disabled-bg: #f0f3f2;
   --mk-disabled-text: #9aa8a5;
 
@@ -89,7 +91,7 @@ body {
 /* Scrollbar */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #c7d2ce; border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: var(--mk-gray-400); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--mk-text-muted); }
 
 .num { font-variant-numeric: tabular-nums; }
@@ -356,7 +358,7 @@ body {
 }
 .stat-card:hover {
   box-shadow: var(--mk-shadow-hover);
-  border-color: #c7d2ce;
+  border-color: var(--mk-gray-400);
 }
 
 .stat-label {
@@ -374,7 +376,7 @@ body {
 .stat-dot.yellow { background: var(--mk-warning); }
 .stat-dot.blue { background: var(--mk-info); }
 .stat-dot.red { background: var(--mk-danger); }
-.stat-dot.gray { background: #c7d2ce; }
+.stat-dot.gray { background: var(--mk-gray-400); }
 
 /* ── Table ──────────────────────────────────────────────────────────────── */
 
@@ -459,7 +461,7 @@ body {
   color: var(--mk-text);
   border: 1px solid var(--mk-border);
 }
-.btn-secondary:hover { background: var(--mk-bg); border-color: #c7d2ce; }
+.btn-secondary:hover { background: var(--mk-bg); border-color: var(--mk-gray-400); }
 
 .btn-danger {
   background: var(--mk-danger);
@@ -697,7 +699,7 @@ textarea.form-input {
   width: 40px;
   height: 22px;
   border-radius: var(--mk-radius-lg);
-  background: #c7d2ce;
+  background: var(--mk-gray-400);
   cursor: pointer;
   transition: background 0.2s;
   border: none;
@@ -1016,7 +1018,7 @@ textarea.form-input {
   transition: background 0.15s;
 }
 .cc-send-btn:hover { background: var(--mk-brand-hover); }
-.cc-send-btn:disabled { background: #c7d2ce; cursor: not-allowed; }
+.cc-send-btn:disabled { background: var(--mk-gray-400); cursor: not-allowed; }
 
 /* Empty state */
 .cc-empty {

@@ -108,7 +108,7 @@ export default function CustomerCarePage() {
                 </div>
                 <div className="cc-ticket-meta">
                   <span>{ticket.user_name || 'Utilisateur'}</span>
-                  <span style={{ color: '#c7d2ce' }}>\u00b7</span>
+                  <span style={{ color: 'var(--mk-gray-400)' }}>\u00b7</span>
                   <Clock size={12} style={{ opacity: 0.5 }} />
                   <span>{timeAgo(ticket.updated_at || ticket.created_at)}</span>
                 </div>
@@ -118,7 +118,7 @@ export default function CustomerCarePage() {
               </div>
               <div className="cc-ticket-right">
                 {ticket.unread_count > 0 && <div className="cc-unread-dot" />}
-                <ChevronRight size={16} style={{ color: '#c7d2ce' }} />
+                <ChevronRight size={16} style={{ color: 'var(--mk-gray-400)' }} />
               </div>
             </div>
           ))}
