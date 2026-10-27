@@ -55,13 +55,13 @@ router.post('/create', authenticate, (req, res, next) => {
       order_id: String(orderId).trim(),
       patient_id: req.user.id,
       amount: amountInt,
-      simulated: simulationAllowed(),
+      simulated: simulationAllowed(req.user),
     });
     if (!row) {
       return res.status(409).json({ success: false, error: 'orderId deja utilise' });
     }
 
-    if (simulationAllowed()) {
+    if (simulationAllowed(req.user)) {
       // Simulation is only reachable on authorized non-production deployments
       // (config boot guard + runtime isProductionDeployment check). The
       // `simulated: true` flag lets web clients branch on a SERVER-provided
@@ -101,7 +101,7 @@ router.post('/verify', authenticate, (req, res, next) => {
     }
 
     let verified = null;
-    if (simulationAllowed() && row.simulated) {
+    if (simulationAllowed(req.user) && row.simulated) {
       verified = {
         reference: row.order_id,
         transactionId: simulatedTransactionId(row.order_id),
@@ -126,7 +126,7 @@ router.post('/verify', authenticate, (req, res, next) => {
       transaction_id: verified.transactionId,
       verified_amount: verified.amount,
       provider_raw: verified.raw,
-      simulated: Boolean(simulationAllowed() && row.simulated),
+      simulated: Boolean(simulationAllowed(req.user) && row.simulated),
     });
 
     // Android shape + web-friendly top-level alias.
@@ -150,8 +150,8 @@ router.post('/verify', authenticate, (req, res, next) => {
 // /verify. Exposes only the boolean test-mode flag — never credentials or
 // payment settings. Fail-closed by construction: simulationAllowed() is false
 // on every production deployment.
-router.get('/config', (req, res) => {
-  res.json({ simulated: simulationAllowed() });
+router.get('/config', authenticate, (req, res) => {
+  res.json({ simulated: simulationAllowed(req.user) });
 });
 
 // ─── GET /payment/simulated (authorized-testing-only page) ──────────────────
