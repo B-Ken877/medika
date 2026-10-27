@@ -92,22 +92,22 @@ function LoginForm() {
           </p>
         </div>
 
-        <div className="auth-brand-highlights" aria-label="Avantaj Medika">
-          <div className="auth-feature">
+        <div className="auth-brand-highlights" role="list" aria-label="Sa Medika ofri">
+          <div className="auth-feature" role="listitem">
             <span className="auth-feature-icon"><Stethoscope size={20} aria-hidden="true" /></span>
             <span className="auth-feature-copy">
               <strong>Konsiltasyon sou entènèt</strong>
               <span>Pale ak yon pwofesyonèl sante san w pa deplase.</span>
             </span>
           </div>
-          <div className="auth-feature">
+          <div className="auth-feature" role="listitem">
             <span className="auth-feature-icon"><CalendarCheck size={20} aria-hidden="true" /></span>
             <span className="auth-feature-copy">
               <strong>Swiv etap swen ou</strong>
               <span>Jere konsiltasyon ou yo dirèkteman nan kont ou.</span>
             </span>
           </div>
-          <div className="auth-feature">
+          <div className="auth-feature" role="listitem">
             <span className="auth-feature-icon"><Smartphone size={20} aria-hidden="true" /></span>
             <span className="auth-feature-copy">
               <strong>Sou aparèy ou itilize chak jou</strong>
