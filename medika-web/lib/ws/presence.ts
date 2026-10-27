@@ -21,7 +21,7 @@ export function presenceFromEvent(
 
 /** Accessible label for a presence state (color alone never communicates). */
 export function presenceLabel(state: PresenceState): string {
-  if (state === "online") return "Sou entènèt";
-  if (state === "offline") return "Pa sou entènèt";
+  if (state === "online") return "Anliy";
+  if (state === "offline") return "Pa anliy";
   return "";
 }
