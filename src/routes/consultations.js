@@ -24,6 +24,8 @@ const usersRepo = require('../repos/users');
 const paymentsRepo = require('../repos/payments');
 const specialtiesRepo = require('../repos/specialties');
 const notesRepo = require('../repos/notes');
+const walletRepo = require('../repos/wallet');
+const lifecycle = require('../consultation-lifecycle');
 const moncash = require('../moncash');
 const { config, simulationAllowed } = require('../config');
 const { authenticate, requireRole } = require('../auth');
@@ -104,15 +106,21 @@ router.post('/consultations', authenticate, requireRole('patient'), async (req, 
       }
     }
 
-    const api = consultationsRepo.consToApi(consultation);
+    // Issue #25: route the request — the patient-picked doctor (or the best
+    // eligible available doctor) receives a one-hour offer; when nobody is
+    // eligible the request parks in a retryable waiting state.
+    const routed = await lifecycle.routeNewConsultation(consultation, {
+      patientChoiceDoctorId: doctorId || null,
+    });
+
+    const api = consultationsRepo.consToApi(routed.consultation);
     const hub = req.app.locals.hub;
     if (hub) {
       const newNotif = { type: 'consultation:new', id, patientName: patient.name, description, specialtyNeeded: specialty, urgencyLevel: urgencyLevel || 'Moyenne' };
       hub.publishToUser(req.user.id, newNotif);
-      if (doctorId) {
-        hub.publishToUser(doctorId, newNotif);
-      } else {
-        hub.publishToRole('doctor', newNotif);
+      // Targeted offer — the request is no longer broadcast to every doctor.
+      if (routed.offeredTo) {
+        hub.publishToUser(routed.offeredTo.id, newNotif);
       }
     }
     res.status(201).json(api);
@@ -223,12 +231,18 @@ function simulatedRetrieveByTransaction(transactionId) {
 
 router.get('/consultations', authenticate, async (req, res, next) => {
   try {
+    // Opportunistic deadline enforcement (throttled, fire-and-forget):
+    // offer timeouts, 5-hour expiries and waiting-state retries are applied
+    // whenever anyone reads the list, so state stays fresh even without a
+    // scheduler. Never blocks or fails the read.
+    lifecycle.enforceDueDeadlines(req.app.locals.hub);
     res.json(await consultationsRepo.listForUser(req.user));
   } catch (err) { next(err); }
 });
 
 router.get('/consultations/:id', authenticate, async (req, res, next) => {
   try {
+    lifecycle.enforceDueDeadlines(req.app.locals.hub);
     const c = await consultationsRepo.findById(req.params.id);
     if (!c) return res.json(null); // legacy: null (200), hides existence
     if (req.user.role !== 'admin' && c.patient_id !== req.user.id && c.doctor_id !== req.user.id) {
@@ -510,10 +524,38 @@ router.get('/consultations/:id/attachments/:aid/file', async (req, res, next) =>
 
 // ─── Doctor actions (authorization hardened — audit H2) ─────────────────────
 
+/**
+ * PUT /api/consultations/:id/accept — atomic claim, deadline-aware (issue #25).
+ * The one-hour offer window is enforced by the conditional UPDATE itself;
+ * when the claim loses, the reason is diagnosed from the persisted state:
+ *   * offer expired → the timeout is processed inline (reroute happens now)
+ *     and the late acceptance is rejected with 410 — it can never take
+ *     ownership of the consultation;
+ *   * offered to someone else / waiting / no active offer → 409;
+ *   * missing or terminal → 404 (legacy hiding convention).
+ */
 router.put('/consultations/:id/accept', authenticate, requireRole('doctor'), async (req, res, next) => {
   try {
     const c = await consultationsRepo.accept(req.params.id, req.user.id);
-    if (!c) return res.status(404).json({ error: 'Not found' });
+    if (!c) {
+      const current = await consultationsRepo.findById(req.params.id);
+      if (!current || current.status !== 'RECHERCHE_MEDECIN') {
+        return res.status(404).json({ error: 'Not found' });
+      }
+      if (current.doctor_id === req.user.id && current.offer_deadline && current.offer_deadline <= new Date()) {
+        // Deadline passed: process the timeout NOW so the reroute is not
+        // deferred to the scheduler, then reject the late acceptance.
+        const outcome = { offersExpired: 0, rerouted: 0, waiting: 0, adopted: 0, retried: 0, expired: 0, notified: 0, consultation: null, notifyNewDoctor: null };
+        await lifecycle.expireOfferAndReroute(req.params.id, outcome);
+        return res.status(410).json({
+          error: 'Delai d\u2019acceptation depasse (1 heure). La demande a ete reorientee a un autre medecin.',
+        });
+      }
+      if (current.doctor_id && current.doctor_id !== req.user.id) {
+        return res.status(409).json({ error: 'Cette demande est actuellement offerte a un autre medecin' });
+      }
+      return res.status(409).json({ error: 'Cette demande n\u2019est pas disponible pour acceptation' });
+    }
     const messages = await consultationsRepo.listMessages(req.params.id);
     const hasSystemMsg = messages.some((m) => m.sender_id === 'system' && m.consultation_id === req.params.id);
     if (!hasSystemMsg) {
@@ -529,12 +571,29 @@ router.put('/consultations/:id/accept', authenticate, requireRole('doctor'), asy
   } catch (err) { next(err); }
 });
 
+/**
+ * PUT /api/consultations/:id/reject (issue #25 semantics):
+ *   * the patient-chosen doctor rejecting ends the request as REFUSE
+ *     (historical behavior — patient notified);
+ *   * a routed-offer rejection behaves like a timeout: immediate reroute.
+ */
 router.put('/consultations/:id/reject', authenticate, requireRole('doctor'), async (req, res, next) => {
   try {
-    const c = await consultationsRepo.reject(req.params.id, req.user.id);
-    if (!c) return res.status(404).json({ error: 'Not found' });
-    notifyConsultationUpdate(req, c);
-    res.json(consultationsRepo.consToApi(c));
+    const result = await lifecycle.rejectConsultation(req.params.id, req.user.id);
+    if (!result) return res.status(404).json({ error: 'Not found' });
+    notifyConsultationUpdate(req, result.consultation);
+    const hub = req.app.locals.hub;
+    if (hub && result.nextDoctor) {
+      hub.publishToUser(result.nextDoctor.id, {
+        type: 'consultation:new',
+        id: result.consultation.id,
+        patientName: result.consultation.patient_name,
+        description: result.consultation.description,
+        specialtyNeeded: result.consultation.specialty_needed,
+        urgencyLevel: result.consultation.urgency_level,
+      });
+    }
+    res.json(consultationsRepo.consToApi(result.consultation));
   } catch (err) { next(err); }
 });
 
@@ -549,6 +608,11 @@ router.put('/consultations/:id/prescription', authenticate, requireRole('doctor'
       sender_id: 'system',
       sender_name: 'Systeme',
       text: `Ordonnance redigee par ${req.user.name}. Consultation clôturée.`,
+    });
+    // Issue #24: a completed consultation with a verified payment becomes
+    // an available earning exactly once (idempotent materialization).
+    await walletRepo.materializeEarnings().catch((err) => {
+      console.error('[wallet] earning materialization failed:', err.code || err.message);
     });
     notifyConsultationUpdate(req, c);
     res.json(consultationsRepo.consToApi(c));

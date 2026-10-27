@@ -16,6 +16,8 @@ const usersRepo = require('../repos/users');
 const consultationsRepo = require('../repos/consultations');
 const specialtiesRepo = require('../repos/specialties');
 const ticketsRepo = require('../repos/tickets');
+const walletRepo = require('../repos/wallet');
+const payoutCycles = require('../payout-cycles');
 const { query } = require('../db');
 const { authenticateAdmin, hashPassword } = require('../auth');
 const { config } = require('../config');
@@ -329,6 +331,85 @@ router.get('/finance', async (req, res, next) => {
       total: { consultations: completed.length, revenue: tFin.total, doctorEarnings: tFin.doctorEarnings, medikaEarnings: tFin.medikaEarnings },
       doctorEarnings, history, recentTransactions,
     });
+  } catch (err) { next(err); }
+});
+
+// ─── Doctor payouts (issue #24: wallet ledger + manual MonCash workflow) ─────
+
+/**
+ * GET /api/admin/payouts — payout management view:
+ *   * cycles: every cycle that still has AVAILABLE earnings, oldest first,
+ *     each with the per-doctor eligible amounts (reconcilable against the
+ *     underlying earnings) and a `due` flag (cycle end date reached);
+ *   * currentCycle: the accumulating cycle;
+ *   * payouts: full settlement history (doctor, cycle, amount, admin actor,
+ *     MonCash reference, timestamp).
+ */
+router.get('/payouts', async (req, res, next) => {
+  try {
+    res.json(await walletRepo.payoutOverview());
+  } catch (err) { next(err); }
+});
+
+/**
+ * POST /api/admin/payouts/settle — mark a doctor's payout for one cycle as
+ * PAID ("Payé"). The admin performs the manual MonCash transfer FIRST and
+ * records the reference; this call settles the ledger atomically:
+ *   * the (doctor, cycle) pair is validated against the real cycle calendar
+ *     (arbitrary date ranges are rejected);
+ *   * an already-settled cycle returns the existing payout (idempotent —
+ *     repeated clicks / retries can never double-pay);
+ *   * DB-level UNIQUE(doctor_id, cycle_start, cycle_end) + advisory lock +
+ *     FOR UPDATE on the earnings make concurrent settles impossible;
+ *   * every included earning flips AVAILABLE→PAID in the same transaction.
+ */
+router.post('/payouts/settle', async (req, res, next) => {
+  try {
+    const { doctorId, cycleStart, cycleEnd, moncashReference } = req.body || {};
+
+    if (typeof doctorId !== 'string' || !doctorId.trim()) {
+      return res.status(400).json({ error: 'doctorId requis' });
+    }
+    if (typeof cycleStart !== 'string' || typeof cycleEnd !== 'string') {
+      return res.status(400).json({ error: 'cycleStart et cycleEnd (YYYY-MM-DD) requis' });
+    }
+    if (moncashReference !== undefined && moncashReference !== null) {
+      if (typeof moncashReference !== 'string' || moncashReference.length > 200) {
+        return res.status(400).json({ error: 'Reference MonCash invalide (200 caracteres max)' });
+      }
+    }
+
+    const cycle = payoutCycles.isValidCyclePair(cycleStart, cycleEnd);
+    if (!cycle) {
+      return res.status(400).json({ error: 'Cycle de paiement invalide (bornes reelles du calendrier attendues)' });
+    }
+    // Payouts run on the cycle date: a cycle can only be settled once its end
+    // date has arrived (today or earlier, app timezone).
+    if (cycle.endDate > payoutCycles.latestDueCycleEndIso(new Date())) {
+      return res.status(400).json({ error: 'Ce cycle de paiement n\'est pas encore termine' });
+    }
+
+    const doctor = await usersRepo.findById(doctorId);
+    if (!doctor || doctor.role !== 'doctor') {
+      return res.status(404).json({ error: 'Medecin introuvable' });
+    }
+
+    const result = await walletRepo.settle({
+      doctorId: doctor.id,
+      cycle,
+      adminId: req.user.id,
+      adminName: req.user.name || 'Admin',
+      moncashReference: moncashReference ? moncashReference.trim() : null,
+    });
+
+    if (result.error === 'no_earnings') {
+      return res.status(409).json({ error: 'Aucun gain eligible pour ce medecin sur ce cycle' });
+    }
+    if (result.error === 'actor_not_found') {
+      return res.status(404).json({ error: 'Medecin introuvable' });
+    }
+
+    res.status(result.alreadyPaid ? 200 : 201).json(result);
   } catch (err) { next(err); }
 });
 

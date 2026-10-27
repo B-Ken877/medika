@@ -63,15 +63,20 @@ describe('authorized preview deployment boots with simulation enabled', () => {
 
 describe('GET /api/payment/config (mode discovery)', () => {
   it('reports { simulated: true } on the canonical path', async () => {
-    const res = await r.get('/api/payment/config');
+    const res = await r.get('/api/payment/config').set('Authorization', `Bearer ${token.patient}`);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ simulated: true });
   });
 
   it('also serves the legacy Android mount path', async () => {
-    const res = await r.get('/payment/api/payment/config');
+    const res = await r.get('/payment/api/payment/config').set('Authorization', `Bearer ${token.patient}`);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ simulated: true });
+  });
+
+  it('requires authentication (PR #22 payment-auth hardening)', async () => {
+    const res = await r.get('/api/payment/config');
+    expect(res.status).toBe(401);
   });
 });
 
@@ -183,7 +188,7 @@ describe('runtime fail-closed when the deployment stage is production', () => {
   it('flipping VERCEL_ENV to production disables simulation for every route', async () => {
     process.env.VERCEL_ENV = 'production';
     try {
-      const cfg = await r.get('/api/payment/config');
+      const cfg = await r.get('/api/payment/config').set('Authorization', `Bearer ${token.patient}`);
       expect(cfg.body).toEqual({ simulated: false });
 
       // The real branch runs instead → without credentials it fails closed 503.
@@ -215,7 +220,7 @@ describe('runtime fail-closed when the deployment stage is production', () => {
   it('an unknown VERCEL_ENV value fails CLOSED (treated as production)', async () => {
     process.env.VERCEL_ENV = 'staging-unknown-value';
     try {
-      const cfg = await r.get('/api/payment/config');
+      const cfg = await r.get('/api/payment/config').set('Authorization', `Bearer ${token.patient}`);
       expect(cfg.body).toEqual({ simulated: false });
     } finally {
       process.env.VERCEL_ENV = 'preview';

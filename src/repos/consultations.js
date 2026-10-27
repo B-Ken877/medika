@@ -10,9 +10,11 @@
 'use strict';
 
 const { query, withTransaction } = require('../db');
+const { config } = require('../config');
 
 function consToApi(row) {
   if (!row) return null;
+  const toEpoch = (v) => (v ? Math.floor(new Date(v).getTime() / 1000) : null);
   return {
     id: row.id,
     patient_id: row.patient_id,
@@ -26,8 +28,16 @@ function consToApi(row) {
     ai_explanation: row.ai_explanation ?? '',
     status: row.status,
     prescription: row.prescription ?? null,
-    created_at: row.created_at ? Math.floor(new Date(row.created_at).getTime() / 1000) : null,
-    updated_at: row.updated_at ? Math.floor(new Date(row.updated_at).getTime() / 1000) : null,
+    created_at: toEpoch(row.created_at),
+    updated_at: toEpoch(row.updated_at),
+    // Lifecycle deadlines (issue #25, additive). offer_deadline = acceptance
+    // window for the CURRENT offer holder (countdown UI); expires_at = the
+    // five-hour consultation deadline once accepted. NULL when not applicable
+    // (legacy rows, non-RECHERCHE_MEDECIN states). Server-persisted values —
+    // never client-supplied.
+    offer_deadline: toEpoch(row.offer_deadline),
+    accepted_at: toEpoch(row.accepted_at),
+    expires_at: toEpoch(row.expires_at),
   };
 }
 
@@ -80,8 +90,20 @@ async function listForUser(user) {
   if (user.role === 'patient') {
     sql = `SELECT * FROM consultations WHERE patient_id = $1`;
   } else if (user.role === 'doctor') {
+    // Issue #25: routed requests are visible ONLY to the current offer
+    // holder (doctor_id). Never-routed rows (legacy data / pre-adoption)
+    // keep the historical broadcast visibility; waiting-state rows (pool
+    // exhausted, reroute_after set) are shown to no doctor.
     sql = `SELECT * FROM consultations
-           WHERE doctor_id = $1 OR (doctor_id IS NULL AND status = 'RECHERCHE_MEDECIN')`;
+           WHERE doctor_id = $1
+              OR (
+                doctor_id IS NULL AND status = 'RECHERCHE_MEDECIN'
+                AND reroute_after IS NULL
+                AND NOT EXISTS (
+                  SELECT 1 FROM consultation_offers o
+                   WHERE o.consultation_id = consultations.id
+                )
+              )`;
   } else {
     sql = `SELECT * FROM consultations`;
     params.length = 0;
@@ -92,39 +114,65 @@ async function listForUser(user) {
 }
 
 /**
- * Atomic doctor accept. Legacy semantics preserved: only doctors, only
- * unassigned consultations (or ones already assigned to them). Returns the
- * updated row or null when the claim lost / not allowed.
+ * Atomic doctor accept (issue #25 hardened). Acceptance requires:
+ *   1. status = RECHERCHE_MEDECIN, and
+ *   2a. the caller IS the current offer holder with an UNEXPIRED
+ *       offer_deadline (the routed path), or
+ *   2b. the consultation was NEVER routed (no offer rows, no waiting
+ *       state — legacy rows and direct fixtures): the historical
+ *       free-accept pool behavior is preserved for them.
+ * On success the consultation becomes EN_COURS with a five-hour
+ * expires_at deadline and the PENDING offer (if any) is marked ACCEPTED.
+ * The single conditional UPDATE under the row lock makes concurrent
+ * accepts race-safe: exactly one caller ever wins.
  */
 async function accept(id, doctorId) {
-  const { rows } = await query(
-    `UPDATE consultations
-       SET doctor_id = $2, status = 'EN_COURS', updated_at = now()
-     WHERE id = $1
-       AND status = 'RECHERCHE_MEDECIN'
-       AND (doctor_id IS NULL OR doctor_id = $2)
-     RETURNING *`,
-    [id, doctorId]
-  );
-  return rows[0] || null;
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `UPDATE consultations
+         SET status = 'EN_COURS',
+             doctor_id = $2,
+             accepted_at = now(),
+             expires_at = now() + make_interval(hours => $3),
+             offer_deadline = NULL,
+             reroute_after = NULL,
+             updated_at = now()
+       WHERE id = $1
+         AND status = 'RECHERCHE_MEDECIN'
+         AND (
+           (doctor_id = $2 AND (offer_deadline IS NULL OR offer_deadline > now()))
+           OR (
+             doctor_id IS NULL AND offer_deadline IS NULL AND reroute_after IS NULL
+             AND NOT EXISTS (
+               SELECT 1 FROM consultation_offers o WHERE o.consultation_id = consultations.id
+             )
+           )
+         )
+       RETURNING *`,
+      [id, doctorId, config.consultationExpiryHours]
+    );
+    const row = rows[0];
+    if (!row) return null;
+    await client.query(
+      `UPDATE consultation_offers
+          SET status = 'ACCEPTED', responded_at = now()
+        WHERE consultation_id = $1 AND doctor_id = $2 AND status = 'PENDING'`,
+      [id, doctorId]
+    );
+    return row;
+  });
 }
 
-async function reject(id, doctorId) {
-  const { rows } = await query(
-    `UPDATE consultations
-       SET status = 'REFUSE', updated_at = now()
-     WHERE id = $1 AND doctor_id = $2
-     RETURNING *`,
-    [id, doctorId]
-  );
-  return rows[0] || null;
-}
-
+/**
+ * Complete an active consultation with a prescription (issue #25 hardened:
+ * only an EN_COURS consultation owned by the acting doctor can be closed —
+ * expired, refused or already-terminated consultations are out of scope).
+ */
 async function prescribe(id, doctorId, prescription) {
   const { rows } = await query(
     `UPDATE consultations
        SET prescription = $3, status = 'TERMINE', updated_at = now()
-     WHERE id = $1 AND doctor_id = $2
+     WHERE id = $1 AND doctor_id = $2 AND status = 'EN_COURS'
      RETURNING *`,
     [id, doctorId, prescription]
   );
@@ -283,7 +331,6 @@ module.exports = {
   findById,
   listForUser,
   accept,
-  reject,
   prescribe,
   adminDelete,
   listAll,

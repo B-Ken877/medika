@@ -37,6 +37,7 @@ import { waitForMessageEcho, mergePersistedMessage } from "@/lib/chat/delivery";
 import type { VoiceMode } from "@/lib/chat/voice";
 import { uploadConsultationAttachment } from "@/lib/api/endpoints";
 import { Avatar, ErrorAlert, Spinner } from "@/components/ui/primitives";
+import OfferCountdown from "@/components/consultation/OfferCountdown";
 import { PrescriptionModal } from "@/components/consultation/PrescriptionModal";
 import { PrescriptionPanel } from "@/components/consultation/PrescriptionPanel";
 import { SecureMedia } from "@/components/consultation/SecureMedia";
@@ -560,6 +561,7 @@ export default function ConsultationChatPage() {
   const waiting = consultation.status === "RECHERCHE_MEDECIN";
   const refused = consultation.status === "REFUSE";
   const finished = consultation.status === "TERMINE";
+  const expired = consultation.status === "EXPIRE";
 
   const subtitle = canChat
     ? partnerTyping
@@ -573,7 +575,9 @@ export default function ConsultationChatPage() {
         ? "Konsiltasyon an fini."
         : refused
           ? "Demann lan refize"
-          : "—";
+          : expired
+            ? "Konsiltasyon an ekspire."
+            : "—";
 
   const renderBubble = (
     m: {
@@ -772,9 +776,24 @@ export default function ConsultationChatPage() {
           N ap tann doktè a. Ou ap resevwa yon notifikasyon le li aksepte demann lan.
         </div>
       )}
+      {canChat && consultation.expires_at != null && (
+        <div className="alert alert-info" style={{ margin: 12, marginBottom: 0 }} role="status">
+          <OfferCountdown deadline={consultation.expires_at} label="Konsiltasyon an ekspire nan:" warnUnderSeconds={30 * 60} />{" "}
+          L istorik mesaj yo ap konsève.
+        </div>
+      )}
       {refused && (
         <div className="alert alert-error" style={{ margin: 12, marginBottom: 0 }} role="status">
           Demann sa a refize. Ou ka{" "}
+          <Link href="/app/consult" className="nowrap">
+            kreye yon nouvo konsiltasyon
+          </Link>
+          .
+        </div>
+      )}
+      {expired && (
+        <div className="alert alert-error" style={{ margin: 12, marginBottom: 0 }} role="status">
+          Konsiltasyon sa a ekspire otomatikman apre 5 zè. Istorik mesaj yo konsève. Ou ka{" "}
           <Link href="/app/consult" className="nowrap">
             kreye yon nouvo konsiltasyon
           </Link>

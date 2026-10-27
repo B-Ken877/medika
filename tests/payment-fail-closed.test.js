@@ -38,9 +38,14 @@ afterAll(async () => {
 
 describe('simulation disabled (default) — mode discovery', () => {
   it('GET /api/payment/config reports { simulated: false }', async () => {
-    const res = await r.get('/api/payment/config');
+    const res = await r.get('/api/payment/config').set('Authorization', `Bearer ${token.patient}`);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ simulated: false });
+  });
+
+  it('GET /api/payment/config requires authentication (PR #22 hardening)', async () => {
+    const res = await r.get('/api/payment/config');
+    expect(res.status).toBe(401);
   });
 });
 

@@ -10,7 +10,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Bell, CalendarDays, ChevronDown, Home, LogOut, Stethoscope, User } from "lucide-react";
+import { Bell, CalendarDays, ChevronDown, Home, LogOut, Stethoscope, User, Wallet } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
 import { useSocket } from "@/lib/ws/socket-context";
 import { Avatar, Spinner } from "@/components/ui/primitives";
@@ -20,6 +20,7 @@ function navItems(role: "patient" | "doctor") {
     return [
       { href: "/app", label: "Akèy", icon: Home, exact: true },
       { href: "/app/consultations", label: "Konsiltasyon yo", icon: CalendarDays },
+      { href: "/app/wallet", label: "Revni mwen", icon: Wallet },
       { href: "/app/notifications", label: "Notifikasyon", icon: Bell },
       { href: "/app/profile", label: "Pwofil mwen", icon: User },
     ];
