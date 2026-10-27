@@ -19,6 +19,37 @@
   --green-800: #145b50; /* text on pale green surfaces */
   --green-900: #0d3a32;
 
+  /* Institutional auth palette — the login/registration pages are the visual
+     source of truth (issue #14). Values are EXACTLY the ones the redesigned
+     auth pages render with; tokens exist so the same shades are reused
+     everywhere instead of being re-hardcoded per selector. */
+  --brand-deep: #073c31;        /* deep clinical green — hero/brand surfaces */
+  --brand-grad-a: #0b594a;      /* brand-mark gradient start */
+  --brand-grad-b: #239b7e;      /* brand-mark gradient end */
+  --brand-mint: #a6f0c9;        /* mint accent on deep green (overline) */
+  --brand-mint-strong: #86e7ae; /* mint accent, stronger (footer rule) */
+  --brand-shell: #eaf2ee;       /* desktop split-screen backdrop */
+  --brand-heading: #122d28;     /* auth page titles */
+  --brand-label: #223b35;       /* auth form labels */
+  --brand-link: #146b58;        /* links on light auth surfaces */
+  --brand-link-hover: #0e4d40;
+  --brand-input-border: #d6e2dd;
+  --brand-input-bg: #fbfdfc;
+  --brand-input-text: #19342d;
+  --brand-placeholder: #91a19b;
+  --brand-icon: #617a71;        /* auth input leading icons */
+  --brand-word: #123a33;        /* Medika wordmark on light auth surfaces */
+  --brand-pill-bg: #f3f8f5;     /* context pill / ghost-hover surface */
+  --brand-pill-border: #d9e9e2; /* context pill + section divider */
+  --brand-section: #225c4e;     /* context pill + section heading green */
+  --auth-submit: #075a48;       /* login hero CTA (register keeps --green-600) */
+  --auth-submit-hover: #064a3c;
+  --auth-focus: #25856d;        /* login input focus ring/border */
+
+  /* Attention red (live recording indicator, destructive accents) — also
+     backstops the var(--red-600, …) references in the voice composer. */
+  --red-600: #dc2626;
+
   /* Neutral scale */
   --gray-50: #f5f8f7;
   --gray-100: #f0f3f2;
@@ -771,7 +802,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   justify-content: center;
   flex-shrink: 0;
   border-radius: 12px;
-  background: linear-gradient(145deg, #0b594a, #239b7e);
+  background: linear-gradient(145deg, var(--brand-grad-a), var(--brand-grad-b));
   color: #fff;
 }
 
@@ -792,7 +823,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 }
 
 .auth-login-shell .auth-mobile-brand .brand-word {
-  color: #123a33;
+  color: var(--brand-word);
   font-size: 23px;
   line-height: 27px;
   font-weight: 750;
@@ -846,11 +877,11 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   display: inline-flex;
   align-items: center;
   min-height: 27px;
-  border: 1px solid #d9e9e2;
+  border: 1px solid var(--brand-pill-border);
   border-radius: 6px;
   padding: 4px 9px;
-  background: #f3f8f5;
-  color: #225c4e;
+  background: var(--brand-pill-bg);
+  color: var(--brand-section);
   font-size: 10px;
   line-height: 16px;
   font-weight: 750;
@@ -861,7 +892,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: #146b58;
+  color: var(--brand-link);
   font-size: 12px;
   line-height: 18px;
   font-weight: 650;
@@ -869,7 +900,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 }
 
 .auth-login-shell .auth-register-link:hover {
-  color: #0e4d40;
+  color: var(--brand-link-hover);
   text-decoration: none;
 }
 
@@ -878,7 +909,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 }
 
 .auth-login-shell .auth-title {
-  color: #122d28;
+  color: var(--brand-heading);
   font-size: clamp(27px, 3vw, 34px);
   line-height: 1.2;
   font-weight: 750;
@@ -899,7 +930,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 .auth-login-shell .auth-field label {
   display: block;
   margin-bottom: 8px;
-  color: #223b35;
+  color: var(--brand-label);
   font-size: 12px;
   line-height: 18px;
   font-weight: 700;
@@ -918,7 +949,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   top: 50%;
   z-index: 1;
   transform: translateY(-50%);
-  color: #617a71;
+  color: var(--brand-icon);
   pointer-events: none;
 }
 
@@ -926,11 +957,11 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   width: 100%;
   min-width: 0;
   min-height: 52px;
-  border: 1px solid #d6e2dd;
+  border: 1px solid var(--brand-input-border);
   border-radius: 10px;
   padding: 13px 14px 13px 44px;
-  background: #fbfdfc;
-  color: #19342d;
+  background: var(--brand-input-bg);
+  color: var(--brand-input-text);
   font-size: 14px;
   line-height: 22px;
   box-shadow: 0 1px 2px rgba(21, 56, 45, 0.025);
@@ -938,12 +969,12 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 }
 
 .auth-login-shell .auth-input-wrap .input.auth-input::placeholder {
-  color: #91a19b;
+  color: var(--brand-placeholder);
   opacity: 1;
 }
 
 .auth-login-shell .auth-input-wrap .input.auth-input:focus {
-  border-color: #25856d;
+  border-color: var(--auth-focus);
   background: #fff;
   box-shadow: 0 0 0 3px rgba(37, 133, 109, 0.13);
   outline: none;
@@ -977,7 +1008,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 }
 
 .auth-login-shell .auth-password-toggle:focus-visible {
-  outline: 2px solid #25856d;
+  outline: 2px solid var(--auth-focus);
   outline-offset: 1px;
 }
 
@@ -990,8 +1021,8 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   gap: 10px;
   margin-top: 26px;
   border-radius: 10px;
-  border: 1px solid #075a48;
-  background: #075a48;
+  border: 1px solid var(--auth-submit);
+  background: var(--auth-submit);
   color: #fff;
   box-shadow: 0 5px 12px rgba(7, 90, 72, 0.14);
   font-size: 14px;
@@ -1000,8 +1031,8 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 }
 
 .auth-login-shell .auth-submit:hover:not(:disabled) {
-  background: #064a3c;
-  border-color: #064a3c;
+  background: var(--auth-submit-hover);
+  border-color: var(--auth-submit-hover);
   box-shadow: 0 7px 16px rgba(7, 90, 72, 0.18);
 }
 
@@ -1068,7 +1099,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
     grid-template-columns: minmax(0, 1.04fr) minmax(0, 0.96fr);
     gap: 0;
     padding: 20px;
-    background: #eaf2ee;
+    background: var(--brand-shell);
   }
 
   .auth-login-shell .auth-mobile-brand {
@@ -1086,7 +1117,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
     overflow: hidden;
     border-radius: 22px 0 0 22px;
     padding: clamp(30px, 4vw, 62px);
-    background-color: #073c31;
+    background-color: var(--brand-deep);
     background-image:
       linear-gradient(90deg, rgba(3, 48, 38, 0.96) 0%, rgba(3, 48, 38, 0.88) 40%, rgba(3, 48, 38, 0.52) 100%),
       linear-gradient(0deg, rgba(2, 33, 27, 0.3), rgba(2, 33, 27, 0.05)),
@@ -1117,7 +1148,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 
   .auth-login-shell .auth-brand-logo .brand-mark {
     background: rgba(238, 255, 247, 0.95);
-    color: #075a48;
+    color: var(--auth-submit);
     box-shadow: 0 7px 22px rgba(1, 24, 19, 0.12);
   }
 
@@ -1143,7 +1174,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   .auth-login-shell .auth-overline {
     display: inline-block;
     margin-bottom: 19px;
-    color: #a6f0c9;
+    color: var(--brand-mint);
     font-size: 10px;
     line-height: 16px;
     font-weight: 750;
@@ -1229,7 +1260,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
     height: 2px;
     flex-shrink: 0;
     border-radius: 2px;
-    background: #86e7ae;
+    background: var(--brand-mint-strong);
   }
 
   .auth-login-shell .auth-form-pane {
@@ -1342,63 +1373,6 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 
 
 /* Legacy auth selectors used by the registration page; preserve its existing layout. */
-.auth-shell { min-height: 100dvh; display: flex; flex-direction: column; background: var(--bg); }
-.auth-mobile-brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 28px 20px 0;
-}
-.auth-mobile-brand .brand-mark { width: 32px; height: 32px; }
-.auth-mobile-brand .brand-word { font-size: 19px; font-weight: 700; color: var(--green-600); }
-.auth-form-pane {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg);
-  padding: 24px 16px 40px;
-}
-.auth-form { width: 100%; max-width: 400px; background: var(--surface); border: 1px solid var(--gray-200); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); padding: 28px 24px; }
-.auth-brand-pane { display: none; }
-.auth-title { font-size: 28px; font-weight: 700; line-height: 36px; color: var(--text-primary); }
-.auth-sub { font-size: 14px; line-height: 22px; color: var(--text-secondary); margin-top: 8px; }
-.auth-form form { margin-top: 28px; }
-.auth-form .input { min-height: 46px; }
-.auth-submit { width: 100%; min-height: 46px; margin-top: 22px; }
-.auth-alt { text-align: center; margin-top: 18px; font-size: 13px; color: var(--text-secondary); }
-.auth-note { text-align: center; margin-top: 14px; font-size: 12px; color: var(--text-tertiary); }
-
-@media (min-width: 900px) {
-  .auth-shell { flex-direction: row; }
-  .auth-mobile-brand { display: none; }
-  .auth-brand-pane {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    width: 42%;
-    flex-shrink: 0;
-    background: var(--green-600);
-    color: #fff;
-    padding: 48px;
-  }
-  .auth-form-pane { background: var(--surface); padding: 48px 32px; }
-  .auth-form { max-width: 380px; border: none; box-shadow: none; padding: 0; border-radius: 0; }
-  .auth-form-pane .auth-form-inner { width: 100%; max-width: 380px; }
-  .auth-brand-logo { display: flex; align-items: center; gap: 12px; color: #fff; margin-bottom: 32px; }
-  .auth-brand-logo .brand-mark { background: #fff; color: var(--green-600); }
-  .auth-brand-logo .brand-word { font-size: 20px; font-weight: 700; }
-  .auth-brand-title { font-size: 30px; line-height: 38px; font-weight: 650; max-width: 420px; color: #fff; }
-  .auth-brand-sub { font-size: 15px; line-height: 25px; margin-top: 16px; max-width: 400px; color: rgba(255, 255, 255, 0.82); }
-}
-.auth-brand-logo { display: flex; align-items: center; gap: 12px; color: #fff; margin-bottom: 32px; }
-.auth-brand-logo .brand-mark { background: #fff; color: var(--green-600); }
-.auth-brand-logo .brand-word { font-size: 20px; font-weight: 700; }
-.auth-brand-title { font-size: 30px; line-height: 38px; font-weight: 650; max-width: 420px; color: #fff; }
-.auth-brand-sub { font-size: 15px; line-height: 25px; margin-top: 16px; max-width: 400px; color: rgba(255, 255, 255, 0.82); }
-
-
-/* Legacy auth selectors used by /register; preserve its existing layout. */
 .auth-shell { min-height: 100dvh; display: flex; flex-direction: column; background: var(--bg); }
 .auth-mobile-brand {
   display: flex;
@@ -1583,13 +1557,13 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   border: 2px solid var(--surface);
   background: var(--gray-300);
 }
-.presence-dot.online { background: var(--green-500, #16a34a); }
+.presence-dot.online { background: var(--green-500); }
 .presence-dot.offline { background: var(--gray-300); }
 
 /* Read receipts */
 .receipt { display: inline-flex; align-items: center; gap: 3px; margin-left: 5px; vertical-align: middle; }
 .receipt.pending { opacity: 0.6; }
-.receipt.read { color: var(--green-100, #bbf7d0); }
+.receipt.read { color: var(--green-100); }
 .bubble-row:not(.mine) .receipt { display: none; }
 .receipt-text { font-size: 10px; }
 
@@ -1684,7 +1658,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 .voice-bar.preview { gap: 8px; }
 .voice-rec-dot {
   width: 10px; height: 10px; border-radius: 50%;
-  background: #dc2626;
+  background: var(--red-600);
   animation: voice-pulse 1.2s ease-in-out infinite;
   flex-shrink: 0;
 }
@@ -1695,9 +1669,9 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 .voice-timer { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 14px; }
 .voice-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .voice-actions { display: inline-flex; gap: 4px; margin-left: auto; flex-shrink: 0; }
-.composer-btn.danger { color: #dc2626; }
+.composer-btn.danger { color: var(--red-600); }
 .voice-preview-audio { height: 36px; max-width: 180px; min-width: 120px; }
-.voice-error { position: absolute; left: 12px; bottom: calc(100% + 4px); color: var(--red-600, #dc2626); }
+.voice-error { position: absolute; left: 12px; bottom: calc(100% + 4px); color: var(--red-600); }
 
 /* Voice composer surfaces (WhatsApp-style) — replace the normal composer row */
 .voice-surface {
@@ -1737,7 +1711,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   background: var(--gray-300);
   min-height: 2px;
 }
-.voice-wave.live span { background: #dc2626; transition: height 0.08s linear; }
+.voice-wave.live span { background: var(--red-600); transition: height 0.08s linear; }
 .voice-wave span.flat { opacity: 0.45; }
 .voice-wave span.played { background: var(--green-700); }
 .voice-surface.preview .voice-wave span { background: var(--green-600); opacity: 0.55; }
@@ -1755,7 +1729,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 }
 .voice-upload .upload-bar { height: 4px; }
 .voice-error-inline {
-  color: var(--red-600, #dc2626);
+  color: var(--red-600);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   max-width: 40%;
 }
@@ -2172,7 +2146,7 @@ body.has-install-banner .app-main { padding-bottom: calc(var(--bottomnav-h) + 11
   justify-content: center;
   flex-shrink: 0;
   border-radius: 12px;
-  background: linear-gradient(145deg, #0b594a, #239b7e);
+  background: linear-gradient(145deg, var(--brand-grad-a), var(--brand-grad-b));
   color: #fff;
 }
 .auth-register-shell .auth-mobile-brand {
@@ -2183,7 +2157,7 @@ body.has-install-banner .app-main { padding-bottom: calc(var(--bottomnav-h) + 11
   border-bottom: 1px solid #e8efec;
   background: #fff;
 }
-.auth-register-shell .auth-mobile-brand .brand-word { color: #123a33; font-size: 23px; font-weight: 750; letter-spacing: -0.04em; }
+.auth-register-shell .auth-mobile-brand .brand-word { color: var(--brand-word); font-size: 23px; font-weight: 750; letter-spacing: -0.04em; }
 .auth-register-shell .auth-form-pane {
   flex: 1;
   min-width: 0;
@@ -2203,10 +2177,10 @@ body.has-install-banner .app-main { padding-bottom: calc(var(--bottomnav-h) + 11
   background: transparent;
   box-shadow: none;
 }
-.auth-register-shell .btn-ghost { color: #146b58; }
-.auth-register-shell .btn-ghost:hover { background: #f3f8f5; color: #0e4d40; }
+.auth-register-shell .btn-ghost { color: var(--brand-link); }
+.auth-register-shell .btn-ghost:hover { background: var(--brand-pill-bg); color: var(--brand-link-hover); }
 .auth-register-shell .auth-title {
-  color: #122d28;
+  color: var(--brand-heading);
   font-size: clamp(27px, 3vw, 34px);
   line-height: 1.2;
   font-weight: 750;
@@ -2215,31 +2189,31 @@ body.has-install-banner .app-main { padding-bottom: calc(var(--bottomnav-h) + 11
 .auth-register-shell .auth-sub { margin-top: 10px; color: #63736f; font-size: 14px; line-height: 22px; }
 .auth-register-shell .form-section { margin-top: 24px; }
 .auth-register-shell .form-section-title {
-  color: #225c4e;
+  color: var(--brand-section);
   font-size: 13px;
   font-weight: 750;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  border-bottom-color: #d9e9e2;
+  border-bottom-color: var(--brand-pill-border);
   padding-bottom: 10px;
 }
 .auth-register-shell .field label { color: #263b36; }
 .auth-register-shell .input:focus,
 .auth-register-shell .select:focus {
-  border-color: #197568;
+  border-color: var(--green-500);
   box-shadow: 0 0 0 3px rgba(25, 117, 104, 0.16);
 }
 .auth-register-shell .auth-submit {
-  background: #145b50;
+  background: var(--green-600);
   color: #fff;
   border-radius: 9px;
   min-height: 48px;
   margin-top: 10px;
 }
-.auth-register-shell .auth-submit:hover:not(:disabled) { background: #10483f; }
+.auth-register-shell .auth-submit:hover:not(:disabled) { background: var(--green-700); }
 .auth-register-shell .auth-alt { margin-top: 22px; text-align: center; color: #63736f; }
-.auth-register-shell .auth-alt a { color: #146b58; font-weight: 650; }
-.auth-register-shell .auth-alt a:hover { color: #0e4d40; }
+.auth-register-shell .auth-alt a { color: var(--brand-link); font-weight: 650; }
+.auth-register-shell .auth-alt a:hover { color: var(--brand-link-hover); }
 .auth-register-shell .auth-form > .btn { margin-bottom: 10px !important; }
 @media (min-width: 900px) {
   .auth-register-shell {
@@ -2247,7 +2221,7 @@ body.has-install-banner .app-main { padding-bottom: calc(var(--bottomnav-h) + 11
     grid-template-columns: minmax(0, 1.04fr) minmax(0, 0.96fr);
     gap: 0;
     padding: 20px;
-    background: #eaf2ee;
+    background: var(--brand-shell);
   }
   .auth-register-shell .auth-mobile-brand { display: none; }
   .auth-register-shell .auth-brand-pane {
@@ -2261,7 +2235,7 @@ body.has-install-banner .app-main { padding-bottom: calc(var(--bottomnav-h) + 11
     overflow: hidden;
     border-radius: 22px 0 0 22px;
     padding: clamp(30px, 4vw, 62px);
-    background-color: #073c31;
+    background-color: var(--brand-deep);
     background-image:
       linear-gradient(90deg, rgba(3, 48, 38, 0.96) 0%, rgba(3, 48, 38, 0.88) 40%, rgba(3, 48, 38, 0.52) 100%),
       linear-gradient(0deg, rgba(2, 33, 27, 0.3), rgba(2, 33, 27, 0.05)),
@@ -2271,7 +2245,7 @@ body.has-install-banner .app-main { padding-bottom: calc(var(--bottomnav-h) + 11
     color: #fff;
   }
   .auth-register-shell .auth-brand-logo { display: flex; align-items: center; gap: 13px; margin-bottom: 54px; color: #fff; }
-  .auth-register-shell .auth-brand-logo .brand-mark { background: rgba(238,255,247,.95); color: #075a48; }
+  .auth-register-shell .auth-brand-logo .brand-mark { background: rgba(238,255,247,.95); color: var(--auth-submit); }
   .auth-register-shell .auth-brand-logo .brand-word { color: #fff; font-size: 26px; font-weight: 750; }
   .auth-register-shell .auth-brand-title { color: #fff; font-size: clamp(30px, 3vw, 42px); line-height: 1.15; font-weight: 750; max-width: 420px; }
   .auth-register-shell .auth-brand-sub { color: rgba(255,255,255,.84); font-size: 15px; line-height: 25px; margin-top: 16px; max-width: 400px; }
