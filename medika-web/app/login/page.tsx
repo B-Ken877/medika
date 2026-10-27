@@ -140,7 +140,7 @@ function LoginForm() {
           </div>
 
           <div className="auth-form-heading">
-            <h1 className="auth-title" id="login-title">Byenveni tounen</h1>
+            <h1 className="auth-title" id="login-title">Kontan wè w ankò</h1>
             <p className="auth-sub">Antre nan kont Medika ou pou w kontinye.</p>
           </div>
 
