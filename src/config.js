@@ -76,6 +76,8 @@ const config = {
   moncashClientId: env('MONCASH_CLIENT_ID', ''),
   moncashClientSecret: env('MONCASH_CLIENT_SECRET', ''),
   paymentSimulation: bool('PAYMENT_SIMULATION', false),
+  // Exact username resolved from the authenticated DB user; never trust client input.
+  paymentSimulationTestUsername: env('PAYMENT_SIMULATION_TEST_USERNAME', '').trim(),
   requirePayment: bool('REQUIRE_PAYMENT', isProduction()),
 
   // ─── Uploads ───────────────────────────────────────────────────────────────
@@ -111,14 +113,10 @@ function assertProductionSafety() {
   if (!process.env.DATABASE_URL) {
     problems.push('DATABASE_URL is required');
   }
-  if (config.paymentSimulation && isProductionDeployment()) {
-    // Simulated payments must be impossible on PRODUCTION deployments.
-    // Vercel Preview deployments run with NODE_ENV=production but
-    // VERCEL_ENV=preview — they are authorized testing targets and must boot.
-    problems.push(
-      'PAYMENT_SIMULATION must NOT be enabled on a production deployment ' +
-      '(VERCEL_ENV=production, or NODE_ENV=production without VERCEL_ENV)'
-    );
+  if (config.paymentSimulation && isProductionDeployment() && !config.paymentSimulationTestUsername) {
+    // Production simulation is permitted only when bound to one server-verified
+    // username. Routes must call simulationAllowed(req.user), never the global form.
+    problems.push('PAYMENT_SIMULATION on production requires PAYMENT_SIMULATION_TEST_USERNAME');
   }
   if (config.seedDemo) {
     problems.push('SEED_DEMO must NOT be enabled when NODE_ENV=production');
@@ -143,8 +141,15 @@ function moncashConfigured() {
  * Deployment stage comes from isProductionDeployment() — VERCEL_ENV-aware so
  * Vercel Preview deployments (NODE_ENV=production, VERCEL_ENV=preview) can
  * run the isolated simulation, while true production fails closed. */
-function simulationAllowed() {
-  return config.paymentSimulation && !isProductionDeployment() && config.moncashMode !== 'production';
+function simulationAllowed(user) {
+  if (!config.paymentSimulation || config.moncashMode === 'production') return false;
+  if (!isProductionDeployment()) return true;
+  return Boolean(
+    config.paymentSimulationTestUsername &&
+    user &&
+    typeof user.username === 'string' &&
+    user.username === config.paymentSimulationTestUsername
+  );
 }
 
 module.exports = { config, assertProductionSafety, moncashConfigured, simulationAllowed, isProduction, isProductionDeployment };
