@@ -66,12 +66,7 @@ const config = {
     .map((s) => s.trim())
     .filter(Boolean),
 
-  // ─── LiveKit ───────────────────────────────────────────────────────────────
-  livekitUrl: env('LIVEKIT_URL', ''),          // public client URL, e.g. wss://…
-  livekitApiKey: env('LIVEKIT_API_KEY', ''),
-  livekitApiSecret: env('LIVEKIT_API_SECRET', ''),
-
-  // ─── ZEGOCLOUD (web call provider; explicit opt-in per deployment) ─────────
+  // ─── ZEGOCLOUD (the sole video-call provider) ──────────────────────────────
   // APP_ID and SERVER_URL are client-visible (the browser engine needs both);
   // SERVER_SECRET and APP_SIGN are server-only and must NEVER reach client
   // bundles or logs. Use the intended ZEGO project credentials in each scope.
@@ -84,16 +79,6 @@ const config = {
   zegoCloudServerUrl: env('ZEGOCLOUD_SERVER_URL', ''),    // public WS endpoint from the ZEGO console
   zegoCloudServerSecret: env('ZEGOCLOUD_SERVER_SECRET', ''), // backend only; exactly 32 chars
   zegoCloudAppSign: env('ZEGOCLOUD_APP_SIGN', ''),        // backend only; unused by token04 auth
-
-  // Effective call provider. Production remains on LiveKit by default, but
-  // the operator can explicitly opt in with CALL_PROVIDER=zego after setting
-  // the correct production ZEGO credentials. Unknown values fail closed.
-  // Rollback is immediate at the next deployment by setting CALL_PROVIDER=livekit
-  // (or removing CALL_PROVIDER); no provider is selected by client input.
-  callProvider: (() => {
-    const requested = env('CALL_PROVIDER', 'livekit');
-    return requested === 'zego' ? 'zego' : 'livekit';
-  })(),
 
   // ─── MonCash payments ──────────────────────────────────────────────────────
   moncashMode: env('MONCASH_MODE', 'sandbox'), // 'sandbox' | 'production'
