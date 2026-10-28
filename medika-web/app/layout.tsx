@@ -38,6 +38,20 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: "#145b50",
+  /**
+   * Issue #47 — keep the chat header visible while the Android keyboard is
+   * open. Without this directive, Chrome on Android (108+) defaults to
+   * `interactive-widget=resizes-visual`: opening the keyboard does NOT shrink
+   * the layout viewport, so the full-height chat column (100dvh) keeps the
+   * composer anchored behind the keyboard and Chrome pans the visual viewport
+   * up to reveal the focused input — pushing the conversation header (and the
+   * partner's name) out of view. `resizes-content` shrinks the layout viewport
+   * instead: the header stays at the top, the composer sits immediately above
+   * the keyboard, and only the message history (flex-1, overflow-y: auto)
+   * resizes/scrolls. Browsers that do not support the directive ignore it and
+   * keep their current behavior.
+   */
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

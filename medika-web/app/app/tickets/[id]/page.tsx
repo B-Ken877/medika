@@ -177,6 +177,13 @@ export default function TicketChatPage() {
           placeholder="Ekri mesaj ou..."
           aria-label="Mesaj èd ou a"
           maxLength={4000}
+          /* Issue #47 — same composer contract as the consultation chat:
+             non-autofillable chat field, send action key. The Android
+             keyboard/autofill accessory strip is OS/keyboard-owned and
+             cannot be removed by web content. */
+          autoComplete="off"
+          autoCapitalize="sentences"
+          enterKeyHint="send"
         />
         <button type="submit" className="composer-btn send" disabled={!draft.trim() || sending} aria-label="Voye">
           <Send size={19} />
