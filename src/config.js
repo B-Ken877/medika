@@ -71,6 +71,34 @@ const config = {
   livekitApiKey: env('LIVEKIT_API_KEY', ''),
   livekitApiSecret: env('LIVEKIT_API_SECRET', ''),
 
+  // ─── ZEGOCLOUD (issue #62 — Preview/Development rollout ONLY) ─────────────
+  // Temporary test project. APP_ID and SERVER_URL are client-visible (the
+  // browser engine needs both); SERVER_SECRET and APP_SIGN are server-only
+  // and must NEVER reach client bundles, logs or Production scope.
+  zegoCloudAppId: (() => {
+    const raw = env('ZEGOCLOUD_APP_ID', '');
+    if (!raw) return 0;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  })(),
+  zegoCloudServerUrl: env('ZEGOCLOUD_SERVER_URL', ''),    // public WS endpoint from the ZEGO console
+  zegoCloudServerSecret: env('ZEGOCLOUD_SERVER_SECRET', ''), // backend only; exactly 32 chars
+  zegoCloudAppSign: env('ZEGOCLOUD_APP_SIGN', ''),        // backend only; unused by token04 auth
+
+  // Effective call provider. 'zego' is honored ONLY on preview/development
+  // deployments — a production deployment ALWAYS stays on livekit even if
+  // CALL_PROVIDER=zego and the ZEGOCLOUD_* vars leak into production scope
+  // (fail-safe rollout boundary, issue #62).
+  callProvider: (() => {
+    const requested = env('CALL_PROVIDER', 'livekit');
+    const provider = requested === 'zego' ? 'zego' : 'livekit';
+    if (provider === 'zego' && isProductionDeployment()) {
+      console.warn('[config] CALL_PROVIDER=zego ignored on a production deployment — staying on livekit (issue #62 rollout boundary)');
+      return 'livekit';
+    }
+    return provider;
+  })(),
+
   // ─── MonCash payments ──────────────────────────────────────────────────────
   moncashMode: env('MONCASH_MODE', 'sandbox'), // 'sandbox' | 'production'
   moncashClientId: env('MONCASH_CLIENT_ID', ''),
