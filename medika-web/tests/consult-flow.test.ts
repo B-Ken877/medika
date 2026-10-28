@@ -154,12 +154,16 @@ describe("consult flow — directory entry (?doctor=) goes through intake", () =
 });
 
 describe("doctors directory — entry point to the consultation flow", () => {
-  it("still links each card to /app/consult?doctor=<id>", () => {
-    expect(doctorsPage).toContain("`/app/consult?doctor=${encodeURIComponent(d.id)}`");
+  // Issue #30 changed the contract: every directory card (including the old
+  // "Konsilte" entry point) now opens the dedicated doctor PROFILE page; the
+  // profile's CTA continues to /app/consult?doctor=<id> with intake required.
+  it("links each card to the doctor profile page (issue #30)", () => {
+    expect(doctorsPage).toContain("`/app/doctors/${encodeURIComponent(d.id)}`");
+    expect(doctorsPage).not.toContain("`/app/consult?doctor=${encodeURIComponent(d.id)}`");
   });
 
-  it("labels the consultation action with the approved Kreyòl copy", () => {
-    expect(doctorsPage).toContain("Konsilte");
+  it("labels the profile action with Kreyòl copy (no French)", () => {
+    expect(doctorsPage).toContain("Gade pwofil");
     expect(doctorsPage).not.toContain("Consulter");
   });
 

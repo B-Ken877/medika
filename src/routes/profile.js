@@ -71,4 +71,19 @@ router.get('/doctors', authenticate, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * GET /api/doctors/:id — public doctor detail for the profile page (issue
+ * #30). Same redaction contract as the list (publicDoctor: no email/phone);
+ * the response carries the explicit verification_status (issue #32) so the
+ * badge is grounded in server state, never inferred from a license string.
+ * 404 for unknown/non-doctor ids (no existence leak beyond the directory).
+ */
+router.get('/doctors/:id', authenticate, async (req, res, next) => {
+  try {
+    const user = await usersRepo.findById(req.params.id);
+    if (!user || user.role !== 'doctor') return next(notFound());
+    res.json(usersRepo.publicDoctor(usersRepo.toApi(user)));
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

@@ -181,9 +181,65 @@ router.put('/doctors/:id', async (req, res, next) => {
       }
       patch.password_hash = hashPassword(String(body.password));
     }
+    // Issue #32: an admin edit of professional credential fields is recorded
+    // in the verification audit trail (no automatic status change — admins
+    // stay in explicit control of the verification state).
+    const CREDENTIAL_FIELDS = [
+      ['specialty', 'specialty'], ['licenseNumber', 'license_number'],
+      ['location', 'location'], ['hospital', 'hospital'], ['biography', 'biography'],
+    ];
+    const before = await usersRepo.findById(req.params.id);
+    if (!before || before.role !== 'doctor') {
+      return res.status(404).json({ error: 'Doctor not found' });
+    }
+    const changed = CREDENTIAL_FIELDS
+      .filter(([camel, snake]) => body[camel] !== undefined && String(body[camel] ?? '') !== String(before[snake] ?? ''))
+      .map(([camel]) => camel);
     const user = await usersRepo.adminUpdateDoctor(req.params.id, patch);
     if (!user) return res.status(404).json({ error: 'Doctor not found' });
+    if (changed.length) {
+      await usersRepo.logCredentialFieldsEdit(req.params.id, req.user.id, changed)
+        .catch(() => undefined); // audit write must not fail the edit
+    }
     res.json(usersRepo.toApi(user));
+  } catch (err) { next(err); }
+});
+
+// ─── Doctor credential verification (issue #32) ─────────────────────────────
+
+/**
+ * PUT /api/admin/doctors/:id/verification — transition the credential
+ * verification status. Admin-only (this router authenticates admin for every
+ * route). Statuses: pending | verified | rejected; verified_at/verified_by
+ * are maintained server-side; every change lands in the audit trail with the
+ * acting admin. Doctors/patients have no route that writes this state.
+ */
+router.put('/doctors/:id/verification', async (req, res, next) => {
+  try {
+    const { status, note } = req.body || {};
+    if (!usersRepo.VERIFICATION_STATUSES.includes(status)) {
+      return res.status(400).json({ error: 'Status must be one of pending, verified, rejected' });
+    }
+    if (note !== undefined && note !== null && String(note).length > 500) {
+      return res.status(400).json({ error: 'Note too long (max 500)' });
+    }
+    const user = await usersRepo.setDoctorVerification(req.params.id, {
+      status,
+      actorId: req.user.id,
+      note: note === undefined || note === null ? null : String(note),
+    });
+    if (!user) return res.status(404).json({ error: 'Doctor not found' });
+    res.json(usersRepo.toApi(user));
+  } catch (err) { next(err); }
+});
+
+/** GET /api/admin/doctors/:id/verification — the audit trail (admin-only). */
+router.get('/doctors/:id/verification', async (req, res, next) => {
+  try {
+    const user = await usersRepo.findById(req.params.id);
+    if (!user || user.role !== 'doctor') return res.status(404).json({ error: 'Doctor not found' });
+    const audit = await usersRepo.listVerificationAudit(req.params.id);
+    res.json({ verification_status: user.verification_status ?? null, audit });
   } catch (err) { next(err); }
 });
 

@@ -84,6 +84,13 @@ export function getDoctorsBySpecialty(token: string, specialty: string, signal?:
   return apiFetch<User[]>("/api/doctors", { token, params: { specialty }, signal });
 }
 
+/** Public doctor detail for the profile page (issue #30). Same redaction
+ *  contract as the list (no email/phone); carries the explicit
+ *  verification_status (issue #32). */
+export function getDoctor(token: string, id: string, signal?: AbortSignal) {
+  return apiFetch<User>(`/api/doctors/${encodeURIComponent(id)}`, { token, signal });
+}
+
 // ─── Specialties / pricing ────────────────────────────────────────────────────
 
 export function getSpecialtyPrices(token?: string | null, signal?: AbortSignal) {

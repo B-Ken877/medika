@@ -13,6 +13,7 @@ import type { SpecialtyPrice, User } from "@/lib/api/types";
 import { formatCurrency } from "@/lib/format";
 import { specialtyLabel } from "@/lib/labels";
 import { Avatar, EmptyState, ErrorAlert, SkeletonRows } from "@/components/ui/primitives";
+import { VerifiedBadge } from "@/components/ui/VerifiedBadge";
 
 export default function DoctorsPage() {
   const { token } = useAuth();
@@ -146,14 +147,15 @@ export default function DoctorsPage() {
         {filtered.map((d) => (
           <Link
             key={d.id}
-            href={`/app/consult?doctor=${encodeURIComponent(d.id)}`}
+            href={`/app/doctors/${encodeURIComponent(d.id)}`}
             className="row card-hover"
-            aria-label={`Konsilte ${d.name}, ${d.specialty ?? ""}`}
+            aria-label={`Pwofil ${d.name}, ${d.specialty ?? ""}`}
           >
             <Avatar name={d.name} src={d.avatar_url} size="md" alt={`Foto pwofil ${d.name}`} />
             <div className="row-body">
               <div className="row-title">
                 <span>{d.name}</span>
+                {d.verification_status === "verified" && <VerifiedBadge compact />}
                 {d.is_available === 1 ? (
                   <span className="badge badge-green">Disponib</span>
                 ) : (
@@ -179,7 +181,7 @@ export default function DoctorsPage() {
             <div className="nowrap text-center">
               <div style={{ fontWeight: 700, color: "var(--green-700)" }}>{formatCurrency(priceOf(d.specialty))}</div>
               <span className="btn btn-primary btn-sm mt-1" style={{ pointerEvents: "none" }}>
-                Konsilte
+                Gade pwofil
               </span>
             </div>
           </Link>

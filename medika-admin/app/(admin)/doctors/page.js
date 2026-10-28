@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch, formatCurrency, formatDate } from '../../../lib/api';
-import { Plus, Search, Edit2, Trash2, Key, Eye, EyeOff, X, Check } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Key, Eye, EyeOff, X, Check, ShieldCheck, ShieldX, RotateCcw, History } from 'lucide-react';
 
 const SPECIALTIES = [
   'Medecine Generale', 'Cardiologie', 'Dermatologie', 'Endocrinologie',
@@ -32,6 +32,50 @@ export default function DoctorsPage() {
   const [resetPw, setResetPw] = useState(null);
   const [newPw, setNewPw] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // Issue #32: credential verification workflow state.
+  const [verifyBusy, setVerifyBusy] = useState(null); // doctor id while transitioning
+  const [auditFor, setAuditFor] = useState(null);    // doctor whose trail is open
+  const [audit, setAudit] = useState([]);            // audit rows
+  const [auditLoading, setAuditLoading] = useState(false);
+
+  const VERIF_LABELS = {
+    verified: 'Verifie',
+    pending: 'En revue',
+    rejected: 'Rejete',
+    null: 'Inconnu',
+  };
+  const VERIF_BADGES = {
+    verified: 'badge-green',
+    pending: 'badge-yellow',
+    rejected: 'badge-red',
+    null: 'badge-gray',
+  };
+
+  /** Transition a doctor's verification status (admin-only endpoint). */
+  const setVerification = async (doc, status) => {
+    setVerifyBusy(doc.id);
+    try {
+      await apiFetch(`/admin/doctors/${doc.id}/verification`, {
+        method: 'PUT',
+        body: JSON.stringify({ status }),
+      });
+      showToast(`Statut de verification de ${doc.name}: ${VERIF_LABELS[status]}`);
+      load();
+    } catch (e) { showToast(e.message, 'error'); }
+    finally { setVerifyBusy(null); }
+  };
+
+  /** Open the audit trail modal for one doctor. */
+  const openAudit = async (doc) => {
+    setAuditFor(doc);
+    setAudit([]);
+    setAuditLoading(true);
+    try {
+      const data = await apiFetch(`/admin/doctors/${doc.id}/verification`);
+      setAudit(data.audit || []);
+    } catch (e) { showToast(e.message, 'error'); setAuditFor(null); }
+    finally { setAuditLoading(false); }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -167,12 +211,13 @@ export default function DoctorsPage() {
           <table className="data-table">
             <thead><tr>
               <th>Medecin</th><th>Specialite</th><th>Contact</th>
+              <th style={{ textAlign: 'center' }}>Verification</th>
               <th style={{ textAlign: 'center' }}>Statut</th><th style={{ textAlign: 'right' }}>Consult.</th>
               <th style={{ textAlign: 'right' }}>Gains</th><th style={{ textAlign: 'center' }}>Actions</th>
             </tr></thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={7} className="empty-state">Aucun medecin trouve</td></tr>
+                <tr><td colSpan={8} className="empty-state">Aucun medecin trouve</td></tr>
               ) : filtered.map(doc => (
                 <tr key={doc.id}>
                   <td>
@@ -194,6 +239,36 @@ export default function DoctorsPage() {
                   <td>
                     <div style={{ fontSize: 13 }}>{doc.email || '-'}</div>
                     <div style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>{doc.phone || '-'}</div>
+                  </td>
+                  {/* Issue #32: explicit verification status + admin workflow.
+                      NULL = unknown/legacy — never displayed as verified. */}
+                  <td style={{ textAlign: 'center' }}>
+                    <span className={`badge ${VERIF_BADGES[doc.verification_status ?? 'null']}`}>
+                      {VERIF_LABELS[doc.verification_status ?? 'null']}
+                    </span>
+                    <div style={{ display: 'flex', gap: 4, justifyContent: 'center', marginTop: 6 }}>
+                      {doc.verification_status !== 'verified' && (
+                        <button className="btn btn-secondary btn-sm" disabled={verifyBusy === doc.id}
+                          onClick={() => setVerification(doc, 'verified')} title="Verifier les credentials">
+                          <ShieldCheck size={13} />
+                        </button>
+                      )}
+                      {doc.verification_status !== 'rejected' && (
+                        <button className="btn btn-secondary btn-sm" disabled={verifyBusy === doc.id}
+                          onClick={() => setVerification(doc, 'rejected')} title="Rejeter">
+                          <ShieldX size={13} />
+                        </button>
+                      )}
+                      {doc.verification_status != null && (
+                        <button className="btn btn-secondary btn-sm" disabled={verifyBusy === doc.id}
+                          onClick={() => setVerification(doc, 'pending')} title="Remettre en revue">
+                          <RotateCcw size={13} />
+                        </button>
+                      )}
+                      <button className="btn btn-secondary btn-sm" onClick={() => openAudit(doc)} title="Historique de verification">
+                        <History size={13} />
+                      </button>
+                    </div>
                   </td>
                   <td style={{ textAlign: 'center' }}>
                     <button onClick={() => toggleAvailability(doc)}
@@ -357,6 +432,46 @@ export default function DoctorsPage() {
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => { setResetPw(null); setNewPw(''); }}>Annuler</button>
               <button className="btn btn-primary" onClick={handleResetPw}><Key size={16} /> Reinitialiser</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Verification audit trail (issue #32) */}
+      {auditFor && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setAuditFor(null); }}>
+          <div className="modal-content" style={{ maxWidth: 560 }}>
+            <div className="modal-header">
+              <h2 style={{ fontSize: 16, fontWeight: 700 }}>Historique de verification — {auditFor.name}</h2>
+              <button onClick={() => setAuditFor(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
+            </div>
+            <div className="modal-body">
+              {auditLoading && <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><div className="spinner" /></div>}
+              {!auditLoading && audit.length === 0 && (
+                <p style={{ color: 'var(--mk-text-secondary)' }}>Aucun evenement pour ce medecin.</p>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {audit.map(row => (
+                  <div key={row.id} style={{ padding: '10px 12px', border: '1px solid var(--mk-border)', borderRadius: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                      <strong style={{ fontSize: 13 }}>
+                        {row.action === 'status_changed'
+                          ? `${row.from_status ?? 'inconnu'} → ${row.to_status}`
+                          : row.action === 'credential_fields_edited'
+                            ? 'Champs de credentials modifies'
+                            : row.action}
+                      </strong>
+                      <span style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>{formatDate(row.created_at)}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--mk-text-secondary)', marginTop: 4 }}>
+                      Par {row.actor_name || 'Systeme'}{row.note ? ` — ${row.note}` : ''}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setAuditFor(null)}>Fermer</button>
             </div>
           </div>
         </div>

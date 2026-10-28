@@ -5,11 +5,11 @@
  */
 'use strict';
 
-const { query } = require('../db');
+const { query, withTransaction } = require('../db');
 
 const COLS = `id, username, role, name, email, phone, age, gender, specialty,
   license_number, location, hospital, biography, avatar_url, rating,
-  is_available, created_at`;
+  is_available, created_at, verification_status, verified_at, verified_by`;
 
 function toApi(row) {
   if (!row) return null;
@@ -31,6 +31,11 @@ function toApi(row) {
     rating: row.rating === null ? null : Number(row.rating),
     is_available: row.is_available ? 1 : 0,
     created_at: row.created_at ? Math.floor(new Date(row.created_at).getTime() / 1000) : null,
+    // Issue #32: explicit, server-owned credential verification status.
+    // NULL = unknown/legacy (NOT verified — never inferred from a populated
+    // license_number). Additive field: legacy consumers ignore it.
+    verification_status: row.verification_status ?? null,
+    verified_at: row.verified_at ? Math.floor(new Date(row.verified_at).getTime() / 1000) : null,
   };
 }
 
@@ -204,6 +209,89 @@ async function adminResetPassword(id, password_hash) {
   return rows[0]?.name || null;
 }
 
+// ─── Doctor credential verification (issue #32) ──────────────────────────────
+
+const VERIFICATION_STATUSES = ['pending', 'verified', 'rejected'];
+
+/** Audit trail for one doctor, newest first. Admin-facing only — never part
+ *  of public doctor responses. */
+async function listVerificationAudit(doctorId, limit = 50) {
+  const { rows } = await query(
+    `SELECT a.id, a.doctor_id, a.actor_id, a.action, a.from_status, a.to_status,
+            a.note, a.created_at, u.name AS actor_name
+       FROM verification_audit_log a
+       LEFT JOIN users u ON u.id = a.actor_id
+      WHERE a.doctor_id = $1
+      ORDER BY a.id DESC LIMIT $2`,
+    [doctorId, limit]
+  );
+  return rows.map((r) => ({
+    id: Number(r.id),
+    doctor_id: r.doctor_id,
+    actor_id: r.actor_id,
+    actor_name: r.actor_name ?? null,
+    action: r.action,
+    from_status: r.from_status ?? null,
+    to_status: r.to_status ?? null,
+    note: r.note ?? null,
+    created_at: r.created_at ? Math.floor(new Date(r.created_at).getTime() / 1000) : null,
+  }));
+}
+
+/** Transition a doctor's verification status (admin-only at the route
+ *  layer). Writes the audit row in the SAME transaction as the status
+ *  change; verified_at/verified_by are set on the verified edge and cleared
+ *  when leaving it. Returns the updated row, or null when the doctor does
+ *  not exist. */
+async function setDoctorVerification(doctorId, { status, actorId, note = null }) {
+  if (!VERIFICATION_STATUSES.includes(status)) {
+    const err = new Error('invalid status');
+    err.code = 'EINVAL';
+    throw err;
+  }
+  return withTransaction(async (client) => {
+    // Capture the PRE-transition status for the audit trail.
+    const cur = await client.query(
+      `SELECT verification_status FROM users WHERE id = $1 AND role = 'doctor' FOR UPDATE`,
+      [doctorId]
+    );
+    if (!cur.rows[0]) return null;
+    const fromStatus = cur.rows[0].verification_status ?? null;
+
+    const { rows } = await client.query(
+      `UPDATE users SET
+         verification_status = $2,
+         verified_at = CASE WHEN $2 = 'verified' THEN now() ELSE NULL END,
+         verified_by  = CASE WHEN $2 = 'verified' THEN $3 ELSE NULL END
+       WHERE id = $1 AND role = 'doctor'
+       RETURNING *`,
+      [doctorId, status, actorId ?? null]
+    );
+    const row = rows[0];
+    if (!row) return null;
+    await client.query(
+      `INSERT INTO verification_audit_log
+         (doctor_id, actor_id, action, from_status, to_status, note)
+       VALUES ($1, $2, 'status_changed', $3, $4, $5)`,
+      [doctorId, actorId ?? null, fromStatus, status, note]
+    );
+    return row;
+  });
+}
+
+/** Record an admin edit of credential fields (audit only — no automatic
+ *  status change: admins stay in explicit control of the verification
+ *  state, and every credential edit is visible in the trail). */
+async function logCredentialFieldsEdit(doctorId, actorId, changedFields) {
+  if (!changedFields.length) return;
+  await query(
+    `INSERT INTO verification_audit_log
+       (doctor_id, actor_id, action, note)
+     VALUES ($1, $2, 'credential_fields_edited', $3)`,
+    [doctorId, actorId ?? null, changedFields.join(', ')]
+  );
+}
+
 module.exports = {
   toApi,
   safe,
@@ -221,4 +309,8 @@ module.exports = {
   adminUpdateDoctor,
   adminDeleteUser,
   adminResetPassword,
+  VERIFICATION_STATUSES,
+  listVerificationAudit,
+  setDoctorVerification,
+  logCredentialFieldsEdit,
 };
