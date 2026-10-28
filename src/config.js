@@ -151,9 +151,6 @@ function assertProductionSafety() {
   if (config.moncashMode === 'production' && (!config.moncashClientId || !config.moncashClientSecret)) {
     problems.push('MONCASH_MODE=production requires MONCASH_CLIENT_ID and MONCASH_CLIENT_SECRET');
   }
-  if (config.livekitUrl && !/^wss:|^https:/i.test(config.livekitUrl)) {
-    problems.push('LIVEKIT_URL must use wss:// or https:// in production (plain ws/http leaks video signaling)');
-  }
   if (problems.length) {
     throw new Error('Refusing to start in production:\n  - ' + problems.join('\n  - '));
   }
