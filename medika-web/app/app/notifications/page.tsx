@@ -64,6 +64,12 @@ const SUPPORT_COPY: Record<PushSupport, string> = {
   "no-push-manager": "Navigatè a pa gen jesyon push.",
   denied: "Ou bloke notifikasyon yo nan paramèt navigatè a. Louvri paramèt yo pou pèmèt yo.",
   "server-disabled": "Sèvis push la pa konfigure kounye a — notifikasyon nan aplikasyon an ap kontinye mache.",
+  // Issue #50 health signal: server/network failures are distinct from
+  // browser limitations — the user (and any report) can tell them apart.
+  "server-unreachable":
+    "Nou pa t kapab tache ak sèvis notifikasyon yo. Verifye koneksyon ou, epi eseye ankò.",
+  "registration-failed":
+    "Sèvè a pa t aksepte enskripsyon notifikasyon an. Dekonekte epi konekte ankò, Lè sa a eseye ankò.",
 };
 
 export default function NotificationsPage() {
