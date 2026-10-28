@@ -169,7 +169,10 @@ export default function TicketChatPage() {
         </button>
       )}
 
-      <form className="chat-composer" onSubmit={onSend}>
+      {/* Issue #53 — same form-level autocomplete=off contract as the
+          consultation chat composer (suppresses Chrome's autofill accessory
+          strip; Gboard's own suggestion strip is IME-owned). */}
+      <form className="chat-composer" autoComplete="off" onSubmit={onSend}>
         <input
           className="input"
           value={draft}

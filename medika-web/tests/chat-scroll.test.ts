@@ -182,3 +182,50 @@ describe("Source contracts — Android keyboard layout (issue #47)", () => {
     }
   });
 });
+
+describe("Source contracts — keyboard suggestion bar (issue #53)", () => {
+  const read = async (p: string) => (await import("node:fs")).readFileSync(p, "utf8");
+  const COMPOSER_FILES = [
+    "app/app/consultations/[id]/page.tsx",
+    "app/app/tickets/[id]/page.tsx",
+    "components/consultation/InCallChat.tsx",
+  ] as const;
+
+  it("all three composer forms declare form-level autocomplete=off (Chrome autofill strip suppression)", async () => {
+    // Form-level is the authoritative Chromium signal for non-credential
+    // forms; input-level alone (PR #52) can leave the autofill strip up.
+    for (const p of COMPOSER_FILES) {
+      const src = await read(p);
+      expect(src, p).toMatch(
+        /<form className="(chat-composer|call-chat-composer)" autoComplete="off"/,
+      );
+    }
+  });
+
+  it("the in-call chat input matches the composer contract of the other chats", async () => {
+    const src = await read("components/consultation/InCallChat.tsx");
+    expect(src).toContain('type="text"');
+    expect(src).toContain('autoComplete="off"');
+    expect(src).toContain('autoCapitalize="sentences"');
+    expect(src).toContain('enterKeyHint="send"');
+    // Enter-to-send already exists; the hint must stay consistent with it.
+    expect(src).toContain('e.key === "Enter" && !e.shiftKey');
+  });
+
+  it("no chat surface renders a suggestion/accessory/toolbar element (bar is OS-owned)", async () => {
+    // Guards against a future app-rendered bar being mistaken for the OS
+    // accessory strip. Anchored to className attributes so audit comments
+    // mentioning the same words never trip it.
+    for (const p of COMPOSER_FILES) {
+      const src = await read(p);
+      expect(src, p).not.toMatch(/className=\{?"[^"]*(suggestion|toolbar|accessor|quick-repl)/i);
+    }
+  });
+
+  it("the identification runbook exists and names both OS-layer candidates", async () => {
+    const doc = await read("../docs/MOBILE_KEYBOARD_SUGGESTION_BAR.md");
+    expect(doc).toContain("Gboard suggestion strip");
+    expect(doc).toContain("Chrome autofill accessory strip");
+    expect(doc).toContain("Owner verification checklist");
+  });
+});
