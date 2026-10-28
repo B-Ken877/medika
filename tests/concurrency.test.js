@@ -56,8 +56,10 @@ describe('concurrent consultation accepts', () => {
     );
     const winners = results.filter((res) => res.status === 200);
     expect(winners).toHaveLength(1);
+    // Fetch as the PATIENT (always a participant): either racing doctor may
+    // win, so the doctor tokens cannot be assumed to have read access.
     const msgs = await r.get(`/api/consultations/${cons.id}/messages`)
-      .set('Authorization', `Bearer ${token.doctor}`);
+      .set('Authorization', `Bearer ${token.patient}`);
     // Exactly ONE system "accepte" message despite 10 racing requests
     expect(msgs.body.filter((m) => m.sender_id === 'system' && m.text.includes('accepte'))).toHaveLength(1);
   });

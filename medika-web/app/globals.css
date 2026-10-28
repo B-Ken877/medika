@@ -2678,3 +2678,8 @@ body.has-install-banner .app-main { padding-bottom: calc(var(--bottomnav-h) + 11
   font-size: 0.95rem;
   margin-bottom: 10px;
 }
+
+/* Notification center rows (issue #36) */
+.notif-row { border: 0; border-top: 1px solid var(--gray-200); }
+.notif-row.unread { background: rgba(16, 115, 73, 0.05); }
+.notif-row .brand-mark { flex-shrink: 0; }

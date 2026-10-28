@@ -431,6 +431,109 @@ export function getTicketMessages(token: string, id: string, signal?: AbortSigna
   });
 }
 
+// ─── Notifications (issue #36) ───────────────────────────────────────────────
+
+export interface PushSubscriptionInput {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+  userAgent?: string;
+}
+
+export interface AppNotification {
+  id: number;
+  category: "consultations" | "messages" | "calls" | "wallet" | string;
+  event_type: string;
+  title: string;
+  body: string;
+  url: string | null;
+  read: boolean;
+  created_at: number | null;
+}
+
+export interface NotificationPreferences {
+  consultations: boolean;
+  messages: boolean;
+  calls: boolean;
+  wallet: boolean;
+}
+
+/** Register a Web Push subscription for the authenticated user (multi-device). */
+export function registerPushSubscription(token: string, sub: PushSubscriptionInput, signal?: AbortSignal) {
+  return apiFetch<{ success: boolean }>("/api/notifications/subscriptions", {
+    method: "POST",
+    body: sub,
+    token,
+    signal,
+  });
+}
+
+/** Revoke own subscription(s) — by endpoint, or all (logout). */
+export function revokePushSubscription(token: string, endpoint?: string, signal?: AbortSignal) {
+  return apiFetch<{ success: boolean }>("/api/notifications/subscriptions", {
+    method: "DELETE",
+    body: endpoint ? { endpoint } : {},
+    token,
+    signal,
+  });
+}
+
+/** Persisted in-app history (paginated, own only). */
+export function getNotifications(
+  token: string,
+  opts: { limit?: number; before?: number; signal?: AbortSignal } = {},
+) {
+  return apiFetch<{ notifications: AppNotification[]; unread: number; hasMore: boolean }>(
+    "/api/notifications",
+    {
+      token,
+      params: { limit: opts.limit, before: opts.before },
+      signal: opts.signal,
+    },
+  );
+}
+
+export function markNotificationsRead(token: string, ids: number[], signal?: AbortSignal) {
+  return apiFetch<{ success: boolean; updated: number }>("/api/notifications/read", {
+    method: "POST",
+    body: { ids },
+    token,
+    signal,
+  });
+}
+
+export function markAllNotificationsRead(token: string, signal?: AbortSignal) {
+  return apiFetch<{ success: boolean; updated: number }>("/api/notifications/read-all", {
+    method: "POST",
+    token,
+    signal,
+  });
+}
+
+export function getNotificationPreferences(token: string, signal?: AbortSignal) {
+  return apiFetch<NotificationPreferences>("/api/notifications/preferences", { token, signal });
+}
+
+export function updateNotificationPreferences(
+  token: string,
+  prefs: Partial<NotificationPreferences>,
+  signal?: AbortSignal,
+) {
+  return apiFetch<NotificationPreferences>("/api/notifications/preferences", {
+    method: "PUT",
+    body: prefs,
+    token,
+    signal,
+  });
+}
+
+/** VAPID public key for subscribing (null when push is server-disabled). */
+export function getVapidPublicKey(token: string, signal?: AbortSignal) {
+  return apiFetch<{ publicKey: string | null; configured: boolean }>(
+    "/api/notifications/vapid-public-key",
+    { token, signal },
+  );
+}
+
 // ─── Health ───────────────────────────────────────────────────────────────────
 
 export function health(signal?: AbortSignal) {

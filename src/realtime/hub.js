@@ -25,6 +25,7 @@ const { v4: uuidv4 } = require('uuid');
 const { verifyToken } = require('../auth');
 const consultationsRepo = require('../repos/consultations');
 const usersRepo = require('../repos/users');
+const notifications = require('../notifications/emit');
 const { createRedisBus, createLocalBus } = require('./redis-bus');
 const { createPresence } = require('./presence');
 
@@ -251,7 +252,24 @@ class RealtimeHub {
     this.publishToUser(user.id, envelope);
     const recipientId =
       consultation.patient_id === user.id ? consultation.doctor_id : consultation.patient_id;
-    if (recipientId) this.publishToUser(recipientId, envelope);
+    if (recipientId) {
+      this.publishToUser(recipientId, envelope);
+      // Issue #36: durable notification for the RECIPIENT after the message
+      // is PERSISTED (never before). Push is suppressed when the recipient
+      // is connected (they just received the live delivery); the in-app
+      // record is always kept. Fire-and-forget: delivery issues can never
+      // break chat persistence.
+      const recipientOnline = (this.sockets.get(recipientId)?.size ?? 0) > 0;
+      notifications.emit({
+        userId: recipientId,
+        eventType: 'message:new',
+        idempotencyKey: `message:${Number(msg.id)}`,
+        title: notifications.COPY.messageNew.title,
+        body: notifications.COPY.messageNew.body,
+        url: `/app/consultations/${consultationId}`,
+        push: !recipientOnline,
+      });
+    }
   }
 
   /** typing — membership-checked relay to the other participant, gated on the
@@ -333,7 +351,26 @@ class RealtimeHub {
     }
     const recipientId =
       consultation.patient_id === user.id ? consultation.doctor_id : consultation.patient_id;
-    if (recipientId) this.publishToUser(recipientId, buildEvent(recipientId));
+    if (recipientId) {
+      this.publishToUser(recipientId, buildEvent(recipientId));
+      // Issue #36: urgent push for an INCOMING CALL (only for the intended
+      // recipient, never a broadcast). Suppressed when they are connected —
+      // the live ring is already in front of them. Typing, recording and
+      // presence events NEVER reach this path.
+      if (data.type === 'call:start') {
+        const recipientOnline = (this.sockets.get(recipientId)?.size ?? 0) > 0;
+        const minuteBucket = Math.floor(Date.now() / 60000);
+        notifications.emit({
+          userId: recipientId,
+          eventType: 'call:incoming',
+          idempotencyKey: `call:${data.consultationId}:${user.id}:${minuteBucket}`,
+          title: notifications.COPY.callIncoming.title,
+          body: notifications.COPY.callIncoming.body,
+          url: `/app/consultations/${data.consultationId}`,
+          push: !recipientOnline,
+        });
+      }
+    }
   }
 
   // ─── Delivery ────────────────────────────────────────────────────────────

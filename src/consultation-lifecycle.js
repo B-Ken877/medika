@@ -40,6 +40,7 @@
 const { query, withTransaction } = require('./db');
 const { config } = require('./config');
 const consultationsRepo = require('./repos/consultations');
+const notifications = require('./notifications/emit');
 
 const SYSTEM_SENDER = { sender_id: 'system', sender_name: 'Systeme' };
 
@@ -348,6 +349,42 @@ function emitNotifications(hub, outcome) {
     });
     outcome.notified += 1;
   }
+
+  // Issue #36: durable push notifications for the SAME post-commit
+  // transitions (fire-and-forget; emit never throws). Every emission is
+  // idempotent by a stable record-derived key, so duplicate cron runs and
+  // reruns after a crash are harmless.
+  const c = outcome.consultation;
+  if (c.status === 'EXPIRE' && c.patient_id) {
+    // Five-hour expiry — the transition itself is atomic, so this fires once.
+    notifications.emit({
+      userId: c.patient_id,
+      eventType: 'consultation:expired',
+      idempotencyKey: `consultation:${c.id}:expired`,
+      ...notifications.COPY.consultationExpired,
+    });
+  }
+  if (outcome.notifyNewDoctor) {
+    // High-priority offer to the SPECIFIC newly assigned doctor only.
+    notifications.emit({
+      userId: outcome.notifyNewDoctor.id,
+      eventType: 'consultation:offer',
+      idempotencyKey: `consultation:${c.id}:offer:${outcome.notifyNewDoctor.id}`,
+      ...notifications.COPY.consultationOffer,
+    });
+    // Patient "reassignment" signal — ONE per consultation (coalescing rapid
+    // routing transitions; the definitive outcome carries the real news).
+    if (c.patient_id) {
+      notifications.emit({
+        userId: c.patient_id,
+        eventType: 'consultation:rerouted',
+        idempotencyKey: `consultation:${c.id}:rerouted`,
+        ...notifications.COPY.consultationRejected,
+      });
+    }
+  }
+  // Waiting-state retries emit NOTHING: unchanged waiting state must not
+  // produce pushes (documented no-spam rule).
 }
 
 // ─── Opportunistic (throttled) enforcement ───────────────────────────────────

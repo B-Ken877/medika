@@ -20,6 +20,7 @@
 
 const { query, withTransaction } = require('../db');
 const { config } = require('../config');
+const notifications = require('../notifications/emit');
 const cycles = require('../payout-cycles');
 
 function earningToApi(row) {
@@ -68,7 +69,7 @@ function payoutToApi(row) {
  * Safe to run concurrently (ON CONFLICT DO NOTHING) and repeatedly.
  */
 async function materializeEarnings() {
-  const { rowCount } = await query(
+  const { rows } = await query(
     `INSERT INTO doctor_earnings
        (doctor_id, doctor_name, consultation_id, payment_id,
         gross_amount, platform_fee, net_amount, status, available_at)
@@ -83,10 +84,24 @@ async function materializeEarnings() {
        JOIN users u ON u.id = c.doctor_id
       WHERE c.status = 'TERMINE'
         AND c.doctor_id IS NOT NULL
-      ON CONFLICT (consultation_id) DO NOTHING`,
+      ON CONFLICT (consultation_id) DO NOTHING
+      RETURNING id, doctor_id, consultation_id`,
     [config.platformFee]
   );
-  return rowCount;
+  // Issue #36: notify each doctor whose earnings just became AVAILABLE —
+  // the single authoritative transition point, fired exactly once per
+  // earning (RETURNING yields only NEW rows, so duplicate cron runs and the
+  // prescribe-route materialization can never double-notify). Fire-and-
+  // forget: emit never throws and never breaks the wallet flow.
+  for (const row of rows) {
+    notifications.emit({
+      userId: row.doctor_id,
+      eventType: 'wallet:earnings',
+      idempotencyKey: `wallet:earning:${Number(row.id)}`,
+      ...notifications.COPY.walletEarnings,
+    });
+  }
+  return rows.length;
 }
 
 /** Doctor's own wallet view (read-only for doctors by construction). */
