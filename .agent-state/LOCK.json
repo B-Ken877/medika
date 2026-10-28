@@ -1,8 +1,9 @@
 {
   "run_id": "cron-20261029-0230",
   "started_at_utc": "2026-10-28T18:33:00Z",
-  "heartbeat_utc": "2026-10-28T18:38:00Z",
+  "heartbeat_utc": "2026-10-28T18:55:00Z",
+  "active": false,
   "owner": "medika-autonomous-agent",
   "issue": 36,
-  "note": "Backend 29 files/376 tests passed post-rebase. Running web verification."
+  "note": "Run completed: PR #41 conflict-free + verified; issue #36 IN REVIEW. Lock released."
 }
