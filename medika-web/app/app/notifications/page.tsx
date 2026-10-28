@@ -1,138 +1,380 @@
 "use client";
 
 /**
- * In-app notification center — web counterpart of NotificationsScreen.kt.
- * The backend has no REST endpoint for notification history; the Android
- * screen is equally driven by live events. This page therefore surfaces
- * realtime events (consultation updates, new requests, incoming calls)
- * for the current session and routes the user to the right screen.
- * No fabricated history, no persistence of medical data.
+ * In-app notification center (issue #36 upgrade).
+ *
+ * Previously this page held only live WS events in browser memory. Now it is
+ * backed by the SERVER-PERSISTED history (GET /api/notifications) with
+ * unread/read state, mark-read/mark-all-read, pagination — plus:
+ *   - Web Push enable/disable (explicit user action; honest unsupported /
+ *     blocked / denied / server-disabled states);
+ *   - per-category preferences (consultations, messages, calls, wallet).
+ *
+ * Live WS events still stream in as a supplement while the page is open; the
+ * server record is the source of truth. No medical data is ever displayed
+ * here — notification copy is generic by server design.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, CalendarCheck, Phone, Stethoscope, Trash2 } from "lucide-react";
+import {
+  Bell,
+  BellRing,
+  CalendarCheck,
+  CheckCheck,
+  Phone,
+  Stethoscope,
+  Wallet,
+} from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
 import { useSocket } from "@/lib/ws/socket-context";
-import { EmptyState } from "@/components/ui/primitives";
+import { ApiError } from "@/lib/api/client";
+import {
+  getNotificationPreferences,
+  getNotifications,
+  markAllNotificationsRead,
+  markNotificationsRead,
+  updateNotificationPreferences,
+  type AppNotification,
+  type NotificationPreferences,
+} from "@/lib/api/endpoints";
+import { EmptyState, ErrorAlert, SkeletonRows } from "@/components/ui/primitives";
 import { relativeTime } from "@/lib/format";
+import { enablePush, disablePush, probePushSupport, hasPushSubscription, type PushSupport } from "@/lib/push";
 
-interface Notice {
-  id: string;
-  icon: "consult" | "update" | "call";
-  title: string;
-  body: string;
-  href: string;
-  at: number; // epoch ms
-}
+const CATEGORY_ICON = {
+  consultations: CalendarCheck,
+  messages: Stethoscope,
+  calls: Phone,
+  wallet: Wallet,
+} as const;
+
+const CATEGORY_LABEL: Record<string, string> = {
+  consultations: "Konsiltasyon",
+  messages: "Mesaj",
+  calls: "Apèl",
+  wallet: "Revni",
+};
+
+const SUPPORT_COPY: Record<PushSupport, string> = {
+  supported: "",
+  "unsupported-browser": "Navigatè sa a pa sipòte notifikasyon push.",
+  "insecure-context": "Notifikasyon push bezwen yon koneksyon sekirize (HTTPS).",
+  "no-service-worker": "Sèvis travay la pa disponib sou aparèy sa a.",
+  "no-push-manager": "Navigatè a pa gen jesyon push.",
+  denied: "Ou bloke notifikasyon yo nan paramèt navigatè a. Louvri paramèt yo pou pèmèt yo.",
+  "server-disabled": "Sèvis push la pa konfigure kounye a — notifikasyon nan aplikasyon an ap kontinye mache.",
+};
 
 export default function NotificationsPage() {
-  const { user } = useAuth();
+  const { token, user } = useAuth();
   const { socket } = useSocket();
   const router = useRouter();
-  const [notices, setNotices] = useState<Notice[]>([]);
+
+  const [items, setItems] = useState<AppNotification[] | null>(null);
+  const [unread, setUnread] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [liveCount, setLiveCount] = useState(0);
+
+  const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
+  const [prefsBusy, setPrefsBusy] = useState(false);
+
+  const [pushSupport] = useState<PushSupport>(() => probePushSupport());
+  const [pushEnabled, setPushEnabled] = useState<boolean | null>(null);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushNotice, setPushNotice] = useState<string | null>(null);
+  const beforeRef = useRef<number | null>(null);
+
+  const load = useCallback(() => {
+    if (!token) return;
+    const controller = new AbortController();
+    getNotifications(token, { signal: controller.signal })
+      .then((res) => {
+        setItems(res.notifications);
+        setUnread(res.unread);
+        setHasMore(res.hasMore);
+        beforeRef.current = res.notifications.length
+          ? res.notifications[res.notifications.length - 1].id
+          : null;
+        setError(null);
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        setError(err);
+        setItems([]);
+      });
+    return () => controller.abort();
+  }, [token]);
 
   useEffect(() => {
+    const cleanup = load();
+    return () => cleanup?.();
+  }, [load]);
+
+  useEffect(() => {
+    if (!token) return;
+    getNotificationPreferences(token).then(setPrefs).catch(() => setPrefs(null));
+    hasPushSubscription().then(setPushEnabled).catch(() => setPushEnabled(false));
+  }, [token]);
+
+  // Live events supplement the persisted history while the page is open.
+  useEffect(() => {
     if (!socket || !user) return;
-    const push = (n: Omit<Notice, "id" | "at">) => {
-      setNotices((prev) => [{ ...n, id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, at: Date.now() }, ...prev].slice(0, 50));
-    };
     return socket.onEvent((event) => {
-      if (event.type === "consultation:new") {
-        const e = event as { id: string; patientName?: string; description?: string; specialtyNeeded?: string };
-        if (user.role === "doctor" && !e.patientName) return;
-        push({
-          icon: "consult",
-          title: user.role === "doctor" ? "Nouvo demann konsiltasyon" : "Demann lan voye",
-          body:
-            user.role === "doctor"
-              ? `${e.patientName ?? "Yon pasyan"} — ${e.specialtyNeeded ?? ""} : ${e.description ?? ""}`
-              : `Demann ou a (${e.specialtyNeeded ?? ""}) ap tann yon doktè.`,
-          href: `/app/consultations/${encodeURIComponent(e.id)}`,
-        });
-      } else if (event.type === "consultation:updated") {
-        const e = event as { id: string; status?: string; doctor_id?: string | null };
-        const labels: Record<string, string> = {
-          EN_COURS: "konsiltasyon an aksepte — konvèsasyon an louvri",
-          TERMINE: "konsiltasyon an fini — gade òrdònans ou a",
-          REFUSE: "demann lan refize",
-        };
-        const label = e.status ? (labels[e.status] ?? e.status) : "yon mete ajou";
-        push({
-          icon: "update",
-          title: "Mete ajou konsiltasyon",
-          body: `Gen ${label}.`,
-          href: `/app/consultations/${encodeURIComponent(e.id)}`,
-        });
-      } else if (event.type === "call:incoming") {
-        const e = event as { consultationId: string; fromName?: string; callType?: string };
-        push({
-          icon: "call",
-          title: `Apèl ${e.callType === "video" ? "videyo" : "vwa"} ap antre`,
-          body: `${e.fromName ?? "Lòt moun nan"} ap rele w. Rejwenn apèl la nan konvèsasyon an.`,
-          href: `/app/consultations/${encodeURIComponent(e.consultationId)}`,
-        });
+      if (event.type === "consultation:new" || event.type === "consultation:updated") {
+        setLiveCount((n) => n + 1);
+        load(); // refresh the persisted view (server is the source of truth)
       }
     });
-  }, [socket, user]);
+  }, [socket, user, load]);
 
-  const clear = useCallback(() => setNotices([]), []);
+  const loadMore = async () => {
+    if (!token || loadingMore || !hasMore || beforeRef.current == null) return;
+    setLoadingMore(true);
+    try {
+      const res = await getNotifications(token, { before: beforeRef.current });
+      setItems((prev) => [...(prev ?? []), ...res.notifications]);
+      setHasMore(res.hasMore);
+      beforeRef.current = res.notifications.length
+        ? res.notifications[res.notifications.length - 1].id
+        : null;
+    } catch {
+      setHasMore(false);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
-  const Icon = { consult: Stethoscope, update: CalendarCheck, call: Phone };
+  const openNotification = (n: AppNotification) => {
+    if (!n.read && token) {
+      markNotificationsRead(token, [n.id]).catch(() => undefined);
+      setUnread((u) => Math.max(0, u - 1));
+      setItems((prev) => prev?.map((x) => (x.id === n.id ? { ...x, read: true } : x)) ?? prev);
+    }
+    if (n.url) router.push(n.url);
+  };
+
+  const markAll = async () => {
+    if (!token) return;
+    try {
+      await markAllNotificationsRead(token);
+      setUnread(0);
+      setItems((prev) => prev?.map((x) => ({ ...x, read: true })) ?? prev);
+    } catch {
+      /* keep the current view; retry stays available */
+    }
+  };
+
+  const togglePref = async (key: keyof NotificationPreferences) => {
+    if (!token || !prefs || prefsBusy) return;
+    const next = { ...prefs, [key]: !prefs[key] };
+    setPrefsBusy(true);
+    setPrefs(next); // optimistic
+    try {
+      setPrefs(await updateNotificationPreferences(token, { [key]: next[key] }));
+    } catch {
+      setPrefs(prefs); // revert on failure
+    } finally {
+      setPrefsBusy(false);
+    }
+  };
+
+  const onEnablePush = async () => {
+    if (!token || pushBusy) return;
+    setPushBusy(true);
+    setPushNotice(null);
+    const state = await enablePush(token);
+    setPushEnabled(state.enabled);
+    if (!state.enabled && state.support !== "supported") {
+      setPushNotice(SUPPORT_COPY[state.support]);
+    }
+    setPushBusy(false);
+  };
+
+  const onDisablePush = async () => {
+    if (!token || pushBusy) return;
+    setPushBusy(true);
+    setPushNotice(null);
+    await disablePush(token);
+    setPushEnabled(false);
+    setPushBusy(false);
+  };
 
   return (
     <div className="stack">
-      <div className="flex-between">
+      <div className="page-head">
         <div>
           <h1 className="page-title">Notifikasyon</h1>
-          <p className="muted small">Evènman nan sesyon k ap pase kounye a</p>
+          <p className="page-desc">
+            {unread > 0 ? `${unread} notifikasyon pa li.` : "Tout notifikasyon ou yo isit."}
+          </p>
         </div>
-        {notices.length > 0 && (
-          <button className="btn btn-secondary btn-sm" onClick={clear}>
-            <Trash2 size={14} aria-hidden /> Efase
+        <div className="page-head-actions">
+          <button className="btn btn-secondary btn-sm" onClick={load} disabled={items === null}>
+            <BellRing size={14} aria-hidden /> Refrèchi
           </button>
-        )}
+          {unread > 0 && (
+            <button className="btn btn-secondary btn-sm" onClick={markAll}>
+              <CheckCheck size={14} aria-hidden /> Make tout li
+            </button>
+          )}
+        </div>
       </div>
 
-      {notices.length === 0 ? (
-        <div className="card">
-          <EmptyState
-            icon={<Bell size={26} />}
-            title="Pa gen notifikasyon pou kounye a"
-            description="Mete ajou konsiltasyon ou yo ak apèl k ap antre yo ap parèt isit an tan reyèl."
-          />
+      <ErrorAlert
+        error={
+          error == null
+            ? null
+            : new ApiError("server", 0, "Nou pa t kapab chaje notifikasyon yo. Tanpri, eseye ankò.")
+        }
+        onRetry={load}
+      />
+
+      {/* Push subscriptions (explicit user action only) */}
+      <section className="panel" aria-labelledby="push-title">
+        <div className="panel-head">
+          <h2 id="push-title" className="panel-title">
+            Notifikasyon push
+          </h2>
         </div>
-      ) : (
-        <div className="list">
-          {notices.map((n) => {
-            const IconFor = Icon[n.icon];
-            return (
+        <div className="panel-row">
+          <div className="row-body">
+            <div className="row-title">
+              <span>Alert sou aparèy ou a</span>
+            </div>
+            <div className="row-meta">
+              {pushSupport === "supported"
+                ? pushEnabled
+                  ? "Ou ap resevwa notifikasyon push sou aparèy sa a."
+                  : "Aktive notifikasyon push pou w konnen le gen yon mizajou, menm lè aplikasyon an fèmen."
+                : SUPPORT_COPY[pushSupport]}
+            </div>
+          </div>
+          <div className="row-actions">
+            {pushSupport === "supported" && pushEnabled !== null && (
               <button
-                key={n.id}
-                className="row"
-                onClick={() => router.push(n.href)}
-                aria-label={`${n.title} — ${n.body}`}
+                className={`btn btn-sm ${pushEnabled ? "btn-secondary" : "btn-primary"}`}
+                onClick={pushEnabled ? onDisablePush : onEnablePush}
+                disabled={pushBusy}
               >
-                <span className="brand-mark" aria-hidden>
-                  <IconFor size={16} />
-                </span>
-                <div className="row-body">
-                  <div className="row-title">{n.title}</div>
-                  <div className="row-sub">{n.body}</div>
-                  <div className="row-meta">{relativeTime(Math.floor(n.at / 1000))}</div>
-                </div>
+                {pushEnabled ? "Dezaktive" : "Aktive"}
               </button>
-            );
-          })}
+            )}
+          </div>
         </div>
+        {pushNotice && (
+          <div className="alert alert-warning" role="status" style={{ margin: 12 }}>
+            {pushNotice}
+          </div>
+        )}
+      </section>
+
+      {/* Category preferences */}
+      {prefs && (
+        <section className="panel" aria-labelledby="prefs-title">
+          <div className="panel-head">
+            <h2 id="prefs-title" className="panel-title">
+              Preferans
+            </h2>
+          </div>
+          {(["consultations", "messages", "calls", "wallet"] as const).map((key) => (
+            <div className="panel-row" key={key}>
+              <div className="row-body">
+                <div className="row-title">
+                  <span>{CATEGORY_LABEL[key]}</span>
+                </div>
+                <div className="row-meta">
+                  {key === "wallet" && user?.role !== "doctor"
+                    ? "Pou doktè yo."
+                    : "Konnen lè evènman sa yo rive."}
+                </div>
+              </div>
+              <div className="row-actions">
+                <button
+                  role="switch"
+                  className="switch"
+                  aria-checked={prefs[key]}
+                  aria-label={CATEGORY_LABEL[key]}
+                  onClick={() => togglePref(key)}
+                  disabled={prefsBusy || (key === "wallet" && user?.role !== "doctor")}
+                />
+              </div>
+            </div>
+          ))}
+          <p className="tiny muted" style={{ padding: "0 16px 12px" }}>
+            Preferans yo sèlman kontròle VWA push la — istwa notifikasyon nan aplikasyon an konsève toujou.
+          </p>
+        </section>
       )}
 
+      {/* Persisted history */}
+      <section className="panel" aria-labelledby="history-title">
+        <div className="panel-head">
+          <h2 id="history-title" className="panel-title">
+            Istorik
+          </h2>
+          {liveCount > 0 && (
+            <span className="badge badge-green" role="status">
+              {liveCount} evènman an dirèk
+            </span>
+          )}
+        </div>
+
+        {items === null && !error && (
+          <div style={{ padding: 24 }}>
+            <SkeletonRows count={4} />
+          </div>
+        )}
+
+        {items !== null && items.length === 0 && !error && (
+          <EmptyState
+            icon={<Bell size={24} />}
+            title="Pa gen notifikasyon pou kounye a"
+            description="Nou ap fè w konnen le gen yon mizajou enpòtan."
+          />
+        )}
+
+        {items?.map((n) => {
+          const Icon = CATEGORY_ICON[n.category as keyof typeof CATEGORY_ICON] ?? Bell;
+          return (
+            <button
+              key={n.id}
+              className={`panel-row notif-row${n.read ? "" : " unread"}`}
+              onClick={() => openNotification(n)}
+              style={{ textAlign: "left", width: "100%", background: "inherit", cursor: n.url ? "pointer" : "default" }}
+            >
+              <span className="brand-mark" aria-hidden>
+                <Icon size={16} />
+              </span>
+              <div className="row-body">
+                <div className="row-title">
+                  <span>{n.title}</span>
+                  {!n.read && <span className="badge badge-green">Nouvo</span>}
+                </div>
+                <div className="row-sub">{n.body}</div>
+                <div className="row-meta">
+                  {CATEGORY_LABEL[n.category] ?? n.category} ·{" "}
+                  {n.created_at ? relativeTime(n.created_at) : ""}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+
+        {hasMore && (
+          <div style={{ padding: 12, display: "flex", justifyContent: "center" }}>
+            <button className="btn btn-secondary btn-sm" onClick={loadMore} disabled={loadingMore}>
+              {loadingMore ? "N ap chaje…" : "Chaje plis"}
+            </button>
+          </div>
+        )}
+      </section>
+
       <p className="tiny muted text-center">
-        Notifikasyon yo tanporè epi yo sèlman pou onglet sa a — pa gen done medikal ki kenbe sou aparèy ou a. Gade{" "}
-        <Link href="/app/consultations" className="nowrap">
-          konsiltasyon ou yo
-        </Link>{" "}
-        pou istwa konplè a.
+        Notifikasyon yo sèvi avèk kopi jenerik — pa gen done medikal ki kenbe sou aparèy ou a. Gade{" "}
+        <Link href="/app/profile">pwofil ou</Link> pou enfòmasyon prive.
       </p>
     </div>
   );

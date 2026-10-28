@@ -18,6 +18,7 @@ const specialtiesRepo = require('../repos/specialties');
 const ticketsRepo = require('../repos/tickets');
 const walletRepo = require('../repos/wallet');
 const payoutCycles = require('../payout-cycles');
+const notifications = require('../notifications/emit');
 const { query } = require('../db');
 const { authenticateAdmin, hashPassword } = require('../auth');
 const { config } = require('../config');
@@ -464,6 +465,16 @@ router.post('/payouts/settle', async (req, res, next) => {
     if (result.error === 'actor_not_found') {
       return res.status(404).json({ error: 'Medecin introuvable' });
     }
+
+    // Issue #36: notify the doctor AFTER the payout state is committed —
+    // including the idempotent alreadyPaid path (same stable key → the
+    // duplicate settle click cannot double-notify).
+    notifications.emit({
+      userId: doctor.id,
+      eventType: 'payout:paid',
+      idempotencyKey: `payout:${result.payout.id}:paid`,
+      ...notifications.COPY.payoutPaid,
+    });
 
     res.status(result.alreadyPaid ? 200 : 201).json(result);
   } catch (err) { next(err); }

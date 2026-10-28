@@ -26,6 +26,7 @@ const specialtiesRepo = require('../repos/specialties');
 const notesRepo = require('../repos/notes');
 const walletRepo = require('../repos/wallet');
 const lifecycle = require('../consultation-lifecycle');
+const notifications = require('../notifications/emit');
 const moncash = require('../moncash');
 const { config, simulationAllowed } = require('../config');
 const { authenticate, requireRole } = require('../auth');
@@ -122,6 +123,25 @@ router.post('/consultations', authenticate, requireRole('patient'), async (req, 
       if (routed.offeredTo) {
         hub.publishToUser(routed.offeredTo.id, newNotif);
       }
+    }
+
+    // Issue #36: durable notifications AFTER the creation + routing commit.
+    // Fire-and-forget (emit never throws) — a notification failure can never
+    // break consultation creation. The patient's copy is generic; the offer
+    // goes ONLY to the committed offer holder with a safe deep link.
+    notifications.emit({
+      userId: req.user.id,
+      eventType: 'consultation:submitted',
+      idempotencyKey: `consultation:${id}:submitted`,
+      ...notifications.COPY.consultationSubmitted,
+    });
+    if (routed.offeredTo) {
+      notifications.emit({
+        userId: routed.offeredTo.id,
+        eventType: 'consultation:offer',
+        idempotencyKey: `consultation:${id}:offer:${routed.offeredTo.id}`,
+        ...notifications.COPY.consultationOffer,
+      });
     }
     res.status(201).json(api);
   } catch (err) {
@@ -306,6 +326,24 @@ router.post('/consultations/:id/messages', authenticate, async (req, res, next) 
       hub.publishToUser(req.user.id, envelope);
       const recipientId = c.patient_id === req.user.id ? c.doctor_id : c.patient_id;
       if (recipientId) hub.publishToUser(recipientId, envelope);
+    }
+    // Issue #36: same durable-notification contract as the WS path — the
+    // recipient gets an in-app record + a queued push (suppressed when they
+    // are connected, i.e. the live WS delivery already reached them).
+    // Fire-and-forget: never blocks or breaks the REST send.
+    const recipientId = c.patient_id === req.user.id ? c.doctor_id : c.patient_id;
+    if (recipientId) {
+      const hub2 = req.app.locals.hub;
+      const recipientOnline = hub2 ? (hub2.sockets.get(recipientId)?.size ?? 0) > 0 : false;
+      notifications.emit({
+        userId: recipientId,
+        eventType: 'message:new',
+        idempotencyKey: `message:${Number(msg.id)}`,
+        title: notifications.COPY.messageNew.title,
+        body: notifications.COPY.messageNew.body,
+        url: `/app/consultations/${req.params.id}`,
+        push: !recipientOnline,
+      });
     }
     res.status(201).json(consultationsRepo.msgToApi(msg));
   } catch (err) { next(err); }
@@ -567,6 +605,14 @@ router.put('/consultations/:id/accept', authenticate, requireRole('doctor'), asy
       });
     }
     notifyConsultationUpdate(req, c);
+    // Issue #36: patient notified of the acceptance AFTER the authoritative
+    // status transition commits. Generic copy — no medical data.
+    notifications.emit({
+      userId: c.patient_id,
+      eventType: 'consultation:accepted',
+      idempotencyKey: `consultation:${c.id}:accepted`,
+      ...notifications.COPY.consultationAccepted,
+    });
     res.json(consultationsRepo.consToApi(c));
   } catch (err) { next(err); }
 });
@@ -593,6 +639,25 @@ router.put('/consultations/:id/reject', authenticate, requireRole('doctor'), asy
         urgencyLevel: result.consultation.urgency_level,
       });
     }
+    // Issue #36: the PATIENT is notified only for the definitive REFUSE
+    // outcome — a reroute continues silently and the waiting/accepted event
+    // carries the news instead (no contradictory spam).
+    if (result.refused && result.consultation.patient_id) {
+      notifications.emit({
+        userId: result.consultation.patient_id,
+        eventType: 'consultation:rejected',
+        idempotencyKey: `consultation:${result.consultation.id}:rejected`,
+        ...notifications.COPY.consultationRejected,
+      });
+    }
+    if (result.nextDoctor) {
+      notifications.emit({
+        userId: result.nextDoctor.id,
+        eventType: 'consultation:offer',
+        idempotencyKey: `consultation:${result.consultation.id}:offer:${result.nextDoctor.id}`,
+        ...notifications.COPY.consultationOffer,
+      });
+    }
     res.json(consultationsRepo.consToApi(result.consultation));
   } catch (err) { next(err); }
 });
@@ -615,6 +680,17 @@ router.put('/consultations/:id/prescription', authenticate, requireRole('doctor'
       console.error('[wallet] earning materialization failed:', err.code || err.message);
     });
     notifyConsultationUpdate(req, c);
+    // Issue #36: completion notifications AFTER the authoritative transition.
+    // Wallet availability is a separate event emitted by materializeEarnings
+    // exactly when the earnings become AVAILABLE.
+    if (c.patient_id) {
+      notifications.emit({
+        userId: c.patient_id,
+        eventType: 'consultation:completed',
+        idempotencyKey: `consultation:${c.id}:completed`,
+        ...notifications.COPY.consultationCompleted,
+      });
+    }
     res.json(consultationsRepo.consToApi(c));
   } catch (err) { next(err); }
 });

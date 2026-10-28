@@ -30,6 +30,7 @@
 const express = require('express');
 const lifecycle = require('../consultation-lifecycle');
 const walletRepo = require('../repos/wallet');
+const dispatch = require('../notifications/dispatch');
 const { authenticateAdmin } = require('../auth');
 
 const router = express.Router();
@@ -78,5 +79,20 @@ async function processDeadlines(req, res, next) {
 // Vercel cron jobs issue GET requests; POST is kept for manual/operator use.
 router.get('/crons/consultation-deadlines', authorizeCron, processDeadlines);
 router.post('/crons/consultation-deadlines', authorizeCron, processDeadlines);
+
+/**
+ * GET/POST /api/crons/notification-dispatch (issue #36) — drain the due
+ * notification outbox (idempotent, concurrency-safe; duplicate runs are
+ * harmless). Same fail-closed authorization as the deadlines cron. Aggregate
+ * counts only in the response — never payloads or recipient data.
+ */
+async function processNotifications(req, res, next) {
+  try {
+    const counts = await dispatch.dispatchDueNotifications({ limit: 50 });
+    res.json({ ok: true, counts, ranAt: new Date().toISOString() });
+  } catch (err) { next(err); }
+}
+router.get('/crons/notification-dispatch', authorizeCron, processNotifications);
+router.post('/crons/notification-dispatch', authorizeCron, processNotifications);
 
 module.exports = router;

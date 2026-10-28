@@ -100,9 +100,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    // Issue #36: revoke this device's push subscription server-side BEFORE
+    // the session disappears (best-effort, never blocks logout). The browser
+    // subscription itself is left alone — a re-login re-binds the same
+    // endpoint to its owner.
+    const token = state.token;
+    if (token) {
+      import("@/lib/api/endpoints")
+        .then((m) => m.revokePushSubscription(token).catch(() => undefined))
+        .catch(() => undefined);
+    }
     clearSession();
     setState({ user: null, token: null, status: "anonymous" });
-  }, []);
+  }, [state.token]);
 
   const setUser = useCallback((user: User) => {
     setState((prev) => {

@@ -1,0 +1,45 @@
+# Notification outbox dispatcher (issue #36).
+#
+# Drains the due notification outbox every 5 minutes against the production
+# API. Fully idempotent and concurrency-safe (FOR UPDATE SKIP LOCKED +
+# stable idempotency keys), so duplicate, overlapping or manual runs are all
+# harmless. A new push subscription also triggers an opportunistic drain, so
+# this workflow is a delivery-latency enhancement, never a correctness
+# dependency.
+#
+# One-time setup (repo owner): identical to consultation-deadlines.yml —
+# CRON_SECRET on both the Vercel project (Production) and the repository
+# secrets, plus an optional PRODUCTION_URL. Without CRON_SECRET the workflow
+# exits silently — nothing breaks.
+name: Notification dispatcher
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notification-dispatch
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger notification dispatch
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          PRODUCTION_URL: ${{ secrets.PRODUCTION_URL }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "CRON_SECRET is not configured — skipping (see the setup notes in this workflow)."
+            exit 0
+          fi
+          URL="${PRODUCTION_URL:-https://medika-ecru.vercel.app}/api/crons/notification-dispatch"
+          echo "Draining due notifications at $URL ..."
+          curl -fsS --max-time 90 --retry 2 \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "$URL"

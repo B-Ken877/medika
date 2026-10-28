@@ -463,7 +463,12 @@ describe('accept vs expiry race (concurrency)', () => {
       expect(row.status).toBe('EN_COURS');
       expect(row.doctor_id).toBe(users.doctor.id);
     } else {
-      expect(acceptRes.status).toBe(410);
+      // Late acceptance: the deadline won. Depending on where the reroute
+      // commit landed relative to the accept's reads, the route answers 410
+      // (holder's expired offer still visible) or 409 (reroute to the next
+      // doctor already committed — the pre-existing "offered to another
+      // doctor" branch). Both mean exactly ONE consistent outcome.
+      expect([409, 410]).toContain(acceptRes.status);
       expect(row.status).toBe('RECHERCHE_MEDECIN');
       expect(row.doctor_id).toBe(MG2); // rerouted by whichever worker won
     }
