@@ -1,10 +1,9 @@
 {
   "run_id": "cron-20261029-0303",
   "started_at_utc": "2026-10-28T18:56:00Z",
-  "heartbeat_utc": "2026-10-28T19:10:00Z",
-  "active": true,
+  "heartbeat_utc": "2026-10-28T19:25:00Z",
+  "active": false,
   "owner": "medika-autonomous-agent",
-  "issue": 45,
-  "branch": "feat/issue-45-livekit-chat-integration",
-  "note": "Audit complete. Implementation phase: in-call chat panel (no route navigation), call-phase state machine, POST /call/token status hardening (EN_COURS-only, fail closed), reconnection + permission-denied states, tests."
+  "issue": null,
+  "note": "Run completed: issue #45 IN REVIEW via PR #49. Lock released."
 }
