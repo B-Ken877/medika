@@ -143,4 +143,10 @@ Check-only run cron-202610290450 (no lock acquired): PR #59 open/unmerged, merge
 Next action (next run):
 1. Check lock -> state -> owner feedback on #56 / #53 real-device verification results.
 2. Check for NEW issues from owner (titles start with NEW) — none exist as of this run.
-3. QUEUE EMPTY otherwise: do not start new work; #50 remains owner-only (Vercel VAPID env/secrets + real-device push verification).
+3. QUEUE EMPTY otherwise: do not start new work; #50 remains owner-only (Vercel VAPID env/secrets + real-device push verification).## Run cron-20261029-0505 — STARTED issue #60 (NEW [HIGH PRIORITY]) — IN PROGRESS
+
+- Owner closed #50 (21:02Z) and opened #60: Prevent overlapping consultations + reconcile legacy duplicate open bookings. Agent-eligible: NEW-titled, high priority, 0 comments, no duplicate branch/PR. Claimed with IN PROGRESS (priority labels preserved).
+- Lock: cron-20261029-0505 / issue 60 / active.
+- Branch (planned): feat/issue-60-one-active-consultation (from origin/main @ e66a420).
+- Scope: server-side + DB-enforced one-active-per-patient AND one-active-per-doctor; atomic reservation (partial unique index + transaction, no check-then-insert race); bounded pending timeout that never expires in-progress; deterministic rerunnable reconciliation keeping newest eligible record per patient/doctor conflict set (no hard-delete); UI guards + conflict responses; tests for transitions/cleanup/concurrency; vitest/tsc/lint/build.
+- Next action: audit consultation model/status enum/creation routes/migrations in repo; write blocking-state set + timeout policy; implement reconciliation BEFORE invariant enforcement.
