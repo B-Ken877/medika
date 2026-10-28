@@ -46,3 +46,12 @@ Last updated: 2026-10-28T20:04Z (run cron-20261029-0347)
 2. If owner reviews any open PR with change requests, resume that issue FIRST.
 3. If owner merges any open PR, merge-tree the others vs main; rebranch if
    needed (last check: 0 conflicts among #49/#54/#55).
+
+
+## Active issue (updated run cron-20261029-0414 at 20:18Z)
+- #53 IN PROGRESS: NEW [HIGH PRIORITY] Remove unwanted black keyboard suggestions bar from mobile chat input.
+  - Branch: fix/issue-53-keyboard-suggestions-bar (to be created from latest main).
+  - Plan: (1) audit composer DOM in consultations+tickets pages to rule out app-rendered bar; (2) smallest evidence-based app change (form-level autocomplete=off if form wrapper exists; no removal of PR #52 attrs); (3) docs/MOBILE_KEYBOARD_SUGGESTION_BAR.md identification runbook (Gboard dark-theme strip vs Chrome autofill strip vs app-rendered); (4) contract tests; (5) vitest/tsc/lint/build.
+  - Constraint: do not regress PR #52 viewport fix or its contract tests. Device verification likely unavailable - must state honestly.
+- #51: PR #57 MERGED by owner (20:12Z). Remaining #51 steps are OWNER-ONLY (Vercel dashboard quota + re-trigger preview). Issue label still IN REVIEW - leave for owner.
+- Queue after #53: #56 (LiveKit video consultations, created 20:11Z, oldest-first next). #50 remains owner-only env config.
