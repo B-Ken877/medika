@@ -1,7 +1,13 @@
 /**
- * Recording indicator (issue #19) — the telemetry bus between the voice
- * composer and the chat-area bubble, the bubble's SSR smoke, and source
- * contracts for the recording lifecycle wiring.
+ * Recording indicator (issues #19 → #26) — the telemetry bus between the
+ * voice composer and any subscribed indicator, plus the recipient-only
+ * REMOTE recording activity contracts.
+ *
+ * Issue #26 changed the contract: the sender's own chat log no longer shows
+ * a recording bubble (their controls live in the composer only); instead the
+ * RECIPIENT sees a transient pulsing-microphone status row while the other
+ * participant's capture is genuinely active. These tests cover the bus, the
+ * remote indicator's SSR, and the source contracts for the wiring.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { renderToString } from "react-dom/server";
@@ -11,7 +17,7 @@ import {
   publishRecordingEvent,
   subscribeRecordingIndicator,
 } from "@/lib/chat/recording-indicator";
-import { RecordingBubble } from "@/components/consultation/RecordingBubble";
+import { RemoteRecordingIndicator } from "@/components/consultation/RemoteRecordingIndicator";
 
 describe("recording indicator bus", () => {
   beforeEach(() => clearRecordingIndicatorSubscribers());
@@ -48,57 +54,94 @@ describe("recording indicator bus", () => {
   });
 });
 
-describe("RecordingBubble (SSR smoke)", () => {
+describe("RemoteRecordingIndicator (SSR smoke, issue #26)", () => {
   it("renders as a status — never as a sent message", () => {
-    const html = renderToString(createElement(RecordingBubble));
+    const html = renderToString(createElement(RemoteRecordingIndicator));
     expect(html).toContain('role="status"');
-    expect(html).toContain("N ap anrejistre yon mesaj vwa");
+    expect(html).toContain("Lòt moun nan ap anrejistre yon mesaj vwa");
   });
 
-  it("renders the mic indicator, a waveform and a timer (decorative)", () => {
-    const html = renderToString(createElement(RecordingBubble));
-    expect(html).toContain("voice-rec-dot");
-    expect(html).toContain("recording-wave");
-    expect(html).toContain("recording-timer");
-    expect(html).toContain("0:00");
-    // Pre-first-sample fallback keeps the bubble alive instantly.
-    expect(html).toContain("height:20%"); // 12 flat bars at 0.2
+  it("shows a pulsing microphone pill (decorative) in the typing-row language", () => {
+    const html = renderToString(createElement(RemoteRecordingIndicator));
+    expect(html).toContain("recording-remote-row");
+    expect(html).toContain("recording-remote-pill");
+    expect(html).toContain("recording-remote-mic");
+    expect(html).toContain("Ap anrejistre…");
+    // The animated icon is decorative — screen readers get the label once.
+    expect(html).toContain('aria-hidden="true"');
   });
 
   it("does not render inside a bubble-row (it is not a message)", () => {
-    const html = renderToString(createElement(RecordingBubble));
+    const html = renderToString(createElement(RemoteRecordingIndicator));
     expect(html).not.toContain("bubble-row");
     expect(html).not.toContain('class="bubble"');
+    // No duration/timer/waveform in the REMOTE indicator — activity only.
+    expect(html).not.toContain("recording-timer");
+    expect(html).not.toContain("recording-wave");
   });
 });
 
-describe("Source contracts — recording lifecycle (issue #19)", () => {
+describe("Source contracts — recipient-only recording activity (issue #26)", () => {
   const read = async (p: string) => (await import("node:fs")).readFileSync(p, "utf8");
 
-  it("the recorder publishes amplitude + duration telemetry", async () => {
-    const src = await read("components/consultation/VoiceRecorder.tsx");
-    expect(src).toContain("publishRecordingEvent({ type: \"sample\", amplitude })");
-    expect(src).toContain("publishRecordingEvent({ type: \"tick\", recordedMs: total })");
-    // The publish must be INSIDE the same loops that drive the composer UI.
-    expect(src).toMatch(/dispatch\(\{ type: "SAMPLE", amplitude \}\);\s*\n\s*\/\/ Chat-area recording bubble[\s\S]*?publishRecordingEvent/);
-  });
-
-  it("the chat page shows the bubble ONLY while actually recording", async () => {
+  it("the sender's own chat log shows NO recording bubble", async () => {
     const src = await read("app/app/consultations/[id]/page.tsx");
-    expect(src).toContain('voiceMode === "recording" && <RecordingBubble />');
+    expect(src).not.toContain("<RecordingBubble");
+    expect(src).not.toContain("RecordingBubble");
   });
 
-  it("the bubble is removed on every exit path (mode-gated render)", async () => {
+  it("the remote indicator renders from the partner's activity state", async () => {
     const src = await read("app/app/consultations/[id]/page.tsx");
-    // The page derives voiceMode from the recorder's authoritative mode —
-    // stop / cancel / failure all leave "recording", so the bubble unmounts.
-    expect(src).toContain("onModeChange={setVoiceMode}");
+    expect(src).toContain("{partnerRecording && <RemoteRecordingIndicator />}");
   });
 
-  it("globals.css ships the recording bubble styles (typing-bubble language)", async () => {
+  it("outgoing activity is signaled only while capture is genuinely active", async () => {
+    const src = await read("app/app/consultations/[id]/page.tsx");
+    // The recorder's authoritative mode is the trigger: "recording" excludes
+    // permission requests (requesting_permission), preview, upload, retries.
+    expect(src).toMatch(
+      /if \(voiceMode === "recording"\) recordingSignalerRef\.current\?\.start\(\);/,
+    );
+    expect(src).toContain("else recordingSignalerRef.current?.stop();");
+    // The signaler is torn down (explicit stop) on unmount/consultation change.
+    expect(src).toMatch(/signaler\.stop\(\);\s*\n\s*recordingSignalerRef\.current = null;/);
+  });
+
+  it("the socket sends the minimal activity payload (no media/duration metadata)", async () => {
+    const src = await read("lib/ws/socket.ts");
+    expect(src).toContain(
+      'return this.send({ type: "recording", consultationId, isRecording });',
+    );
+    // Nothing else rides along on the recording frame.
+    const frame = src.slice(
+      src.indexOf("sendRecording("),
+      src.indexOf("}", src.indexOf("type: \"recording\"")),
+    );
+    expect(frame).not.toContain("duration");
+    expect(frame).not.toContain("fileUrl");
+    expect(frame).not.toContain("senderName");
+  });
+
+  it("a dropped socket clears the remote indicator (no permanent mic)", async () => {
+    const src = await read("app/app/consultations/[id]/page.tsx");
+    expect(src).toMatch(
+      /recordingTrackerRef\.current\?\.clear\(\);\s*\n\s*setPartnerRecording\(false\);/,
+    );
+  });
+
+  it("globals.css ships the remote indicator + pulse + reduced-motion styles", async () => {
     const css = await read("app/globals.css");
-    expect(css).toContain(".recording-row {");
-    expect(css).toContain(".recording-wave");
-    expect(css).toContain(".recording-timer");
+    expect(css).toContain(".recording-remote-row");
+    expect(css).toContain("remote-mic-pulse");
+    expect(css).toMatch(/prefers-reduced-motion[\s\S]*?\.recording-remote-mic \{ animation: none;/);
+  });
+
+  it("the composer's local recording UI (telemetry publishing) is untouched", async () => {
+    const src = await read("components/consultation/VoiceRecorder.tsx");
+    expect(src).toContain('publishRecordingEvent({ type: "sample", amplitude })');
+    expect(src).toContain('publishRecordingEvent({ type: "tick", recordedMs: total })');
+    // The recorder still reports its authoritative mode to the page — the
+    // composer controls (timer/waveform/preview) remain fully in place.
+    expect(src).toContain("onModeChange?.(state.mode)");
   });
 });

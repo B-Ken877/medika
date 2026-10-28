@@ -151,8 +151,17 @@ export default function PatientDashboard() {
               <div className="row-sub">{current.description || "Pa gen deskripsyon"}</div>
               <div className="row-meta">Demann lan fèt {relativeTime(current.created_at)}</div>
             </div>
-            <Link href={`/app/consultations/${encodeURIComponent(current.id)}`} className="btn btn-secondary">
-              Gade detay yo <ChevronRight size={15} aria-hidden />
+            {/* Issue #33: an ACTIVE consultation's primary surface is the
+                video-first room; waiting/finished ones open the detail chat. */}
+            <Link
+              href={
+                current.status === "EN_COURS"
+                  ? `/app/consultations/${encodeURIComponent(current.id)}/room`
+                  : `/app/consultations/${encodeURIComponent(current.id)}`
+              }
+              className="btn btn-secondary"
+            >
+              {current.status === "EN_COURS" ? "Antre nan sal la" : "Gade detay yo"} <ChevronRight size={15} aria-hidden />
             </Link>
           </div>
         </section>
@@ -190,7 +199,15 @@ export default function PatientDashboard() {
         {recent.length > 0 && (
           <div className="panel">
             {recent.map((c) => (
-              <Link key={c.id} href={`/app/consultations/${encodeURIComponent(c.id)}`} className="panel-row">
+              <Link
+                key={c.id}
+                href={
+                  c.status === "EN_COURS"
+                    ? `/app/consultations/${encodeURIComponent(c.id)}/room`
+                    : `/app/consultations/${encodeURIComponent(c.id)}`
+                }
+                className="panel-row"
+              >
                 <span className="brand-mark" aria-hidden>
                   <Stethoscope size={16} />
                 </span>

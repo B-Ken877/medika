@@ -237,6 +237,13 @@ export class MedikaSocket {
     return this.send({ type: "typing", consultationId, senderId, isTyping });
   }
 
+  /** Voice-recording ACTIVITY signal (issue #26). Ephemeral, membership-checked
+   *  server-side; the payload carries the activity boolean only — never audio,
+   *  waveform, duration or filenames. */
+  sendRecording(consultationId: string, isRecording: boolean): boolean {
+    return this.send({ type: "recording", consultationId, isRecording });
+  }
+
   /** Ask the server for the counterpart's CURRENT presence in one
    *  consultation (membership-checked server-side; reply arrives as a
    *  presence:update event). Used when a chat view mounts after the socket
