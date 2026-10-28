@@ -150,7 +150,8 @@ describe("doctor wallet (issue #24) — read-only by design", () => {
   it("doctor navigation includes the wallet entry", () => {
     const src = readSrc("components/layout/AppShell.tsx");
     expect(src).toContain('href: "/app/wallet"');
-    expect(src).toContain("Revni mwen");
+    // Issue #34: concise one-line nav label ("Revni" — was "Revni mwen").
+    expect(src).toContain('label: "Revni"');
   });
 
   it("the types describe the additive deadline fields and wallet shapes", () => {

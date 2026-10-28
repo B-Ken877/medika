@@ -17,19 +17,21 @@ import { Avatar, Spinner } from "@/components/ui/primitives";
 
 function navItems(role: "patient" | "doctor") {
   if (role === "doctor") {
+    // Issue #34: concise one-line labels — five destinations must fit cleanly
+    // on narrow phones (no wrapping inside the fixed bottom bar).
     return [
       { href: "/app", label: "Akèy", icon: Home, exact: true },
-      { href: "/app/consultations", label: "Konsiltasyon yo", icon: CalendarDays },
-      { href: "/app/wallet", label: "Revni mwen", icon: Wallet },
-      { href: "/app/notifications", label: "Notifikasyon", icon: Bell },
-      { href: "/app/profile", label: "Pwofil mwen", icon: User },
+      { href: "/app/consultations", label: "Demann", icon: CalendarDays },
+      { href: "/app/wallet", label: "Revni", icon: Wallet },
+      { href: "/app/notifications", label: "Alèt", icon: Bell },
+      { href: "/app/profile", label: "Pwofil", icon: User },
     ];
   }
   return [
     { href: "/app", label: "Akèy", icon: Home, exact: true },
     { href: "/app/doctors", label: "Doktè yo", icon: Stethoscope },
-    { href: "/app/consultations", label: "Konsiltasyon yo", icon: CalendarDays },
-    { href: "/app/profile", label: "Pwofil mwen", icon: User },
+    { href: "/app/consultations", label: "Konsiltasyon", icon: CalendarDays },
+    { href: "/app/profile", label: "Pwofil", icon: User },
   ];
 }
 

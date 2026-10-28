@@ -70,23 +70,28 @@ export function ErrorAlert({
   error,
   onRetry,
   retryLabel = "Eseye ankò",
+  message,
 }: {
   error: unknown;
   onRetry?: () => void;
   retryLabel?: string;
+  /** Caller-supplied context-specific message (issue #35): overrides the
+   *  generic per-status text so screens can say exactly WHAT failed. */
+  message?: string;
 }) {
   if (error === null || error === undefined) return null;
-  const message =
-    error instanceof ApiError
+  const text =
+    message ??
+    (error instanceof ApiError
       ? error.message
       : error instanceof Error
         ? "Gen yon pwoblèm. Tanpri, eseye ankò."
-        : "Gen yon pwoblèm. Tanpri, eseye ankò.";
+        : "Gen yon pwoblèm. Tanpri, eseye ankò.");
   return (
     <div className="alert alert-error" role="alert">
       <AlertTriangle size={17} aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
       <div style={{ flex: 1 }}>
-        {message}
+        {text}
         {onRetry && (
           <div className="mt-1">
             <button className="btn btn-secondary btn-sm" onClick={onRetry}>
