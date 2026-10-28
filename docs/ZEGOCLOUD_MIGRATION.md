@@ -75,11 +75,11 @@ two-device test is still required before declaring the migration verified.
 
 **Server-side provider switch (fail-safe)**
 - `CALL_PROVIDER` env: `livekit` (default) | `zego`.
-- `config.callProvider` honors `zego` ONLY on preview/development
-  deployments (VERCEL_ENV preview/development, or non-production off-Vercel).
-  On ANY production deployment `zego` is ignored and LiveKit is used — even
-  if `CALL_PROVIDER=zego` and the ZEGOCLOUD_* variables leak into production
-  scope. Unknown values fail closed to `livekit`.
+- `config.callProvider` honors `zego` only when explicitly selected through
+  the server-side `CALL_PROVIDER=zego` environment variable in any deployment
+  scope. The default is `livekit`; unknown values fail closed to `livekit`.
+  The browser cannot select the provider. Production ZEGO credentials must
+  belong to the intended production project, not a temporary test project.
 - `POST /api/call/token` runs the SAME authorization funnel for both
   providers: authenticate → membership 403 → provider availability 503 (with
   a provider-specific, no-fallback error) → `EN_COURS`-only 403 → mint.
@@ -130,7 +130,7 @@ credentials configured as a rollback path.
 
 | Variable | Role | Exposure |
 |---|---|---|
-| `CALL_PROVIDER` | `zego` to switch non-production calls to ZEGO | server |
+| `CALL_PROVIDER` | `zego` to explicitly switch this deployment scope to ZEGO; default/rollback is `livekit` | server |
 | `ZEGOCLOUD_APP_ID` | ZEGO project id (number) | server + sent to browser in the token response (public by design) |
 | `ZEGOCLOUD_SERVER_URL` | public engine endpoint (wss://…) from the ZEGO console | server + sent to browser (public by design) |
 | `ZEGOCLOUD_SERVER_SECRET` | token04 minting secret (32 chars) | **server only — never client, never logs** |
