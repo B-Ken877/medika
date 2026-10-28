@@ -1,9 +1,9 @@
 {
   "run_id": "cron-20261029-0505",
-  "started_at_utc": "2026-10-28T21:05:38Z",
-  "heartbeat_utc": "2026-10-28T21:05:38Z",
-  "active": true,
+  "started_at_utc": "2026-10-28T21:48:23Z",
+  "heartbeat_utc": "2026-10-28T21:48:23Z",
+  "active": false,
   "owner": "medika-autonomous-agent",
-  "issue": 60,
-  "note": "Working issue #60: one-active-consultation invariant + legacy reconciliation"
+  "issue": null,
+  "note": "cron-20261029-0505"
 }
