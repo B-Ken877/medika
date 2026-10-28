@@ -84,3 +84,27 @@ Last updated: 2026-10-28T20:04Z (run cron-20261029-0347)
   - Plan per issue checklist: (1) trace entry points routing to room placeholder/chat on acceptance -> direct to /call?mode=video when eligible; (2) room/page.tsx -> compatibility redirect; (3) reuse call/page.tsx + InCallChat.tsx; (4) neutral wait-and-retry bootstrap (bounded backoff, cancellable, no token bypass); (5) single room creation; (6) chat open/close = view state only; (7) End call separate; (8) auth intact; (9) tests; (10) vitest/tsc/lint/build.
   - PR #58 (#53) IN REVIEW - do not touch its files (consultations/page.tsx composer form area conflict risk - check merge-tree at PR time).
 - Run cron-20261029-0414 closed: #53 via PR #58 (unchanged this run, no owner feedback yet).
+
+#56 PLAN (audited, run cron-20261029-0430, branch feat/issue-56-direct-video-call from main a71cbdd):
+- Server: token route 403 covers both not-yet-EN_COURS AND terminal states -> client must poll
+  getConsultation (server stays authoritative for tokens; no bypass).
+- A. lib/call/phases.ts: add phase 'waiting', failureKind 'ineligible', events
+  waiting-for-eligibility + terminal-status{status}; pure eligibilityBackoffMs(attempt) (3s*1.5 cap 15s)
+  + MAX_ELIGIBILITY_ATTEMPTS=40 (~bounded); chatControlVisible unchanged (waiting excluded).
+- B. call/page.tsx bootstrap: eligibility poll loop FIRST (no Room before token!), neutral
+  'N ap tann doktè a konekte…' during RECHERCHE_MEDECIN; terminal REFUSE/TERMINE/EXPIRE -> clear
+  screen no auto-retry; MAX attempts -> neutral manual state (real retry via attempt++); network
+  errors quiet-retry same loop; room wiring/connect only after eligibility+token; keep
+  startCallSentRef once; keep real retry for genuine connect failures.
+- C. consultations/[id]/page.tsx: roomHref->callHref(/call?mode=video); acceptance edge
+  (RECHERCHE_MEDECIN->EN_COURS in applyConsultation) router.replace(callHref) both roles;
+  banners relink to call (labels 'Antre nan apèl videyo a'/'Ouvri apèl videyo a'); header
+  voice/video links KEEP (explicit voice action).
+- D. PatientDashboard.tsx 159+206: EN_COURS links -> /call?mode=video (label 'Antre nan apèl la').
+- E. DoctorDashboard.tsx:141 post-accept push -> /call?mode=video.
+- F. room/page.tsx -> compact compatibility redirect to /call?mode=video (placeholder retired;
+  real call flow handles waiting/eligibility/terminal safely).
+- G. tests: update call-phases (new events/backoff caps), rewrite consultation-room.test.ts
+  (redirect contracts), new direct-video-entry source contracts (banner/links/auto-nav/
+  no-Room-before-eligibility/waiting copy); server authz tests untouched.
+- PR #58 merged by owner (a71cbdd) -> no conflict risk; #53 left IN REVIEW (owner device check).
