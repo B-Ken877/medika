@@ -163,4 +163,15 @@ Design (blocked on nothing):
 7. tests/consultation-uniqueness.test.js (embedded PG): sequential 409, concurrent same-patient Promise.all, concurrent same-doctor, routing skips busy, patient-choice busy 409, accept-busy 409, pending expiry (RECHERCHE_MEDECIN yes / EN_COURS no), reconciliation greedy incl. cross-participant edge (P: A(D1) older, B(D2) newer; Q: C(D2) newest → keep C+A, cancel B), rerun no-op, migration source contract.
 8. docs/CONSULTATION_UNIQUENESS.md: state sets, rule, migration safety, deploy order.
 
-Next action: write migration 008 → config → repo → lifecycle → routes → web → tests → run vitest/tsc/lint/build → PR.
+Next action: write migration 008 → config → repo → lifecycle → routes → web → tests → run vitest/tsc/lint/build → PR.## Run cron-20261029-0505 — issue #60 COMPLETE → IN REVIEW via PR #61
+
+- Branch feat/issue-60-one-active-consultation, commit 7666b34 (19 files, +1193/−63). PR #61 open, mergeable=true, IN REVIEW label on the PR, status comment posted on #60.
+- Shipped: migration 008 (close_reason + deterministic rerunnable reconcile fn + 2 partial unique indexes + pending-age index, reconcile BEFORE indexes); config.pendingExpiryHours=4 + expireStalePending in the deadline processor; routing pool skips busy doctors + 23505 fallbacks (pool retry → waiting); POST /consultations pre-checks + typed 409s (existing_id / doctor-busy) + issue-#40 same-payment replay preserved (sequential + raced via bounded local poll); accept() DOCTOR_BUSY → 409; consToApi close_reason; web booking guard panel + ApiError.existingId + Consultation.close_reason.
+- Tests: NEW tests/consultation-uniqueness.test.js (11 tests, embedded PG). Full root suite: 33 files / 403 tests passed. tsc 0 errors, next lint clean, next build success.
+- Test-suite migrations for the new invariant (fixtures released slots): helpers.createConsultationFixture releases participant slots; beforeEach releases in lifecycle/payments/idempotent files; two legacy-shape fixtures split across two patients (attachments, ws, schema-drift, wallet-payouts, lifecycle adoption test). No production behavior weakened.
+- Disclosed: no real-device verification (owner-only). Deploy note: npm run migrate reconciles legacy duplicates then creates indexes in one migration.
+
+Next action (next run):
+1. Check lock -> state -> PR #61 feedback/merge (owner).
+2. If merged: do NOT mark #60 DONE until owner verifies in production; verify migration applied cleanly if owner reports.
+3. QUEUE EMPTY otherwise. #50 closed by owner on their side (21:02Z).
