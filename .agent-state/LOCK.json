@@ -1,9 +1,9 @@
 {
   "run_id": "cron-20261029-0333",
   "started_at_utc": "2026-10-28T19:39:00Z",
-  "heartbeat_utc": "2026-10-28T19:48:00Z",
-  "active": true,
+  "heartbeat_utc": "2026-10-28T19:52:00Z",
+  "active": false,
   "owner": "medika-autonomous-agent",
-  "issue": 48,
-  "note": "Issue #48: root cause found (onSend failure branch drops a possibly-persisted send when echo lost + REST failed). Implementing: failed-state + idempotent retry (same clientMsgId) + reconnect/timed auto-reconcile."
+  "issue": null,
+  "note": "Run completed: issue #48 IN REVIEW via PR #54. Lock released."
 }
