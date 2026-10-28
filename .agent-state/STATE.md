@@ -1,13 +1,14 @@
 # Medika Autonomous Agent State
-Last updated: 2026-10-28T19:52Z (run cron-20261029-0333)
+Last updated: 2026-10-28T19:54Z (run cron-20261029-0347)
 
 ## Active issue
-- NONE IN PROGRESS.
-- #48 IN REVIEW via PR #54 (sender-side reconciliation: pending-entry state
-  machine lib/chat/pending.ts, same-clientMsgId idempotent retry, reconnect
-  sweep + bounded 10s timer, 'pa t konfime' UI, dismiss-returns-draft).
-  Actual results: vitest 33 files/418 tests, tsc/lint clean, build OK.
-  merge-tree: 0 conflicts vs PR #52 and PR #49.
+- #50 IN PROGRESS (run cron-20261029-0347): real Web Push in production.
+  Branch fix/issue-50-web-push-runbook (from origin/main). Progress: claimed.
+  Next action: audit push code path (src/notifications/push.js + dispatch +
+  vapid-public-key route + medika-web/lib/push.ts), verify prod endpoint
+  (public, read-only), add owner VAPID setup runbook (owner generates keys
+  locally - agent NEVER handles the private key), tests, PR. BLOCKED-on-owner:
+  actual Vercel env configuration + real-device verification.
 
 
 ## Completed / history
@@ -18,7 +19,7 @@ Last updated: 2026-10-28T19:52Z (run cron-20261029-0333)
 - #47 IN REVIEW via PR #52.
 - #48 IN REVIEW via PR #54.
 
-## Open PRs awaiting OWNER review: #49 (issue #45), #52 (issue #47), #54 (issue #48).
+## Open PRs awaiting OWNER review: #49 (issue #45), #54 (issue #48). #52 (issue #47) MERGED by owner (~19:52Z).
 
 ## Next action (next run)
 1. Check lock -> inspect state -> no owner change requests on #49/#52/#54 ->
