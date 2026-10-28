@@ -31,8 +31,25 @@ router.post('/call/token', authenticate, async (req, res, next) => {
       return res.status(403).json({ error: 'Not part of this consultation' });
     }
 
+    // Consultation lifecycle eligibility (issue #45 — fail closed).
+    // Only an ACTIVE consultation may open a LiveKit room:
+    //   * RECHERCHE_MEDECIN — waiting/routing; the row can already carry a
+    //     temporary doctor_id (current OFFER holder), so participant identity
+    //     alone is NOT proof of acceptance. Calls before accept are denied.
+    //   * TERMINE / REFUSE / EXPIRE — terminal states, no call ever.
+    // Payment is verified server-side BEFORE creation, so EN_COURS implies
+    // the established business rules (verified payment + accepted doctor).
+    // Unknown/legacy statuses also fail closed.
+    // NOTE: the service-availability (503) check below intentionally runs
+    // FIRST — its existing contract (no credential fallback, ever) is
+    // independent of eligibility and must not leak business-rule rejections
+    // when the service itself is not configured.
     if (!config.livekitUrl || !config.livekitApiKey || !config.livekitApiSecret) {
       return res.status(503).json({ error: 'LiveKit non configure (LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET requis)' });
+    }
+
+    if (consultation.status !== 'EN_COURS') {
+      return res.status(403).json({ error: 'Appel indisponible pour cette consultation' });
     }
 
     const roomName = 'medika_' + consultationId;
