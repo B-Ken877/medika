@@ -161,7 +161,7 @@ describe('complete patient → doctor workflow with a simulated payment', () => 
     expect(seen).toBe(true);
   });
 
-  it('rejects a repeated submission for the same payment (409) — no duplicate consultations', async () => {
+  it('replays a repeated submission for the same payment — no duplicate consultations (issue #40)', async () => {
     const orderId = 'MC_flow_2';
     await r.post('/api/payment/create').set('Authorization', `Bearer ${token.patient}`).send({ orderId, amount: 750 });
     await r.post('/api/payment/verify').set('Authorization', `Bearer ${token.patient}`).send({ orderId });
@@ -171,10 +171,15 @@ describe('complete patient → doctor workflow with a simulated payment', () => 
       .send({ description: 'a', specialtyNeeded: 'Medecine Generale', doctorId: users.doctor.id, orderId });
     expect(first.status).toBe(201);
 
+    // Issue #40: the same payment + same patient is an idempotent REPLAY of
+    // the same logical request — the consultation the payment bought is
+    // returned (200), never a duplicate and never a confusing 409.
     const second = await r.post('/api/consultations')
       .set('Authorization', `Bearer ${token.patient}`)
       .send({ description: 'b', specialtyNeeded: 'Medecine Generale', doctorId: users.doctor.id, orderId });
-    expect(second.status).toBe(409);
+    expect(second.status).toBe(200);
+    expect(second.body.id).toBe(first.body.id);
+    expect(second.body.payment_replayed).toBe(true);
   });
 
   it('GET /payment/simulated serves the legacy WebView test page', async () => {

@@ -41,6 +41,7 @@ import { formatCurrency } from "@/lib/format";
 import { specialtyLabel } from "@/lib/labels";
 import { Avatar, ErrorAlert, Spinner } from "@/components/ui/primitives";
 import { VerifiedBadge } from "@/components/ui/VerifiedBadge";
+import { hasConsultDraft } from "@/lib/consult-draft";
 
 export default function DoctorProfilePage() {
   const { id } = useParams<{ id: string }>();
@@ -53,6 +54,12 @@ export default function DoctorProfilePage() {
   const [prices, setPrices] = useState<SpecialtyPrice[]>([]);
   /** Bumped by the retry button to re-run the bootstrap effect. */
   const [retryNonce, setRetryNonce] = useState(0);
+  /** Issue #40: true when the patient arrived with a live consult draft. */
+  const [resumeFromConsult, setResumeFromConsult] = useState(false);
+
+  useEffect(() => {
+    setResumeFromConsult(hasConsultDraft());
+  }, []);
 
   useEffect(() => {
     if (!token || !doctorId) return;
@@ -225,11 +232,20 @@ export default function DoctorProfilePage() {
         <p className="tiny muted" style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 8 }}>
           <MessageSquareText size={13} aria-hidden /> Avan peman an, w ap dekri sentòm ou epi chwazi nivo ijans yo.
         </p>
+        {/* Issue #40: arriving from the consult flow (a live draft exists) the
+            CTA CONTINUES that consultation — resume=1 restores the intake and
+            jumps to the pre-payment review. A fresh visit starts the normal
+            full intake, as required. */}
         <Link
-          href={`/app/consult?doctor=${encodeURIComponent(doctor.id)}`}
+          href={
+            resumeFromConsult
+              ? `/app/consult?doctor=${encodeURIComponent(doctor.id)}&resume=1`
+              : `/app/consult?doctor=${encodeURIComponent(doctor.id)}`
+          }
           className="btn btn-primary btn-block btn-lg mt-2"
         >
-          Kòmanse konsiltasyon ak doktè sa a <ChevronRight size={16} aria-hidden />
+          {resumeFromConsult ? "Kontinye konsiltasyon an" : "Kòmanse konsiltasyon ak doktè sa a"}{" "}
+          <ChevronRight size={16} aria-hidden />
         </Link>
       </section>
     </div>

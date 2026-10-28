@@ -140,7 +140,7 @@ describe('payment-gated consultation creation (REQUIRE_PAYMENT=true)', () => {
     expect(res.body.error).toContain('insuffisant');
   });
 
-  it('rejects a payment already consumed by another consultation (409)', async () => {
+  it('replays a payment already consumed by the SAME patient (issue #40 idempotency)', async () => {
     const orderId = 'MC_gated_3';
     await r.post('/api/payment/create').set('Authorization', `Bearer ${token.patient}`).send({ orderId, amount: 750 });
     await r.post('/api/payment/verify').set('Authorization', `Bearer ${token.patient}`).send({ orderId });
@@ -148,10 +148,14 @@ describe('payment-gated consultation creation (REQUIRE_PAYMENT=true)', () => {
       .set('Authorization', `Bearer ${token.patient}`)
       .send({ description: 'a', specialtyNeeded: 'Medecine Generale', orderId });
     expect(first.status).toBe(201);
+    // The same logical intent retried (double-click/refresh) replays the
+    // consultation that payment bought — no duplicate, no confusing 409.
     const second = await r.post('/api/consultations')
       .set('Authorization', `Bearer ${token.patient}`)
       .send({ description: 'b', specialtyNeeded: 'Medecine Generale', orderId });
-    expect(second.status).toBe(409);
+    expect(second.status).toBe(200);
+    expect(second.body.id).toBe(first.body.id);
+    expect(second.body.payment_replayed).toBe(true);
   });
 
   it('rejects a payment belonging to another patient', async () => {

@@ -44,6 +44,7 @@ import { formatCurrency } from "@/lib/format";
 import { specialtyLabel, urgencyLabel } from "@/lib/labels";
 import { Avatar, ErrorAlert, Spinner } from "@/components/ui/primitives";
 import { VerifiedBadge } from "@/components/ui/VerifiedBadge";
+import { saveConsultDraft, readConsultDraft, clearConsultDraft } from "@/lib/consult-draft";
 import { SpecialtySelect, type SpecialtyOption } from "@/components/ui/SpecialtySelect";
 
 type Step = "intake" | "doctors" | "payment" | "creating";
@@ -53,6 +54,9 @@ function ConsultFlow() {
   const router = useRouter();
   const params = useSearchParams();
   const preselectedDoctorId = params.get("doctor");
+  /** Issue #40: resume=1 (arriving back from the doctor's full profile with
+   *  a saved draft) skips straight to the pre-payment review step. */
+  const resumeFromProfile = params.get("resume") === "1";
 
   const [step, setStep] = useState<Step>("intake");
   const [symptoms, setSymptoms] = useState("");
@@ -80,6 +84,12 @@ function ConsultFlow() {
    * doctor selection — lets a retry re-verify the SAME order instead of
    * creating orphan payment rows. */
   const simOrderReadyRef = useRef(false);
+  /** Issue #40: SYNCHRONOUS in-flight guards — React state updates are
+   * async, so two rapid clicks/taps can both pass a state-based guard in
+   * the same render window. A ref flips immediately, closing the
+   * double-submit race that produced the reported payment conflict. */
+  const submitInFlightRef = useRef(false);
+  const payInFlightRef = useRef(false);
 
   /** Issue #31: the deliberate review/confirmation phase before the MonCash
    * gateway is opened. Reset whenever the doctor selection (or the payment
@@ -160,6 +170,14 @@ function ConsultFlow() {
   useEffect(() => {
     if (!preselectedDoctorId || !token) return;
     const controller = new AbortController();
+    // Issue #40: restore the intake draft saved when the patient left to the
+    // doctor's full profile — their symptoms/urgency are never retyped.
+    const draft = readConsultDraft();
+    if (draft) {
+      setSymptoms(draft.symptoms);
+      setUrgency(draft.urgency);
+      if (draft.specialty) setSpecialty(draft.specialty);
+    }
     getDoctors(token, controller.signal)
       .then((list) => {
         if (controller.signal.aborted) return;
@@ -168,7 +186,14 @@ function ConsultFlow() {
           setSelectedDoctor(doc);
           if (doc.specialty) setSpecialty(doc.specialty);
           setDoctorNotFound(false);
-          // Deliberately stay on "intake" — never jump straight to payment.
+          if (draft) clearConsultDraft(); // consumed — no double restore
+          // Fresh entry (no draft): stay on the FULL intake — never jump
+          // straight to payment. Returning from the profile WITH a draft:
+          // resume at the pre-payment review (the intake is already done).
+          if (draft && resumeFromProfile) {
+            setStep("payment");
+            setReviewed(false);
+          }
         } else {
           setDoctorNotFound(true);
         }
@@ -179,7 +204,7 @@ function ConsultFlow() {
         setDoctorNotFound(true);
       });
     return () => controller.abort();
-  }, [preselectedDoctorId, token]);
+  }, [preselectedDoctorId, token, resumeFromProfile]);
 
   const onSpecialtyChange = (value: string) => {
     setSpecialty(value);
@@ -216,18 +241,22 @@ function ConsultFlow() {
     }
   };
 
-  const selectDoctor = (doc: User) => {
-    setSelectedDoctor(doc);
-    setStep("payment");
-    setReviewed(false); // issue #31: every new selection starts at the review step
-    setPayState("idle");
-    setPayError(null);
-    setTransactionId(null);
-    simOrderReadyRef.current = false;
+  /** Issue #40: selecting a doctor opens the FULL profile immediately — no
+   *  extra "See Profile" step. The intake is saved as a draft and restored
+   *  on return (resume=1 jumps to the pre-payment review step). */
+  const openDoctorProfile = (doc: User) => {
+    saveConsultDraft({
+      symptoms,
+      urgency,
+      specialty,
+      savedAt: Date.now(),
+    });
+    router.push(`/app/doctors/${encodeURIComponent(doc.id)}`);
   };
 
   const startPayment = async () => {
-    if (!selectedDoctor || payState === "creating") return;
+    if (!selectedDoctor || payState === "creating" || payInFlightRef.current) return;
+    payInFlightRef.current = true; // synchronous guard (issue #40)
     const amount = priceOf(selectedDoctor.specialty ?? specialty);
     if (!amount || amount <= 0) {
       setPayState("error");
@@ -257,6 +286,8 @@ function ConsultFlow() {
           ? err.message
           : "Nou pa t kapab kòmanse peman an. Tanpri, eseye ankò.",
       );
+    } finally {
+      payInFlightRef.current = false;
     }
   };
 
@@ -267,7 +298,8 @@ function ConsultFlow() {
    * shown ONLY after the backend confirms; a server that refuses simulation
    * (mode changed, production guard) surfaces as an error, never as success. */
   const startSimulatedPayment = async () => {
-    if (!selectedDoctor || payState === "creating" || payState === "verifying") return;
+    if (!selectedDoctor || payState === "creating" || payState === "verifying" || payInFlightRef.current) return;
+    payInFlightRef.current = true; // synchronous guard (issue #40)
     const amount = priceOf(selectedDoctor.specialty ?? specialty);
     if (!amount || amount <= 0) {
       setPayState("error");
@@ -307,6 +339,8 @@ function ConsultFlow() {
           ? err.message
           : "Nou pa t kapab konfime peman tès la. Tanpri, eseye ankò.",
       );
+    } finally {
+      payInFlightRef.current = false;
     }
   };
 
@@ -329,8 +363,14 @@ function ConsultFlow() {
     }
   };
 
+  /** Issue #40: submit the consultation — automatically after a trusted
+   *  payment success (the patient never clicks "send" twice). The ref guard
+   *  closes the double-click race; a failure keeps the payment context so
+   *  the retry REUSES it (never pays again) and the server replays the
+   *  consultation the payment already bought when one exists. */
   const createTheConsultation = async () => {
-    if (!token || !selectedDoctor || submitting) return; // anti double-submit
+    if (!token || !selectedDoctor || submitting || submitInFlightRef.current) return;
+    submitInFlightRef.current = true; // synchronous anti-double-submit
     setSubmitting(true);
     setError(null);
     try {
@@ -349,13 +389,26 @@ function ConsultFlow() {
       router.replace(`/app/consultations/${encodeURIComponent(consultation.id)}`);
     } catch (err) {
       setSubmitting(false);
-      if (err instanceof ApiError && (err.code === "conflict" || err.code === "validation")) {
-        setError(err);
-      } else {
-        setError(err instanceof Error ? err : new ApiError("unknown", 0, "Nou pa t kapab kreye konsiltasyon an. Tanpri, eseye ankò."));
-      }
+      setError(
+        err instanceof Error
+          ? err
+          : new ApiError("unknown", 0, "Nou pa t kapab kreye konsiltasyon an. Tanpri, eseye ankò."),
+      );
+    } finally {
+      submitInFlightRef.current = false;
     }
   };
+
+  // AUTO-SUBMIT (issue #40): payState "done" only ever follows a
+  // SERVER-verified payment (simulated confirm or MonCash verify), so the
+  // consultation request is submitted immediately — no second patient
+  // action. A submission failure is recoverable with the SAME payment.
+  useEffect(() => {
+    if (payState === "done") {
+      void createTheConsultation();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payState]);
 
   const backToDoctors = () => {
     setSelectedDoctor(null);
@@ -501,11 +554,12 @@ function ConsultFlow() {
 
         <div className="list">
           {list.map((d) => (
-            <button key={d.id} className="row" onClick={() => selectDoctor(d)}>
+            <button key={d.id} className="row" onClick={() => openDoctorProfile(d)}>
               <Avatar name={d.name} src={d.avatar_url} size="md" alt={`Foto pwofil ${d.name}`} />
               <div className="row-body">
                 <div className="row-title">
                   <span>{d.name}</span>
+                  {d.verification_status === "verified" && <VerifiedBadge compact />}
                   {d.is_available === 1 ? (
                     <span className="badge badge-green">Disponib</span>
                   ) : (
@@ -519,7 +573,7 @@ function ConsultFlow() {
                   {formatCurrency(priceOf(specialty))}
                 </div>
                 <span className="btn btn-primary btn-sm mt-1" style={{ pointerEvents: "none" }}>
-                  Chwazi <ChevronRight size={13} aria-hidden />
+                  Gade pwofil <ChevronRight size={13} aria-hidden />
                 </span>
               </div>
             </button>
@@ -709,22 +763,29 @@ function ConsultFlow() {
             <CheckCircle2 size={16} aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
             <span>
               {payMode === "simulated"
-                ? "Peman tès la reyisi. Konsiltasyon ou a konfime."
+                ? "Peman tès la reyisi."
                 : "Peman an konfime."}
               {transactionId ? <span className="tiny muted" style={{ display: "block" }}>Idantifyan: {transactionId}</span> : null}
             </span>
           </div>
-          <button className="btn btn-primary btn-block btn-lg" onClick={createTheConsultation} disabled={submitting}>
-            {submitting ? (
-              <>
-                <span className="spin" aria-hidden /> N ap kreye konsiltasyon ou a...
-              </>
-            ) : (
-              <>
-                <Stethoscope size={17} aria-hidden /> Voye demann lan
-              </>
-            )}
-          </button>
+          {/* Issue #40: the request is submitted AUTOMATICALLY — the patient
+              never clicks "send" a second time. Repeated taps are prevented
+              (the spinner + synchronous guard), and a failure below is
+              recoverable WITHOUT paying again (same payment is reused). */}
+          {submitting ? (
+            <button className="btn btn-primary btn-block btn-lg" disabled>
+              <span className="spin" aria-hidden /> N ap voye demann ou a otomatikman...
+            </button>
+          ) : (
+            <div className="stack">
+              <div className="alert alert-warning" role="alert">
+                Peman ou a konfime, men nou pa t kapab voye demann lan. Pa pè — ou pa bezwen peye ankò.
+              </div>
+              <button className="btn btn-primary btn-block btn-lg" onClick={createTheConsultation}>
+                <Stethoscope size={17} aria-hidden /> Reseye voye demann lan (menm peman an)
+              </button>
+            </div>
+          )}
         </div>
       )}
 
