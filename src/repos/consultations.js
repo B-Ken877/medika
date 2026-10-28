@@ -65,6 +65,33 @@ function msgToApi(row) {
 
 // ─── Consultations ───────────────────────────────────────────────────────────
 
+/**
+ * Doctor list SQL — routed-offer visibility (migration 004) vs the legacy
+ * broadcast view. listForUser() degrades to DOCTOR_LIST_LEGACY_SQL when the
+ * 004 schema is not applied yet (42703/42P01), so the doctor dashboard keeps
+ * working during the deploy→migrate window (issue #35 root cause: every
+ * doctor list read 500'd until 004 was applied).
+ */
+const DOCTOR_LIST_ROUTED_SQL = `SELECT * FROM consultations
+   WHERE doctor_id = $1
+      OR (
+        doctor_id IS NULL AND status = 'RECHERCHE_MEDECIN'
+        AND reroute_after IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM consultation_offers o
+           WHERE o.consultation_id = consultations.id
+        )
+      )`;
+
+const DOCTOR_LIST_LEGACY_SQL = `SELECT * FROM consultations
+   WHERE doctor_id = $1
+      OR (doctor_id IS NULL AND status = 'RECHERCHE_MEDECIN')`;
+
+/** Memoized per process: once a 42703/42P01 is seen we stop retrying the
+ *  routed query until restart (a failed round-trip per dashboard load is
+ *  wasteful; the flag flips only when the schema is actually missing). */
+let doctorListSchemaDrifted = false;
+
 async function create({ id, patient_id, patient_name, patient_age, doctor_id, description, specialty_needed, urgency_level, ai_summary, ai_explanation }) {
   const { rows } = await query(
     `INSERT INTO consultations
@@ -94,16 +121,27 @@ async function listForUser(user) {
     // holder (doctor_id). Never-routed rows (legacy data / pre-adoption)
     // keep the historical broadcast visibility; waiting-state rows (pool
     // exhausted, reroute_after set) are shown to no doctor.
-    sql = `SELECT * FROM consultations
-           WHERE doctor_id = $1
-              OR (
-                doctor_id IS NULL AND status = 'RECHERCHE_MEDECIN'
-                AND reroute_after IS NULL
-                AND NOT EXISTS (
-                  SELECT 1 FROM consultation_offers o
-                   WHERE o.consultation_id = consultations.id
-                )
-              )`;
+    //
+    // Issue #35 deploy-order safety: when migration 004 has not been
+    // applied yet the routed query fails with 42703/42P01 (reroute_after /
+    // consultation_offers undefined) — exactly the "Sèvis la pa disponib"
+    // doctor-dashboard outage. Degrade to the legacy broadcast query so the
+    // dashboard renders while the migration is pending, mirroring the
+    // createMessage() 003 pattern.
+    if (!doctorListSchemaDrifted) {
+      try {
+        const { rows } = await query(`${DOCTOR_LIST_ROUTED_SQL} ORDER BY created_at DESC`, params);
+        return rows.map(consToApi);
+      } catch (err) {
+        if (err && (err.code === '42703' || err.code === '42P01')) {
+          doctorListSchemaDrifted = true;
+          console.error('[DB] listForUser: lifecycle schema missing (migration 004 pending) — legacy doctor visibility');
+        } else {
+          throw err;
+        }
+      }
+    }
+    sql = DOCTOR_LIST_LEGACY_SQL;
   } else {
     sql = `SELECT * FROM consultations`;
     params.length = 0;
@@ -127,40 +165,61 @@ async function listForUser(user) {
  * accepts race-safe: exactly one caller ever wins.
  */
 async function accept(id, doctorId) {
-  return withTransaction(async (client) => {
-    const { rows } = await client.query(
-      `UPDATE consultations
-         SET status = 'EN_COURS',
-             doctor_id = $2,
-             accepted_at = now(),
-             expires_at = now() + make_interval(hours => $3),
-             offer_deadline = NULL,
-             reroute_after = NULL,
-             updated_at = now()
-       WHERE id = $1
-         AND status = 'RECHERCHE_MEDECIN'
-         AND (
-           (doctor_id = $2 AND (offer_deadline IS NULL OR offer_deadline > now()))
-           OR (
-             doctor_id IS NULL AND offer_deadline IS NULL AND reroute_after IS NULL
-             AND NOT EXISTS (
-               SELECT 1 FROM consultation_offers o WHERE o.consultation_id = consultations.id
+  try {
+    return await withTransaction(async (client) => {
+      const { rows } = await client.query(
+        `UPDATE consultations
+           SET status = 'EN_COURS',
+               doctor_id = $2,
+               accepted_at = now(),
+               expires_at = now() + make_interval(hours => $3),
+               offer_deadline = NULL,
+               reroute_after = NULL,
+               updated_at = now()
+         WHERE id = $1
+           AND status = 'RECHERCHE_MEDECIN'
+           AND (
+             (doctor_id = $2 AND (offer_deadline IS NULL OR offer_deadline > now()))
+             OR (
+               doctor_id IS NULL AND offer_deadline IS NULL AND reroute_after IS NULL
+               AND NOT EXISTS (
+                 SELECT 1 FROM consultation_offers o WHERE o.consultation_id = consultations.id
+               )
              )
            )
-         )
-       RETURNING *`,
-      [id, doctorId, config.consultationExpiryHours]
-    );
-    const row = rows[0];
-    if (!row) return null;
-    await client.query(
-      `UPDATE consultation_offers
-          SET status = 'ACCEPTED', responded_at = now()
-        WHERE consultation_id = $1 AND doctor_id = $2 AND status = 'PENDING'`,
-      [id, doctorId]
-    );
-    return row;
-  });
+         RETURNING *`,
+        [id, doctorId, config.consultationExpiryHours]
+      );
+      const row = rows[0];
+      if (!row) return null;
+      await client.query(
+        `UPDATE consultation_offers
+            SET status = 'ACCEPTED', responded_at = now()
+          WHERE consultation_id = $1 AND doctor_id = $2 AND status = 'PENDING'`,
+        [id, doctorId]
+      );
+      return row;
+    });
+  } catch (err) {
+    // Issue #35 deploy-order safety: pre-004 schema (accepted_at/expires_at/
+    // offer_deadline/reroute_after or consultation_offers undefined). Fall
+    // back to the historical free-accept UPDATE so a doctor can still accept
+    // the broadcast requests they can see on the degraded dashboard.
+    if (err && (err.code === '42703' || err.code === '42P01')) {
+      console.error('[DB] accept: lifecycle schema missing (migration 004 pending) — legacy accept');
+      const { rows } = await query(
+        `UPDATE consultations
+           SET doctor_id = $2, status = 'EN_COURS', updated_at = now()
+         WHERE id = $1
+           AND status = 'RECHERCHE_MEDECIN'
+           AND (doctor_id IS NULL OR doctor_id = $2)
+         RETURNING *`,
+        [id, doctorId]
+      );
+      return rows[0] || null;
+    }
+    throw err;
+  }
 }
 
 /**

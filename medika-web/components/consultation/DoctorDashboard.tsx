@@ -62,8 +62,11 @@ export default function DoctorDashboard() {
       })
       .catch((err) => {
         if (controller.signal.aborted) return;
+        // Issue #35: a FAILED load must never look like an empty queue — keep
+        // whatever data we already have (null on first load) so the counters
+        // either show real numbers or an explicit "unknown" marker, never a
+        // fabricated zero.
         setError(err);
-        setConsultations([]);
       });
   }, [token]);
 
@@ -109,6 +112,11 @@ export default function DoctorDashboard() {
       ),
     };
   }, [consultations, user?.id]);
+
+  // Issue #35: with no data and a failed request the counters are UNKNOWN,
+  // not zero — "—" keeps that honest instead of reassuring numbers.
+  const countersUnknown = consultations === null && error !== null;
+  const counterValue = (n: number) => (countersUnknown ? "—" : String(n));
 
   const toggleAvailability = async () => {
     if (!token || availabilityBusy) return;
@@ -189,25 +197,25 @@ export default function DoctorDashboard() {
         </div>
       </div>
 
-      {/* Queue summary (real counts) */}
+      {/* Queue summary (real counts; "—" while the load failed) */}
       <div className="stat-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }} role="group" aria-label="Rezime demann yo">
         <div className="stat-card">
           <div className="stat-label">
             <span className="stat-dot yellow" aria-hidden /> An atant
           </div>
-          <div className="stat-value" style={{ fontSize: 26 }}>{buckets.queue.length}</div>
+          <div className="stat-value" style={{ fontSize: 26 }}>{counterValue(buckets.queue.length)}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">
             <span className="stat-dot green" aria-hidden /> K ap dewoule
           </div>
-          <div className="stat-value" style={{ fontSize: 26 }}>{buckets.active.length}</div>
+          <div className="stat-value" style={{ fontSize: 26 }}>{counterValue(buckets.active.length)}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">
             <span className="stat-dot blue" aria-hidden /> Fini
           </div>
-          <div className="stat-value" style={{ fontSize: 26 }}>{buckets.done.length}</div>
+          <div className="stat-value" style={{ fontSize: 26 }}>{counterValue(buckets.done.length)}</div>
         </div>
       </div>
 
@@ -247,7 +255,7 @@ export default function DoctorDashboard() {
             Demann pasyan yo
           </h2>
           <div className="panel-tools">
-            <button className="btn btn-secondary btn-sm" onClick={load} disabled={consultations === null}>
+            <button className="btn btn-secondary btn-sm" onClick={load} disabled={consultations === null && !error}>
               <RefreshCw size={14} aria-hidden /> Refrèchi
             </button>
           </div>
@@ -260,7 +268,7 @@ export default function DoctorDashboard() {
             className={tab === "queue" ? "active" : ""}
             onClick={() => setTab("queue")}
           >
-            An atant <span className="count">{buckets.queue.length}</span>
+            An atant <span className="count">{counterValue(buckets.queue.length)}</span>
           </button>
           <button
             role="tab"
@@ -268,7 +276,7 @@ export default function DoctorDashboard() {
             className={tab === "active" ? "active" : ""}
             onClick={() => setTab("active")}
           >
-            K ap dewoule <span className="count">{buckets.active.length}</span>
+            K ap dewoule <span className="count">{counterValue(buckets.active.length)}</span>
           </button>
           <button
             role="tab"
@@ -276,7 +284,7 @@ export default function DoctorDashboard() {
             className={tab === "done" ? "active" : ""}
             onClick={() => setTab("done")}
           >
-            Fini <span className="count">{buckets.done.length}</span>
+            Fini <span className="count">{counterValue(buckets.done.length)}</span>
           </button>
         </div>
 
@@ -285,7 +293,19 @@ export default function DoctorDashboard() {
             <SkeletonRows count={3} />
           </div>
         )}
-        <ErrorAlert error={error} onRetry={load} />
+
+        {/* Issue #35: a specific, non-generic message for a failed load. On
+            the FIRST failed load there is no data at all; after a successful
+            load, a failed refresh keeps the previously loaded list visible. */}
+        <ErrorAlert
+          error={error}
+          onRetry={load}
+          message={
+            consultations === null
+              ? "Nou pa t kapab chaje demann konsiltasyon yo. Tanpri, verifye koneksyon ou epi eseye ankò."
+              : "Nou pa t kapab mete ajou demann konsiltasyon yo. Lis la montre dènye versyon ki reyisi."
+          }
+        />
 
         {consultations !== null && list.length === 0 && !error && (
           <EmptyState
