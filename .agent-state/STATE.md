@@ -1,15 +1,10 @@
-# Medika Autonomous Agent State
+Last updated: 2026-10-28T20:00:00Z (run cron-20261029-0358)
 Last updated: 2026-10-28T20:04Z (run cron-20261029-0347)
 
 ## Active issue
-- NONE IN PROGRESS.
-- #50: agent-shareable work IN REVIEW via PR #55 (docs/WEB_PUSH_SETUP.md
-  owner runbook; honest client health states server-unreachable /
-  registration-failed; unconfigured-endpoint + runbook contracts). Actual
-  Vercel VAPID config + real-device verification = OWNER-ONLY (needs owner
-  approval/action; do NOT attempt). Issue stays open until owner configures.
-- #53 (black suggestions bar follow-up) and #51 (Vercel preview provisioning)
-  remain UNCLAIMED (NEW) - next candidates, oldest first: #51 then #53.
+- IN PROGRESS: #51 on branch `fix/issue-51-vercel-preview-provisioning` (run cron-20261029-0358).
+- Progress: Claimed; investigating Vercel BUILD_FAILED / Resource provisioning failed root cause from repo side (decoded vercel bot payloads, commit statuses, issue #40 history, repo config audit)
+- Next action: Evidence-based minimal fix PR or precise external-blocker documentation; verify fresh preview READY if possible
 
 
 ## Completed / history
