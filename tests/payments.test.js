@@ -14,7 +14,7 @@ process.env.MONCASH_MODE = 'sandbox';
 process.env.REQUIRE_PAYMENT = 'true';
 process.env.MONCASH_CLIENT_ID = ''; // no real credentials → provider path fails closed
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 const h = await import('./helpers');
 
 let r, users, token = {};
@@ -29,6 +29,15 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await h.closeAll();
+});
+
+// Issue #60: the database enforces ONE blocking consultation per patient —
+// each test starts from released slots so creation tests are independent.
+// The invariant itself is exercised in tests/consultation-uniqueness.test.js.
+beforeEach(async () => {
+  const { query } = await import('../src/db.js').then((m) => (m.default ?? m));
+  await query(`UPDATE consultations SET status = 'TERMINE', updated_at = now()
+                WHERE status IN ('RECHERCHE_MEDECIN','EN_COURS')`);
 });
 
 const ORDER = 'MC_1770000000000_doctor_t1';

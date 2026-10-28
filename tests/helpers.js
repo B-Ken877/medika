@@ -75,10 +75,25 @@ async function authHeader(r, username) {
   return { Authorization: `Bearer ${await loginToken(r, username)}` };
 }
 
-/** Create a consultation directly via repo (test fixture). */
+/** Create a consultation directly via repo (test fixture).
+ *
+ * Issue #60: the database enforces ONE blocking consultation per patient and
+ * per doctor. A fixture describes its own scenario, so before inserting it
+ * releases the participants' prior blocking fixtures (terminal transition —
+ * nothing is deleted). This keeps every non-invariant test focused on its own
+ * behavior; the invariant itself is exercised in
+ * tests/consultation-uniqueness.test.js. */
 async function createConsultationFixture({ patientId, patientName = 'Pat Test', doctorId = null, status = 'RECHERCHE_MEDECIN', specialty = 'Medecine Generale' }) {
   const consultationsRepo = await importCjs('../src/repos/consultations.js');
+  const { query } = await importCjs('../src/db.js');
   const { v4: uuidv4 } = await importCjs('uuid');
+  await query(
+    `UPDATE consultations SET status = 'TERMINE', updated_at = now()
+      WHERE status IN ('RECHERCHE_MEDECIN','EN_COURS')
+        AND ($1::text IS NOT NULL AND patient_id = $1
+             OR $2::text IS NOT NULL AND doctor_id = $2)`,
+    [patientId ?? null, doctorId ?? null]
+  );
   const row = await consultationsRepo.create({
     id: 'cons_' + uuidv4().substring(0, 8),
     patient_id: patientId,

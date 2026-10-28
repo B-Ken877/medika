@@ -71,6 +71,11 @@ export interface Consultation {
   offer_deadline?: number | null;
   accepted_at?: number | null;
   expires_at?: number | null;
+  /** Issue #60: why a consultation left the active set without a normal
+   * completion — 'duplicate_open_consultation' (legacy reconciliation) or
+   * 'pending_timeout' (bounded unanswered-request expiry). Absent/null for
+   * normal transitions. */
+  close_reason?: string | null;
 }
 
 // ─── Doctor wallet (issue #24) ─────────────────────────────────────────────

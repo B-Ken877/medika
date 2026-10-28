@@ -43,15 +43,19 @@ beforeAll(async () => {
   token.patient = await h.loginToken(r, 't.patient');
   token.doctor = await h.loginToken(r, 't.doctor');
   token.patient2 = await h.loginToken(r, 't.patient2');
+  const repo = (await import('../src/repos/consultations.js')).default;
+  // Issue #60: the one-active invariant releases a participant's prior slots
+  // when a new fixture is created (both participants share the doctor here),
+  // so the consultation that gets prescribed (finishedConsId) is created and
+  // terminated FIRST — then consId is created and stays EN_COURS.
+  finishedConsId = (await h.createConsultationFixture({
+    patientId: users.patient2.id, doctorId: users.doctor.id, status: 'EN_COURS',
+  })).id;
+  await repo.prescribe(finishedConsId, users.doctor.id, 'fini');
   const cons = await h.createConsultationFixture({
     patientId: users.patient.id, doctorId: users.doctor.id, status: 'EN_COURS',
   });
   consId = cons.id;
-  const repo = (await import('../src/repos/consultations.js')).default;
-  finishedConsId = (await h.createConsultationFixture({
-    patientId: users.patient.id, doctorId: users.doctor.id, status: 'EN_COURS',
-  })).id;
-  await repo.prescribe(finishedConsId, users.doctor.id, 'fini');
   otherConsId = (await h.createConsultationFixture({ patientId: users.patient2.id })).id;
 });
 
@@ -104,7 +108,7 @@ describe('POST /api/consultations/:id/attachments', () => {
 
   it('rejects uploads into a consultation that is not EN_COURS', async () => {
     const res = await r.post(`/api/consultations/${finishedConsId}/attachments`)
-      .set('Authorization', `Bearer ${token.patient}`)
+      .set('Authorization', `Bearer ${token.patient2}`) // finishedCons belongs to patient2 (issue #60 fixture split)
       .attach('file', PNG_BYTES, 'x.png');
     expect(res.status).toBe(409);
   });

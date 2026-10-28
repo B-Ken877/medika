@@ -92,7 +92,9 @@ describe('earning eligibility (completed + verified payment, exactly once)', () 
     const pay = await h.createPaidPaymentFixture({ patientId: users.patient.id, orderId, amount: 750 });
     await paymentsRepo.attachToConsultation(pay.id, active.id); // paid but NOT completed
 
-    await h.createConsultationFixture({ patientId: users.patient.id, doctorId: users.doctor.id }); // RECHERCHE_MEDECIN
+    // Issue #60: the patient1+doctor slots are held by `active` — the extra
+    // RECHERCHE_MEDECIN fixture belongs to patient2 so `active` stays EN_COURS.
+    await h.createConsultationFixture({ patientId: users.patient2.id }); // RECHERCHE_MEDECIN
     await query(
       `INSERT INTO consultations (id, patient_id, patient_name, doctor_id, status, description, specialty_needed, urgency_level, ai_summary, ai_explanation)
        VALUES ('cons_refused_w', $1, 'Pat Test', $2, 'REFUSE', 'x', 'Medecine Generale', 'Moyenne', '', '')`,

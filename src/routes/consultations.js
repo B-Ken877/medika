@@ -67,7 +67,40 @@ router.post('/consultations', authenticate, requireRole('patient'), async (req, 
     const specialty = specialtyNeeded || 'Medecine Generale';
     const price = await specialtiesRepo.priceFor(specialty);
 
-    // ── Payment gate (audit C5 fix) ──────────────────────────────────────────
+    // ── One-active-consultation invariant (issue #60) ──────────────────────
+    // Fast-fail pre-checks (the DB partial unique indexes remain the
+    // authoritative referee for true concurrent races — see the 23505
+    // handling below). A patient with a blocking consultation is pointed
+    // back to it — UNLESS this request carries the very payment that bought
+    // it (issue #40 replay: double-tap / retry must return the SAME
+    // consultation, never a 409 and never a duplicate). A patient explicitly
+    // picking a doctor who already holds a blocking consultation gets the
+    // honest "doctor busy" answer.
+    const existingActive = await consultationsRepo.findActiveForPatient(req.user.id);
+    if (existingActive) {
+      const replayed = await tryReplayActivePayment({
+        active: existingActive, patientId: req.user.id, orderId, transactionId,
+      });
+      if (replayed) {
+        return res.json({ ...consultationsRepo.consToApi(replayed), payment_replayed: true });
+      }
+      return res.status(409).json({
+        error: 'Ou gen deja yon konsiltasyon aktif. Fini oswa tann li anvan w kreye yon lòt.',
+        existing_id: existingActive.id,
+        existing_status: existingActive.status,
+      });
+    }
+    if (doctorId) {
+      const doctorActive = await consultationsRepo.findActiveForDoctor(String(doctorId));
+      if (doctorActive) {
+        return res.status(409).json({
+          error: 'Doktè sa a okipe deja yon konsiltasyon. Chwazi yon lòt doktè oswa eseye pi ta.',
+          existing_id: doctorActive.id,
+        });
+      }
+    }
+
+    // ── Payment gate (audit C5 fix) ───────────────────────────────────────────
     let payment = null;
     if (config.requirePayment) {
       if (!orderId && !transactionId) {
@@ -96,18 +129,54 @@ router.post('/consultations', authenticate, requireRole('patient'), async (req, 
       }
     }
 
-    const consultation = await consultationsRepo.create({
-      id,
-      patient_id: req.user.id,
-      patient_name: patient.name,
-      patient_age: patientAge === undefined ? null : (parseInt(patientAge, 10) || null),
-      doctor_id: doctorId || null,
-      description,
-      specialty_needed: specialty,
-      urgency_level: urgencyLevel || 'Moyenne',
-      ai_summary: aiSummary || '',
-      ai_explanation: aiExplanation || '',
-    });
+    let consultation;
+    try {
+      consultation = await consultationsRepo.create({
+        id,
+        patient_id: req.user.id,
+        patient_name: patient.name,
+        patient_age: patientAge === undefined ? null : (parseInt(patientAge, 10) || null),
+        doctor_id: doctorId || null,
+        description,
+        specialty_needed: specialty,
+        urgency_level: urgencyLevel || 'Moyenne',
+        ai_summary: aiSummary || '',
+        ai_explanation: aiExplanation || '',
+      });
+    } catch (err) {
+      // Issue #60: the partial unique indexes are the authoritative referee —
+      // a concurrent request won the contested slot between the pre-check and
+      // this INSERT. Respond 409 with the right explanation; the verified
+      // payment was NOT attached, so nothing was consumed.
+      if (err && err.code === '23505') {
+        if (err.constraint_scope === 'doctor') {
+          // The patient-choice doctor's slot was taken by a simultaneous
+          // booking — the clear "doctor is currently busy" answer.
+          return res.status(409).json({
+            error: 'Doktè sa a okipe deja yon konsiltasyon. Chwazi yon lòt doktè oswa eseye pi ta.',
+          });
+        }
+        const winner = await consultationsRepo.findActiveForPatient(req.user.id);
+        if (winner) {
+          // Same-payment race (issue #40): replay instead of 409.
+          if (payment && payment.row) {
+            const replayed = await tryReplayActivePayment({
+              active: winner, patientId: req.user.id, orderId, transactionId,
+            });
+            if (replayed) {
+              return res.json({ ...consultationsRepo.consToApi(replayed), payment_replayed: true });
+            }
+          }
+          return res.status(409).json({
+            error: 'Ou gen deja yon konsiltasyon aktif. Fini oswa tann li anvan w kreye yon lòt.',
+            existing_id: winner.id,
+            existing_status: winner.status,
+          });
+        }
+        return res.status(409).json({ error: 'Ou gen deja yon konsiltasyon aktif.' });
+      }
+      throw err;
+    }
 
     if (payment && payment.row) {
       const attached = await paymentsRepo.attachToConsultation(payment.row.id, id);
@@ -253,6 +322,38 @@ async function resolveVerifiedPayment({ patientId, orderId, transactionId, requi
     return { error: `Montant paye insuffisant (requis: ${requiredAmount} HTG)` };
   }
   return { row };
+}
+
+/**
+ * Issue #40 replay preserved under the issue #60 one-active invariant.
+ * When the patient's blocking consultation was bought by THIS request's
+ * payment (double-tap, refresh, retry), the existing consultation is
+ * returned instead of a 409. Strictly LOCAL resolution — never a provider
+ * call: the payment row must be verified (PAID), owned by the requesting
+ * patient, and attached to the active consultation — or attaching within a
+ * short bounded window (a racing same-payment request sits between its
+ * INSERT and its attach for only milliseconds). Returns the consultation
+ * row to replay, or null (→ ordinary conflict answer; an unattached payment
+ * is never consumed by this path).
+ */
+async function tryReplayActivePayment({ active, patientId, orderId, transactionId }) {
+  if (!orderId && !transactionId) return null;
+  let row = null;
+  if (orderId) row = await paymentsRepo.findByOrderId(String(orderId));
+  if (!row && transactionId) row = await paymentsRepo.findByTransactionId(String(transactionId));
+  if (!row || row.patient_id !== patientId || row.status !== 'PAID') return null;
+  if (row.consultation_id === active.id) return active;
+  if (row.consultation_id) return null; // this payment bought a different consultation
+  // Verified, owned, not yet attached → raced double-tap. The winner request
+  // attaches this very payment right after its INSERT; poll briefly.
+  for (let i = 0; i < 10; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    const fresh = orderId
+      ? await paymentsRepo.findByOrderId(String(orderId))
+      : await paymentsRepo.findByTransactionId(String(transactionId));
+    if (fresh && fresh.status === 'PAID' && fresh.consultation_id === active.id) return active;
+  }
+  return null;
 }
 
 // Simulation-mode retrieval helpers (STRICTLY isolated: non-production +
@@ -597,8 +698,16 @@ router.get('/consultations/:id/attachments/:aid/file', async (req, res, next) =>
  */
 router.put('/consultations/:id/accept', authenticate, requireRole('doctor'), async (req, res, next) => {
   try {
-    const c = await consultationsRepo.accept(req.params.id, req.user.id);
-    if (!c) {
+    const accepted = await consultationsRepo.accept(req.params.id, req.user.id);
+    if (accepted === 'DOCTOR_BUSY') {
+      // Issue #60: the doctor-side partial unique index rejected a second
+      // blocking consultation for this doctor (concurrent accept or legacy
+      // data) — an honest 409, never a 500.
+      return res.status(409).json({
+        error: 'Ou gen deja yon konsiltasyon aktif. Fini li anvan w aksepte yon lòt.',
+      });
+    }
+    if (!accepted) {
       const current = await consultationsRepo.findById(req.params.id);
       if (!current || current.status !== 'RECHERCHE_MEDECIN') {
         return res.status(404).json({ error: 'Not found' });
@@ -627,16 +736,16 @@ router.put('/consultations/:id/accept', authenticate, requireRole('doctor'), asy
         text: `Le ${req.user.name} a accepte votre demande. La session de chat est ouverte.`,
       });
     }
-    notifyConsultationUpdate(req, c);
+    notifyConsultationUpdate(req, accepted);
     // Issue #36: patient notified of the acceptance AFTER the authoritative
     // status transition commits. Generic copy — no medical data.
     notifications.emit({
-      userId: c.patient_id,
+      userId: accepted.patient_id,
       eventType: 'consultation:accepted',
-      idempotencyKey: `consultation:${c.id}:accepted`,
+      idempotencyKey: `consultation:${accepted.id}:accepted`,
       ...notifications.COPY.consultationAccepted,
     });
-    res.json(consultationsRepo.consToApi(c));
+    res.json(consultationsRepo.consToApi(accepted));
   } catch (err) { next(err); }
 });
 

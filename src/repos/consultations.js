@@ -28,6 +28,11 @@ function consToApi(row) {
     ai_explanation: row.ai_explanation ?? '',
     status: row.status,
     prescription: row.prescription ?? null,
+    // Issue #60: why a consultation left the active set without a normal
+    // completion — 'duplicate_open_consultation' (legacy reconciliation) or
+    // 'pending_timeout' (bounded unanswered-request expiry). NULL for every
+    // normal transition and all legacy rows. Additive; older clients ignore it.
+    close_reason: row.close_reason ?? null,
     created_at: toEpoch(row.created_at),
     updated_at: toEpoch(row.updated_at),
     // Lifecycle deadlines (issue #25, additive). offer_deadline = acceptance
@@ -93,17 +98,59 @@ const DOCTOR_LIST_LEGACY_SQL = `SELECT * FROM consultations
 let doctorListSchemaDrifted = false;
 
 async function create({ id, patient_id, patient_name, patient_age, doctor_id, description, specialty_needed, urgency_level, ai_summary, ai_explanation }) {
+  try {
+    const { rows } = await query(
+      `INSERT INTO consultations
+         (id, patient_id, patient_name, patient_age, doctor_id, description,
+          specialty_needed, urgency_level, ai_summary, ai_explanation, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'RECHERCHE_MEDECIN')
+       RETURNING *`,
+      [id, patient_id, patient_name, patient_age ?? null, doctor_id ?? null,
+       description || '', specialty_needed || 'Medecine Generale',
+       urgency_level || 'Moyenne', ai_summary || '', ai_explanation || '']
+    );
+    return rows[0];
+  } catch (err) {
+    // Issue #60: the partial unique indexes (uq_consultations_patient_active /
+    // uq_consultations_doctor_active) are the AUTHORITATIVE one-active-per-
+    // participant invariant. A 23505 here means a concurrent request won the
+    // participant's slot between the caller's advisory pre-check and this
+    // INSERT — annotated for a typed conflict response (never a 500).
+    if (err && err.code === '23505') {
+      err.constraint_scope = /patient/.test(String(err.constraint || '')) ? 'patient' : 'doctor';
+    }
+    throw err;
+  }
+}
+
+/**
+ * The caller's single blocking consultation, if any (issue #60 fast-fail
+ * pre-check + conflict responses). NULL = free to book. Blocking states are
+ * exactly RECHERCHE_MEDECIN and EN_COURS — terminal rows never block.
+ */
+async function findActiveForPatient(patientId) {
+  if (!patientId) return null;
   const { rows } = await query(
-    `INSERT INTO consultations
-       (id, patient_id, patient_name, patient_age, doctor_id, description,
-        specialty_needed, urgency_level, ai_summary, ai_explanation, status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'RECHERCHE_MEDECIN')
-     RETURNING *`,
-    [id, patient_id, patient_name, patient_age ?? null, doctor_id ?? null,
-     description || '', specialty_needed || 'Medecine Generale',
-     urgency_level || 'Moyenne', ai_summary || '', ai_explanation || '']
+    `SELECT * FROM consultations
+      WHERE patient_id = $1 AND status IN ('RECHERCHE_MEDECIN', 'EN_COURS')
+      ORDER BY created_at DESC, id DESC
+      LIMIT 1`,
+    [patientId]
   );
-  return rows[0];
+  return rows[0] || null;
+}
+
+/** The doctor's single blocking consultation (offer held or accepted), if any. */
+async function findActiveForDoctor(doctorId) {
+  if (!doctorId) return null;
+  const { rows } = await query(
+    `SELECT * FROM consultations
+      WHERE doctor_id = $1 AND status IN ('RECHERCHE_MEDECIN', 'EN_COURS')
+      ORDER BY created_at DESC, id DESC
+      LIMIT 1`,
+    [doctorId]
+  );
+  return rows[0] || null;
 }
 
 async function findById(id) {
@@ -201,6 +248,13 @@ async function accept(id, doctorId) {
       return row;
     });
   } catch (err) {
+    // Issue #60: the doctor-side partial unique index makes a concurrent or
+    // legacy double-accept impossible — the DB, not the API, is the referee.
+    // Surfaced as a sentinel so the route answers 409 "you already have an
+    // active consultation" instead of a generic failure.
+    if (err && err.code === '23505') {
+      return 'DOCTOR_BUSY';
+    }
     // Issue #35 deploy-order safety: pre-004 schema (accepted_at/expires_at/
     // offer_deadline/reroute_after or consultation_offers undefined). Fall
     // back to the historical free-accept UPDATE so a doctor can still accept
@@ -388,6 +442,8 @@ module.exports = {
   msgToApi,
   create,
   findById,
+  findActiveForPatient,
+  findActiveForDoctor,
   listForUser,
   accept,
   prescribe,

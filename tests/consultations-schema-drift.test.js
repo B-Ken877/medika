@@ -38,6 +38,9 @@ describe('consultation list/accept deploy-order safety (issue #35)', () => {
     const consultationsRepo = await import('../src/repos/consultations');
     // Legacy broadcast request (never routed, doctor_id NULL) + a request
     // already owned by the doctor — both must stay visible pre-004.
+    // Issue #60: the DB enforces one blocking consultation per patient/doctor,
+    // so the doctor-owned fixture is patient2's and is immediately completed —
+    // visibility of a doctor-owned row in the list is what's under test.
     legacyCons = await consultationsRepo.create({
       id: 'cons_drift1', patient_id: users.patient.id, patient_name: 'Pat Test',
       patient_age: 30, doctor_id: null, description: 'legacy broadcast',
@@ -45,11 +48,13 @@ describe('consultation list/accept deploy-order safety (issue #35)', () => {
       ai_summary: '', ai_explanation: '',
     });
     ownedCons = await consultationsRepo.create({
-      id: 'cons_drift2', patient_id: users.patient.id, patient_name: 'Pat Test',
+      id: 'cons_drift2', patient_id: users.patient2.id, patient_name: 'Pat Deux',
       patient_age: 30, doctor_id: users.doctor.id, description: 'owned',
       specialty_needed: 'Medecine Generale', urgency_level: 'Moyenne',
       ai_summary: '', ai_explanation: '',
     });
+    await consultationsRepo.accept(ownedCons.id, users.doctor.id);
+    await consultationsRepo.prescribe(ownedCons.id, users.doctor.id, 'rx');
   });
 
   afterAll(async () => {

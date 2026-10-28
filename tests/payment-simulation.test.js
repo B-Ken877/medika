@@ -162,6 +162,11 @@ describe('complete patient → doctor workflow with a simulated payment', () => 
   });
 
   it('replays a repeated submission for the same payment — no duplicate consultations (issue #40)', async () => {
+    // Issue #60: release the slots held by the previous workflow test (the
+    // one-active invariant is DB-enforced; replay semantics stay intact).
+    const { query } = await import('../src/db.js').then((m) => (m.default ?? m));
+    await query(`UPDATE consultations SET status = 'TERMINE', updated_at = now()
+                  WHERE status IN ('RECHERCHE_MEDECIN','EN_COURS')`);
     const orderId = 'MC_flow_2';
     await r.post('/api/payment/create').set('Authorization', `Bearer ${token.patient}`).send({ orderId, amount: 750 });
     await r.post('/api/payment/verify').set('Authorization', `Bearer ${token.patient}`).send({ orderId });
