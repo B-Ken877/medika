@@ -324,11 +324,33 @@ function CallScreen() {
       } catch (err) {
         if (disposed) return;
         dispatch({ type: "connect-failed", kind: "generic" });
-        setError(
-          err instanceof ApiError
-            ? err.message
-            : "Nou pa rive jwenn sèvis apèl la. Tanpri, eseye ankò pita.",
-        );
+
+        // Do not hide the one actionable server response: the API deliberately
+        // returns 503 when LiveKit credentials are missing. This lets testers
+        // distinguish a deployment configuration problem from a phone/network
+        // problem without exposing credentials or raw server internals.
+        const liveKitNotConfigured =
+          err instanceof ApiError &&
+          err.status === 503 &&
+          typeof err.detail === "string" &&
+          /LIVEKIT_URL.*LIVEKIT_API_KEY.*LIVEKIT_API_SECRET/.test(err.detail);
+
+        if (liveKitNotConfigured) {
+          setError(
+            "Sèvis apèl la poko konfigire sou sèvè a. Administratè a dwe konfigire LiveKit nan anviwònman Vercel yo.",
+          );
+        } else {
+          if (!(err instanceof ApiError)) {
+            console.error("[Medika call] LiveKit connection attempt failed", {
+              name: err instanceof Error ? err.name : "UnknownError",
+            });
+          }
+          setError(
+            err instanceof ApiError
+              ? err.message
+              : "Nou pa rive jwenn sèvis apèl la. Tanpri, eseye ankò pita.",
+          );
+        }
       }
     })();
 
