@@ -108,3 +108,26 @@ Last updated: 2026-10-28T20:04Z (run cron-20261029-0347)
   (redirect contracts), new direct-video-entry source contracts (banner/links/auto-nav/
   no-Room-before-eligibility/waiting copy); server authz tests untouched.
 - PR #58 merged by owner (a71cbdd) -> no conflict risk; #53 left IN REVIEW (owner device check).
+
+
+## Run cron-20261029-0430 summary (closed loop)
+- #56: IN REVIEW via PR #59 (branch feat/issue-56-direct-video-call, commit 3c83656, 9 files
+  +549/-444). Direct-to-video entry (auto-nav on acceptance, dashboard links, doctor post-accept,
+  room placeholder -> compat redirect), two-phase call bootstrap (eligibility poll w/ bounded
+  backoff BEFORE any Room; calm waiting; terminal honest states), phases machine extended
+  (waiting/ineligible/backoff budget). Server token gate untouched+guarded.
+  Tests: vitest 36f/468 passed, tsc 0, lint clean, build ok.
+- LESSON (fixed in scripts/agent_state_update.py): the script used to leave the repo on the
+  agent-state branch (which carries a FULL OLD tree) — a later tsc/build/diff then ran against
+  the wrong tree; one intermediate verification pass was discarded and re-run on the branch.
+  Script now restores the previous branch after every push.
+- #53: PR #58 MERGED by owner (a71cbdd). Remaining #53 work is owner-side (device checklist in
+  docs/MOBILE_KEYBOARD_SUGGESTION_BAR.md §4). Label left IN REVIEW for owner.
+- #51: PR #57 merged earlier; remaining steps owner-only (Vercel dashboard).
+
+## Next action (next run)
+1. Check lock -> state -> owner feedback on PR #59 (or issue #56).
+2. QUEUE EMPTY otherwise: no new agent-eligible issues exist. #50 stays owner-only (Vercel
+   VAPID env/secrets config + real-device push verification - do NOT attempt).
+3. If owner merges PR #59: verify deployment/preview, report; do not mark #56 DONE until owner
+   verifies on a real device (per issue acceptance criteria).
