@@ -37,10 +37,6 @@ export interface User {
   avatar_url?: string | null;
   rating?: number | null;
   is_available?: number;
-  /** Issue #32: server-owned credential verification status. NULL =
-   *  unknown/legacy — NOT verified; never inferred from a license string. */
-  verification_status?: "pending" | "verified" | "rejected" | null;
-  verified_at?: number | null;
 }
 
 export interface AuthResponse {
@@ -390,6 +386,15 @@ export interface WsTypingEvent {
   isTyping: boolean;
 }
 
+/** Voice-recording ACTIVITY (issue #26) — ephemeral, never persisted, minimal
+ *  payload (activity boolean only: no audio/waveform/duration/filenames). */
+export interface WsRecordingEvent {
+  type: "recording";
+  consultationId: string;
+  senderId: string;
+  isRecording: boolean;
+}
+
 /** Compact read-receipt event (one per mark-read request, not per message). */
 export interface WsMessagesReadEvent {
   type: "messages:read";
@@ -429,6 +434,7 @@ export type WsServerEvent =
   | WsConsultationUpdatedEvent
   | WsNewConsultationEvent
   | WsTypingEvent
+  | WsRecordingEvent
   | WsMessagesReadEvent
   | WsPresenceEvent
   | WsIncomingCallEvent

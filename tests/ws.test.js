@@ -326,3 +326,89 @@ describe('WS messaging — messaging upgrade contracts', () => {
     expect(stored.text).toBe(emojiText);
   });
 });
+
+describe('WS recording activity relay (issue #26)', () => {
+  let consId, closedConsId, outsiderWs;
+
+  beforeAll(async () => {
+    const cons = await h.createConsultationFixture({
+      patientId: users.patient.id, doctorId: users.doctor.id, status: 'EN_COURS',
+    });
+    consId = cons.id;
+    const repo = (await import('../src/repos/consultations.js')).default;
+    const closed = await h.createConsultationFixture({
+      patientId: users.patient.id, doctorId: users.doctor.id, status: 'EN_COURS',
+    });
+    closedConsId = (await repo.prescribe(closed.id, users.doctor.id, 'òrdònans')).id;
+    patientWs = await authSocket('patient');
+    doctorWs = await authSocket('doctor');
+    outsiderWs = await authSocket('patient2');
+    await drain(patientWs);
+    await drain(doctorWs);
+    await drain(outsiderWs);
+  });
+
+  afterAll(() => {
+    patientWs?.close();
+    doctorWs?.close();
+    outsiderWs?.close();
+  });
+
+  it('relays recording activity to the other participant with a MINIMAL payload', async () => {
+    const doctorRecv = nextMessage(doctorWs, 5000, (e) => e.type === 'recording' && e.consultationId === consId);
+    patientWs.send(JSON.stringify({ type: 'recording', consultationId: consId, isRecording: true }));
+    const evt = await doctorRecv;
+    expect(evt.isRecording).toBe(true);
+    expect(evt.senderId).toBe(users.patient.id);
+    // Exactly the four contract keys — no audio/waveform/duration/filename.
+    expect(Object.keys(evt).sort()).toEqual(['consultationId', 'isRecording', 'senderId', 'type']);
+  });
+
+  it('relays the stop signal (isRecording:false)', async () => {
+    const doctorRecv = nextMessage(doctorWs, 5000, (e) => e.type === 'recording' && e.consultationId === consId && e.isRecording === false);
+    patientWs.send(JSON.stringify({ type: 'recording', consultationId: consId, isRecording: false }));
+    const evt = await doctorRecv;
+    expect(evt.senderId).toBe(users.patient.id);
+  });
+
+  it('does NOT relay recording activity for a closed consultation (lifecycle gate)', async () => {
+    patientWs.send(JSON.stringify({ type: 'recording', consultationId: closedConsId, isRecording: true }));
+    await expect(nextMessage(doctorWs, 700, (e) =>
+      e.type === 'recording' && e.consultationId === closedConsId)).rejects.toThrow('timeout');
+  });
+
+  it('does NOT relay for a consultation the sender does not belong to', async () => {
+    const other = await h.createConsultationFixture({ patientId: users.patient2.id });
+    patientWs.send(JSON.stringify({ type: 'recording', consultationId: other.id, isRecording: true }));
+    await expect(nextMessage(outsiderWs, 700, (e) =>
+      e.type === 'recording' && e.consultationId === other.id)).rejects.toThrow('timeout');
+  });
+
+  it('derives the recording sender from the authenticated socket (spoofed ids ignored)', async () => {
+    const doctorRecv = nextMessage(doctorWs, 5000, (e) =>
+      e.type === 'recording' && e.consultationId === consId);
+    patientWs.send(JSON.stringify({
+      type: 'recording', consultationId: consId, isRecording: true, senderId: users.doctor.id,
+    }));
+    const evt = await doctorRecv;
+    expect(evt.senderId).toBe(users.patient.id); // authenticated identity, not the frame
+  });
+
+  it('never persists recording activity as a message', async () => {
+    const before = await r.get(`/api/consultations/${consId}/messages`)
+      .set('Authorization', `Bearer ${token.patient}`);
+    patientWs.send(JSON.stringify({ type: 'recording', consultationId: consId, isRecording: true }));
+    patientWs.send(JSON.stringify({ type: 'recording', consultationId: consId, isRecording: false }));
+    await waitFor(300);
+    const after = await r.get(`/api/consultations/${consId}/messages`)
+      .set('Authorization', `Bearer ${token.patient}`);
+    expect(after.body.length).toBe(before.body.length);
+  });
+
+  it('typing indicators still work independently alongside recording', async () => {
+    const doctorRecv = nextMessage(doctorWs, 5000, (e) => e.type === 'typing' && e.consultationId === consId);
+    patientWs.send(JSON.stringify({ type: 'typing', consultationId: consId, isTyping: true }));
+    const evt = await doctorRecv;
+    expect(evt.isTyping).toBe(true);
+  });
+});
