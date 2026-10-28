@@ -1,13 +1,13 @@
 # Medika Autonomous Agent State
-Last updated: 2026-10-28T19:38Z (run cron-20261029-0322)
+Last updated: 2026-10-28T19:40Z (run cron-20261029-0333)
 
 ## Active issue
-- NONE IN PROGRESS.
-- #47 IN REVIEW via PR #52 (Android keyboard: interactive-widget=resizes-content,
-  useChatScroll container re-pin, composer autofill/enterKeyHint attrs; toolbar
-  audited = OS/keyboard-owned accessory bar, documented). Actual results:
-  vitest 32 files/409 tests, tsc/lint clean, next build OK (meta verified).
-  merge-tree vs PR #49: 0 conflicts.
+- #48 IN PROGRESS (run cron-20261029-0333): NEW [HIGH PRIORITY] Reconcile sent
+  messages in sender chat without requiring refresh. Branch
+  fix/issue-48-sender-message-reconcile (from origin/main). Progress: lock
+  acquired, IN PROGRESS label added. Next action: trace send lifecycle
+  (optimistic UI -> API/WS persistence -> echo -> reconciliation), find root
+  cause, implement, tests+build, PR.
 
 
 ## Completed / history
