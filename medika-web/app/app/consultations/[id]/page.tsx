@@ -36,6 +36,13 @@ import { presenceFromEvent, presenceLabel, type PresenceState } from "@/lib/ws/p
 import { applyMessagesRead, receiptFor, unreadIncomingIds, type ReceiptState } from "@/lib/chat/receipts";
 import { insertAtCursor } from "@/lib/chat/emoji";
 import { waitForMessageEcho, mergePersistedMessage } from "@/lib/chat/delivery";
+import {
+  isReconcilablePending,
+  markPendingFailed,
+  markPendingRetrying,
+  removePending,
+  type PendingMessage,
+} from "@/lib/chat/pending";
 import type { VoiceMode } from "@/lib/chat/voice";
 import { uploadConsultationAttachment } from "@/lib/api/endpoints";
 import { Avatar, ErrorAlert, Spinner } from "@/components/ui/primitives";
@@ -50,26 +57,19 @@ import { VoiceRecorder } from "@/components/consultation/VoiceRecorder";
 import { RemoteRecordingIndicator } from "@/components/consultation/RemoteRecordingIndicator";
 import { useChatScroll } from "@/components/consultation/useChatScroll";
 
-/** Optimistic entry while a durable send is unresolved. `failed` marks a
- *  total delivery failure (WS echo timeout AND REST fallback failed) — the
- *  entry then offers a retry that reuses the SAME clientMsgId (server-side
- *  idempotency) and the already-uploaded attachment when present. */
-interface PendingMessage {
-  clientMsgId: string;
-  createdAt: number;
-  text: string;
-  messageType: "text" | "image" | "video" | "voice" | "file";
-  fileUrl: string | null;
-  fileSize: number | null;
-  duration: number | null;
-  failed?: boolean;
-  /** In-memory File for the retry path (never serialized). */
-  fileRef?: File | null;
-  /** Already-uploaded attachment reference — a retry skips re-uploading. */
-  attachmentRef?: { url: string; size: number } | null;
-}
+/** Optimistic entry while a durable send is unresolved — state machine in
+ *  `@/lib/chat/pending` (issue #48): a transport failure marks the entry
+ *  `failed` ("pa t konfime") instead of dropping it; reconciliation re-sends
+ *  with the SAME clientMsgId so the server dedupe always converges. */
 
 const UPLOAD_MAX_BYTES = 4 * 1024 * 1024; // keep in step with the server's MAX_UPLOAD_MB
+
+/** Issue #48 reconciliation cadence: an unconfirmed entry auto-retries with
+ *  this fixed delay (generous enough for high-latency mobile networks to
+ *  settle), bounded per entry. Manual retry and reconnect sweeps are NOT
+ *  bounded — the server-side clientMsgId dedupe makes every attempt safe. */
+const RECONCILE_DELAY_MS = 10_000;
+const MAX_AUTO_RECONCILE = 4;
 
 function newClientMsgId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
@@ -525,23 +525,122 @@ export default function ConsultationChatPage() {
     setPending((prev) => prev.filter((p) => p.clientMsgId !== id));
   }, []);
 
-  const retryPending = useCallback(
-    (entry: PendingMessage) => {
-      // Voice retries through the recorder (clip preserved there); text
-      // failures restore the draft instead — only media entries retry here.
-      if (!entry.fileRef) return;
-      if (entry.messageType !== "image" && entry.messageType !== "video" && entry.messageType !== "file") {
-        return;
+  // ── Unconfirmed-send reconciliation (issue #48) ────────────────────────────
+  // One in-flight guard shared by the manual button, the timed retries and the
+  // reconnect sweep — an entry is never reconciled twice concurrently.
+  const reconcilingRef = useRef<Set<string>>(new Set());
+  const reconcileTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const autoAttemptsRef = useRef<Map<string, number>>(new Map());
+
+  /** Re-send ONE unconfirmed entry with its ORIGINAL clientMsgId. Server-side
+   *  idempotency ((sender_id, client_msg_id) unique, migration 003) makes
+   *  every retry safe: a send that was actually persisted returns the
+   *  ORIGINAL row (merged by id — no duplicate), an unsent one is delivered
+   *  fresh. Resolves true only with persisted evidence. */
+  const reconcilePending = useCallback(
+    (entry: PendingMessage): Promise<boolean> => {
+      if (reconcilingRef.current.has(entry.clientMsgId)) return Promise.resolve(false);
+      if (!isReconcilablePending(entry)) return Promise.resolve(false);
+      reconcilingRef.current.add(entry.clientMsgId);
+      setPending((prev) => markPendingRetrying(prev, entry.clientMsgId));
+      const finish = (ok: boolean) => {
+        reconcilingRef.current.delete(entry.clientMsgId);
+        if (ok) {
+          // The echo path already removed the entry via the live-event
+          // handler; the REST path relies on this removal. Idempotent.
+          setPending((prev) => removePending(prev, entry.clientMsgId));
+        } else {
+          setPending((prev) => markPendingFailed(prev, entry.clientMsgId));
+        }
+        return ok;
+      };
+      if (entry.messageType === "text") {
+        return sendText(entry.text, entry.clientMsgId).then(finish);
       }
-      void sendMedia(entry.fileRef, entry.messageType, entry.duration ?? undefined, {
-        clientMsgId: entry.clientMsgId,
-      });
+      return sendMedia(
+        entry.fileRef as File,
+        entry.messageType as "image" | "video" | "file",
+        entry.duration ?? undefined,
+        { clientMsgId: entry.clientMsgId },
+      ).then(finish);
     },
-    [sendMedia],
+    [sendText, sendMedia],
   );
 
-  const dismissPending = useCallback((clientMsgId: string) => {
-    setPending((prev) => prev.filter((p) => p.clientMsgId !== clientMsgId));
+  const retryPending = useCallback(
+    (entry: PendingMessage) => {
+      // Voice retries through the recorder (clip preserved there) — unchanged.
+      if (entry.messageType === "voice") return;
+      void reconcilePending(entry);
+    },
+    [reconcilePending],
+  );
+
+  const dismissPending = useCallback((entry: PendingMessage) => {
+    setPending((prev) => removePending(prev, entry.clientMsgId));
+    const t = reconcileTimersRef.current.get(entry.clientMsgId);
+    if (t) {
+      clearTimeout(t);
+      reconcileTimersRef.current.delete(entry.clientMsgId);
+    }
+    autoAttemptsRef.current.delete(entry.clientMsgId);
+    // Text content goes back to the composer so "Retire" never loses what
+    // the user wrote (only when the draft is empty — never clobber typing).
+    if (entry.messageType === "text" && entry.text) {
+      setDraft((prev) => (prev.trim() ? prev : entry.text));
+    }
+  }, []);
+
+  // (a) Reconnect sweep — when the socket recovers, reconcile every
+  //     unconfirmed entry immediately (slow/intermittent networks: the echo
+  //     was likely lost, the REST retry may have failed). Event-driven, so
+  //     no polling; the in-flight guard keeps it duplicate-free.
+  const prevSocketStatusRef = useRef<string | null>(null);
+  useEffect(() => {
+    const was = prevSocketStatusRef.current;
+    prevSocketStatusRef.current = socketStatus;
+    if (socketStatus !== "open" || was === "open") return;
+    for (const entry of pendingRef.current) {
+      if (entry.failed) void reconcilePending(entry);
+    }
+  }, [socketStatus, reconcilePending]);
+
+  // (b) Timed retries — a failed entry retries automatically with a fixed
+  //     delay, bounded per entry (MAX_AUTO_RECONCILE). Beyond the bound the
+  //     manual button and reconnect sweeps remain available. In-flight
+  //     retries (failed flag cleared) never count nor reschedule; the
+  //     attempt bookkeeping is cleared when the entry leaves the list.
+  useEffect(() => {
+    const knownIds = new Set(pending.map((p) => p.clientMsgId));
+    for (const entry of pending) {
+      if (!entry.failed || entry.messageType === "voice") continue;
+      const clientMsgId = entry.clientMsgId;
+      if (reconcileTimersRef.current.has(clientMsgId)) continue;
+      if ((autoAttemptsRef.current.get(clientMsgId) ?? 0) >= MAX_AUTO_RECONCILE) continue;
+      const t = setTimeout(() => {
+        reconcileTimersRef.current.delete(clientMsgId);
+        autoAttemptsRef.current.set(clientMsgId, (autoAttemptsRef.current.get(clientMsgId) ?? 0) + 1);
+        const current = pendingRef.current.find((p) => p.clientMsgId === clientMsgId);
+        if (current?.failed) void reconcilePending(current);
+      }, RECONCILE_DELAY_MS);
+      reconcileTimersRef.current.set(clientMsgId, t);
+    }
+    for (const [clientMsgId, t] of reconcileTimersRef.current) {
+      if (!knownIds.has(clientMsgId)) {
+        clearTimeout(t);
+        reconcileTimersRef.current.delete(clientMsgId);
+        autoAttemptsRef.current.delete(clientMsgId);
+      }
+    }
+  }, [pending, reconcilePending]);
+
+  // Unmount: never leave timers behind.
+  useEffect(() => {
+    const timers = reconcileTimersRef.current;
+    return () => {
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+    };
   }, []);
 
   const onSend = (e: FormEvent) => {
@@ -568,11 +667,23 @@ export default function ConsultationChatPage() {
         if (ok) {
           notifierRef.current?.stop(); // explicit typing:false after the send
         } else {
-          // Neither transport persisted it: restore the draft, drop the bubble.
-          setPending((prev) => prev.filter((p) => p.clientMsgId !== clientMsgId));
-          setDraft(text);
+          // Issue #48: both persistence signals were missed — but on a slow
+          // network the WS frame is often ALREADY persisted at this point
+          // (the echo was lost and the REST attempt timed out; the
+          // recipient's copy proves the message can be stored). The old
+          // behavior dropped the bubble and restored the draft, leaving the
+          // sender's view stale until a refresh. Instead: keep the bubble,
+          // mark it unconfirmed, and reconcile with the SAME clientMsgId —
+          // manual retry, timed retry, or the reconnect sweep below. The
+          // server dedupe ((sender_id, client_msg_id) unique) guarantees the
+          // retry can never duplicate the message.
+          setPending((prev) => markPendingFailed(prev, clientMsgId));
           setError(
-            new ApiError("network", 0, "Mesaj la pa t ale — n ap rekonekte. Tanpri, eseye ankò nan yon ti moman."),
+            new ApiError(
+              "network",
+              0,
+              "Konfimasyon mesaj la pa rive — n ap rekonesye li otomatikman. Ou ka eseye ankò tou.",
+            ),
           );
         }
       })
@@ -983,8 +1094,12 @@ export default function ConsultationChatPage() {
             )}
             {p.failed && p.messageType !== "voice" && (
               <div className="pending-failed-row" role="alert">
-                <span className="tiny">Pake voye. </span>
-                {p.fileRef && (
+                {/* Issue #48: "pa t konfime" — the send is UNCONFIRMED, not
+                    necessarily lost; the message may already be stored
+                    server-side. The retry re-sends with the SAME clientMsgId,
+                    so it verifies (and reconciles) instead of duplicating. */}
+                <span className="tiny">Pa t konfime. </span>
+                {isReconcilablePending(p) && (
                   <button
                     type="button"
                     className="btn btn-secondary btn-sm"
@@ -996,7 +1111,7 @@ export default function ConsultationChatPage() {
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"
-                  onClick={() => dismissPending(p.clientMsgId)}
+                  onClick={() => dismissPending(p)}
                 >
                   Retire
                 </button>
