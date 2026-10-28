@@ -76,3 +76,11 @@ Last updated: 2026-10-28T20:04Z (run cron-20261029-0347)
    existing call/consult code from PRs #49/#55 first (lib/call/phases.ts, InCallChat.tsx,
    consultations/[id]/call/page.tsx); likely needs server+frontend coordination.
 3. #50 remains owner-only (VAPID env config on Vercel). Do not attempt.
+
+
+## Active issue (updated run cron-20261029-0430)
+- #56 IN PROGRESS: Start consultations in LiveKit video; wait for doctor; preserve call across chat/video.
+  - Branch (to create): feat/issue-56-direct-video-call from latest main.
+  - Plan per issue checklist: (1) trace entry points routing to room placeholder/chat on acceptance -> direct to /call?mode=video when eligible; (2) room/page.tsx -> compatibility redirect; (3) reuse call/page.tsx + InCallChat.tsx; (4) neutral wait-and-retry bootstrap (bounded backoff, cancellable, no token bypass); (5) single room creation; (6) chat open/close = view state only; (7) End call separate; (8) auth intact; (9) tests; (10) vitest/tsc/lint/build.
+  - PR #58 (#53) IN REVIEW - do not touch its files (consultations/page.tsx composer form area conflict risk - check merge-tree at PR time).
+- Run cron-20261029-0414 closed: #53 via PR #58 (unchanged this run, no owner feedback yet).
