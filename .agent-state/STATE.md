@@ -174,4 +174,11 @@ Next action: write migration 008 → config → repo → lifecycle → routes �
 Next action (next run):
 1. Check lock -> state -> PR #61 feedback/merge (owner).
 2. If merged: do NOT mark #60 DONE until owner verifies in production; verify migration applied cleanly if owner reports.
-3. QUEUE EMPTY otherwise. #50 closed by owner on their side (21:02Z).
+3. QUEUE EMPTY otherwise. #50 closed by owner on their side (21:02Z).## Run cron-20261029-0550 — STARTED issue #62 (LiveKit -> ZEGOCLOUD web migration)
+
+- Owner-created high-priority issue (21:51Z). IN PROGRESS label added; NEW + high priority preserved.
+- Also this run: PR #61 (issue #60) MERGED by owner as e1fb9cc (now main HEAD). #60 stays open+IN REVIEW per plan: no DONE until owner production verification. #50 closed by owner themselves. #53/#51/#56 remain closed+merged.
+- Branch: feat/issue-62-zegocloud-migration (from main @ e1fb9cc).
+- Scope per issue: audit LiveKit paths first; ZEGO Web SDK low-level (custom UI); server-side short-lived tokens after auth+consultation checks; feature switch (Preview/Dev only) keeping LiveKit fallback; env names ZEGOCLOUD_APP_ID / ZEGOCLOUD_SERVER_SECRET / ZEGOCLOUD_APP_SIGN / ZEGOCLOUD_SERVER_URL (Preview/Dev only, never client bundles/logs/repo); .env.example placeholders; keep branded UI + call/chat switching without disconnect; tests; no production changes; no LiveKit removal.
+- Progress: audit starting (LiveKit token endpoint, call component, chat mount behavior).
+- Next action: complete audit -> ZEGO SDK research -> config + provider switch -> token endpoint -> web provider implementation -> tests.
