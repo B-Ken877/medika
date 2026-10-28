@@ -94,7 +94,7 @@
   --shadow-lg: 0 12px 32px rgba(23, 43, 58, 0.16);
 
   --header-h: 68px;
-  --bottomnav-h: 64px;
+  --bottomnav-h: 56px;
   --maxw: 1440px;
   --content-pad: 16px;
 
@@ -609,7 +609,8 @@ h1, h2, h3, h4 { line-height: 1.25; font-weight: 600; letter-spacing: -0.01em; }
 @media (min-width: 720px) { :root { --content-pad: 24px; } }
 @media (min-width: 900px) { .app-main { padding: 32px 32px 48px; } }
 
-/* Bottom navigation (mobile) */
+/* Bottom navigation (mobile) — issue #34: equal-width destinations, one-line
+   labels, aligned icons/labels, compact height, safe-area aware. */
 .bottom-nav {
   position: fixed;
   bottom: 0; left: 0; right: 0;
@@ -617,22 +618,27 @@ h1, h2, h3, h4 { line-height: 1.25; font-weight: 600; letter-spacing: -0.01em; }
   background: var(--surface);
   border-top: 1px solid var(--gray-200);
   display: flex;
-  justify-content: space-around;
   height: calc(var(--bottomnav-h) + env(safe-area-inset-bottom, 0px));
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .bottom-nav a {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0; /* let items actually shrink to equal widths */
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
   color: var(--text-secondary);
   font-size: 11px;
   font-weight: 600;
+  line-height: 1.2;
   text-decoration: none;
-  min-height: 44px;
+  padding: 4px 2px;
+  min-height: 44px; /* WCAG touch target */
+  white-space: nowrap; /* one line per label — no multi-line wrap */
+  overflow: hidden;
+  text-overflow: ellipsis; /* safety net if a label ever exceeds its slot */
 }
 .bottom-nav a:hover { text-decoration: none; }
 .bottom-nav a.active { color: var(--green-500); }
@@ -2645,4 +2651,30 @@ body.has-install-banner .app-main { padding-bottom: calc(var(--bottomnav-h) + 11
   background: var(--gray-50);
   border: 1px solid var(--gray-200);
   color: var(--text-secondary);
+}
+
+/* ── Verified doctor badge (issues #30/#32) — shown ONLY for the server's
+   explicit verification_status === 'verified'; never inferred. */
+.badge-verified {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(16, 115, 73, 0.10);
+  color: var(--green-700, #15803d);
+  border: 1px solid rgba(16, 115, 73, 0.30);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.badge-verified-sm { font-size: 10px; padding: 2px 7px; }
+
+/* Doctor profile page (issue #30) */
+.doctor-profile .section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  margin-bottom: 10px;
 }
