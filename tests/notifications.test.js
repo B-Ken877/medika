@@ -467,6 +467,26 @@ describe('outbox dispatcher', () => {
 // ─── Rollout switch: VAPID unconfigured ──────────────────────────────────────
 
 describe('VAPID unconfigured — push safely disabled', () => {
+  it('public-key endpoint reports configured:false and exposes ONLY the two contract fields', async () => {
+    // Issue #50: the unconfigured endpoint contract is as much a part of the
+    // rollout switch as the dispatcher no-op — the client flips to its
+    // "server-disabled" state on exactly this response, and the response must
+    // never leak anything beyond the two documented fields.
+    process.env.VAPID_PUBLIC_KEY = '';
+    process.env.VAPID_PRIVATE_KEY = '';
+    try {
+      const res = await r.get('/api/notifications/vapid-public-key')
+        .set('Authorization', `Bearer ${token.patient}`);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ publicKey: null, configured: false });
+      expect(Object.keys(res.body).sort()).toEqual(['configured', 'publicKey']);
+    } finally {
+      // Restore for any later tests.
+      process.env.VAPID_PUBLIC_KEY = 'BGY3TmF6Yf1mZTKqkCJ0pXG0vXEEoSTq7FVGGhVQ7lHSSsqQ8adlWgfZqcv-OH2FQ6XlOYMfKKSZhUJfh6S-gxE';
+      process.env.VAPID_PRIVATE_KEY = 'SfK9aVd4Wk2Hq8mNpC3xT7yLbE5rU1jZ6cX0oIgDfAw';
+    }
+  });
+
   it('dispatch is a no-op and rows stay queued (in-app unaffected)', async () => {
     process.env.VAPID_PUBLIC_KEY = '';
     process.env.VAPID_PRIVATE_KEY = '';

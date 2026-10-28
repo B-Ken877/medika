@@ -20,7 +20,9 @@ export type PushSupport =
   | "no-service-worker"
   | "no-push-manager"
   | "denied"
-  | "server-disabled";
+  | "server-disabled"
+  | "server-unreachable"
+  | "registration-failed";
 
 export type PushState = {
   support: PushSupport;
@@ -53,6 +55,13 @@ export async function hasPushSubscription(): Promise<boolean> {
 /**
  * Subscribe THIS device to push (explicit user action only). Returns the
  * honest end state; never throws.
+ *
+ * Issue #50 (health signal): server/network failures are reported AS server
+ * states — `server-unreachable` (key bootstrap or subscription registration
+ * could not be completed) — never as "unsupported-browser", so admins and
+ * users can tell a connectivity/configuration problem apart from a device
+ * limitation. "unsupported-browser" is reserved for genuine browser-level
+ * failures (subscribe() rejection, malformed subscription).
  */
 export async function enablePush(token: string): Promise<PushState> {
   const support = probePushSupport();
@@ -61,10 +70,26 @@ export async function enablePush(token: string): Promise<PushState> {
   try {
     const permission = await Notification.requestPermission();
     if (permission !== "granted") return { support: "denied", enabled: false };
+  } catch {
+    // Permission prompt refused at the browser level — a device limitation.
+    return { support: "unsupported-browser", enabled: false };
+  }
 
-    const { publicKey, configured } = await getVapidPublicKey(token);
-    if (!configured || !publicKey) return { support: "server-disabled", enabled: false };
+  let publicKey: string | null;
+  let configured: boolean;
+  try {
+    ({ publicKey, configured } = await getVapidPublicKey(token));
+  } catch {
+    // Network/server failure during key bootstrap (offline, timeout, 5xx).
+    return { support: "server-unreachable", enabled: false };
+  }
+  if (!configured || !publicKey) return { support: "server-disabled", enabled: false };
 
+  let json: {
+    endpoint?: string;
+    keys?: { p256dh?: string; auth?: string };
+  };
+  try {
     const reg = await navigator.serviceWorker.ready;
     const existing = await reg.pushManager.getSubscription();
     // Replace any stale subscription for this browser (server upserts by
@@ -75,20 +100,27 @@ export async function enablePush(token: string): Promise<PushState> {
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(publicKey),
       }));
+    json = sub.toJSON();
+  } catch {
+    // Browser-level failure (no SW, subscribe rejected by the push service).
+    return { support: "unsupported-browser", enabled: false };
+  }
+  if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
+    return { support: "unsupported-browser", enabled: false };
+  }
 
-    const json = sub.toJSON();
-    if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
-      return { support: "unsupported-browser", enabled: false };
-    }
+  try {
     await registerPushSubscription(token, {
       endpoint: json.endpoint,
       keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
       userAgent: navigator.userAgent,
     });
-    return { support: "supported", enabled: true };
   } catch {
-    return { support: "unsupported-browser", enabled: false };
+    // The subscription exists in the browser but the server rejected the
+    // registration (auth expired, validation, 5xx) — a server state.
+    return { support: "registration-failed", enabled: false };
   }
+  return { support: "supported", enabled: true };
 }
 
 /** Unsubscribe this device (browser + server). Never throws. */

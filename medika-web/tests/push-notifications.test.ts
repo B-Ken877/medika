@@ -62,6 +62,69 @@ describe("lib/push.ts — subscription client", () => {
   });
 });
 
+describe("lib/push.ts — honest server health states (issue #50)", () => {
+  const src = read("../lib/push.ts");
+  const page = read("../app/app/notifications/page.tsx");
+
+  it("server/network failures are distinct states, never misreported as browser limits", () => {
+    // The states exist and are typed.
+    expect(src).toContain('"server-unreachable"');
+    expect(src).toContain('"registration-failed"');
+    // Key bootstrap failure → server-unreachable (offline, timeout, 5xx).
+    expect(src).toContain("return { support: \"server-unreachable\", enabled: false };");
+    // Server-side registration rejection → registration-failed.
+    expect(src).toContain("return { support: \"registration-failed\", enabled: false };");
+  });
+
+  it("each failure class has its own guarded scope (no shared catch-all)", () => {
+    // The permission prompt, key fetch, subscribe, and registration are
+    // wrapped in FOUR separate try blocks so failures classify honestly.
+    const fn = src.slice(src.indexOf("export async function enablePush"), src.indexOf("/** Unsubscribe this device"));
+    expect(fn.match(/try \{/g)?.length).toBe(4);
+    // "unsupported-browser" is reserved for genuine browser-level failures:
+    // it appears in probe paths and the browser-scoped catch blocks only.
+    expect(fn.match(/support: "unsupported-browser"/g)?.length).toBe(3);
+  });
+
+  it("the notification center copy distinguishes every server state from device states", () => {
+    expect(page).toContain('"server-unreachable":');
+    expect(page).toContain('"registration-failed":');
+    // The pre-existing unconfigured copy stays (the rollout-switch message).
+    expect(page).toContain("Sèvis push la pa konfigure kounye a");
+  });
+});
+
+describe("WEB_PUSH_SETUP.md — owner runbook (issue #50)", () => {
+  const doc = read("../../docs/WEB_PUSH_SETUP.md");
+
+  it("documents the exact environment variable NAMES (never values)", () => {
+    expect(doc).toContain("`VAPID_PUBLIC_KEY`");
+    expect(doc).toContain("`VAPID_PRIVATE_KEY`");
+    expect(doc).toContain("`VAPID_SUBJECT`");
+    // No real key material may ship in the repo — only placeholders.
+    expect(doc).not.toMatch(/VAPID_PRIVATE_KEY\s*[:=|]+\s*[A-Za-z0-9_-]{20,}/);
+  });
+
+  it("locks the security rules: owner generates keys locally, private key stays server-side", () => {
+    expect(doc).toContain("npx web-push generate-vapid-keys");
+    expect(doc).toContain("Generate the keys YOURSELF");
+    expect(doc).toContain("must NEVER use a `NEXT_PUBLIC_` variable");
+  });
+
+  it("requires a redeploy after env changes and defines the ordered verification", () => {
+    expect(doc).toContain("Redeploy (required)");
+    expect(doc).toContain('{"publicKey":"B…","configured":true}');
+    // The real-device step is explicitly operator-owned (not fakeable here).
+    expect(doc).toContain("Real device");
+  });
+
+  it("covers the dispatcher scheduler and the rollback switch", () => {
+    expect(doc).toContain("notification-dispatch.yml");
+    expect(doc).toContain("CRON_SECRET");
+    expect(doc).toContain("Rollback / off switch");
+  });
+});
+
 describe("service worker push handlers (issue #36)", () => {
   const sw = read("../public/sw.js");
 
