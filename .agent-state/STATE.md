@@ -1,21 +1,41 @@
-Last updated: 2026-10-28T20:15:00Z (run cron-20261029-0358)
+Last updated: 2026-10-28T20:25:00Z (run cron-20261029-0358)
 Last updated: 2026-10-28T20:04Z (run cron-20261029-0347)
 
 ## Active issue
-- IN PROGRESS: #51 on branch `fix/issue-51-vercel-preview-provisioning` (run cron-20261029-0358).
-- Progress: Claimed; investigating Vercel BUILD_FAILED / Resource provisioning failed root cause from repo side (decoded vercel bot payloads, commit statuses, issue #40 history, repo config audit)
-- Next action: Evidence-based minimal fix PR or precise external-blocker documentation; verify fresh preview READY if possible
-
+- NONE IN PROGRESS.
+- #51: IN REVIEW via PR #57 (run cron-20261029-0358). Root cause evidenced as
+  EXTERNAL: per-preview resource provisioning fails pre-build (identical code
+  READY in production; 21+ docs-only agent-state previews failed; matches the
+  documented Neon per-preview branch-limit case). Repo-side mitigation shipped:
+  vercel.json git.deploymentEnabled["agent-state"]=false + contract tests +
+  docs/VERCEL_PREVIEW_PROVISIONING.md owner runbook. Owner-only next steps:
+  dashboard -> Storage/Integrations -> check DB branch quota -> delete stale
+  preview branches -> re-trigger a preview -> verify READY (doc section 4).
+- #50: owner merged PR #55; issue stays open pending OWNER-ONLY Vercel VAPID
+  env config + real-device verification (do NOT attempt).
+- #53 (black suggestions bar) is the ONLY remaining unclaimed issue (NEW).
 
 ## Completed / history
-- #36 CLOSED (owner merged PR #41 at 18:45Z).
-- #43 CLOSED (owner merged PR #44 at 19:00Z).
-- #40 CLOSED (owner merged PR #46 at ~19:20Z).
-- #45 IN REVIEW via PR #49.
-- #47 IN REVIEW via PR #52.
-- #48 IN REVIEW via PR #54.
+- #36 CLOSED (PR #41), #43 CLOSED (PR #44), #40 CLOSED (PR #46).
+- #45 CLOSED: owner merged PR #49 (squash-landed as main 5904fbc ~20:00Z).
+- #47 CLOSED: owner merged PR #52 (main 641add2).
+- #48 CLOSED: owner merged PR #54 (main d4757b2).
+- #50: PR #55 MERGED by owner; issue open pending owner env config.
 
-## Open PRs awaiting OWNER review: #49 (issue #45), #54 (issue #48), #55 (issue #50). #52 (issue #47) MERGED by owner (~19:52Z).
+## Open PRs awaiting OWNER review: #57 (issue #51) only. All other agent PRs
+## (#41/#44/#46/#49/#52/#54/#55) merged; mergeable=True vs main 5904fbc.
+
+## Next action (next run)
+1. Check lock -> state -> owner feedback on PR #57 (or issue #51).
+2. If #57 unchanged and queue unchanged: claim #53 (black keyboard
+   suggestions bar; per issue body, first determine app-rendered vs
+   Gboard/IME-owned; audit composer attributes from PR #52; do not regress
+   the merged viewport fix; likely mostly documentation unless evidence
+   shows an app-rendered bar).
+3. Keep git.deploymentEnabled[agent-state]=false in mind: agent-state pushes
+   no longer create Vercel deployments (fewer status X marks on agent-state
+   commits is EXPECTED, not a regression).
+
 
 ## Next action (next run)
 1. Check lock -> inspect state -> no owner change requests on #49/#54/#55 ->
