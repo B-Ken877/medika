@@ -37,6 +37,10 @@ export interface User {
   avatar_url?: string | null;
   rating?: number | null;
   is_available?: number;
+  /** Issue #32: server-owned credential verification status. NULL =
+   *  unknown/legacy — NOT verified; never inferred from a license string. */
+  verification_status?: "pending" | "verified" | "rejected" | null;
+  verified_at?: number | null;
 }
 
 export interface AuthResponse {

@@ -43,6 +43,7 @@ import { buildOrderId, createPayment, fetchPaymentMode, openPaymentGateway, veri
 import { formatCurrency } from "@/lib/format";
 import { specialtyLabel, urgencyLabel } from "@/lib/labels";
 import { Avatar, ErrorAlert, Spinner } from "@/components/ui/primitives";
+import { VerifiedBadge } from "@/components/ui/VerifiedBadge";
 import { SpecialtySelect, type SpecialtyOption } from "@/components/ui/SpecialtySelect";
 
 type Step = "intake" | "doctors" | "payment" | "creating";
@@ -79,6 +80,11 @@ function ConsultFlow() {
    * doctor selection — lets a retry re-verify the SAME order instead of
    * creating orphan payment rows. */
   const simOrderReadyRef = useRef(false);
+
+  /** Issue #31: the deliberate review/confirmation phase before the MonCash
+   * gateway is opened. Reset whenever the doctor selection (or the payment
+   * state tied to it) is reset, so stale review state is never reused. */
+  const [reviewed, setReviewed] = useState(false);
 
   // Internal values sent to the backend (DB default: "Moyenne") — display
   // labels come from urgencyLabel(); the raw values must never change.
@@ -196,10 +202,11 @@ function ConsultFlow() {
     }
     setError(null);
     // Doctor already chosen from the directory (and still matching the
-    // selected specialty) → go straight to payment. Otherwise, show the
+    // selected specialty) → go to the review step. Otherwise, show the
     // filtered doctor list.
     if (selectedDoctor && selectedDoctor.specialty === specialty) {
       setStep("payment");
+      setReviewed(false);
       setPayState("idle");
       setPayError(null);
       setTransactionId(null);
@@ -212,6 +219,7 @@ function ConsultFlow() {
   const selectDoctor = (doc: User) => {
     setSelectedDoctor(doc);
     setStep("payment");
+    setReviewed(false); // issue #31: every new selection starts at the review step
     setPayState("idle");
     setPayError(null);
     setTransactionId(null);
@@ -351,6 +359,7 @@ function ConsultFlow() {
 
   const backToDoctors = () => {
     setSelectedDoctor(null);
+    setReviewed(false); // issue #31: changing the selection resets the review state
     setPayState("idle");
     setPayError(null);
     setTransactionId(null);
@@ -522,6 +531,7 @@ function ConsultFlow() {
 
   // step === "payment" (or "creating")
   const amount = priceOf(selectedDoctor?.specialty ?? specialty);
+  const amountValid = amount != null && amount > 0;
   return (
     <div className="stack" style={{ maxWidth: 640, margin: "0 auto" }}>
       <button className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start" }} onClick={backToDoctors}>
@@ -529,21 +539,44 @@ function ConsultFlow() {
       </button>
 
       <div>
-        <h1 className="page-title">Peman</h1>
-        <p className="muted small">{payMode === "simulated" ? "Mòd tès — peman simile" : "Etap sekirize MonCash"}</p>
+        <h1 className="page-title">{reviewed ? "Peman" : "Revize demann ou an"}</h1>
+        <p className="muted small">
+          {reviewed
+            ? payMode === "simulated"
+              ? "Mòd tès — peman simile"
+              : "Etap sekirize MonCash"
+            : "Verifye ki moun w ap konsilte ak sa w ap peye anvan w kontinye."}
+        </p>
       </div>
 
       <ErrorAlert error={error} />
 
+      {/* Doctor identity — the review step (issue #31) shows the available
+          professional details and links to the FULL profile page (issue #30). */}
       <div className="card doctor-card">
         <Avatar name={selectedDoctor?.name} src={selectedDoctor?.avatar_url} size="lg" alt={`Foto pwofil ${selectedDoctor?.name}`} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="doctor-name">{selectedDoctor?.name}</div>
+          <div className="doctor-name" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span>{selectedDoctor?.name}</span>
+            {selectedDoctor?.verification_status === "verified" && <VerifiedBadge compact />}
+          </div>
           <div className="doctor-specialty">{specialtyLabel(selectedDoctor?.specialty ?? specialty)}</div>
-          <div className="doctor-meta">{selectedDoctor?.hospital ?? ""}</div>
+          {selectedDoctor?.hospital && <div className="doctor-meta">{selectedDoctor.hospital}</div>}
+          {selectedDoctor?.license_number && (
+            <div className="doctor-meta">Lisans: {selectedDoctor.license_number}</div>
+          )}
+          <Link
+            href={`/app/doctors/${encodeURIComponent(selectedDoctor?.id ?? "")}`}
+            className="tiny nowrap"
+            style={{ display: "inline-block", marginTop: 4 }}
+          >
+            Gade pwofil konplè a <ChevronRight size={12} aria-hidden style={{ display: "inline" }} />
+          </Link>
         </div>
       </div>
 
+      {/* Consultation summary — the exact price (server pricing contract),
+          the intake the patient entered, and the urgency level. */}
       <div className="card">
         <div className="flex-between mb-1">
           <span className="muted">Konsiltasyon ({specialtyLabel(selectedDoctor?.specialty ?? specialty)})</span>
@@ -552,6 +585,12 @@ function ConsultFlow() {
         <div className="flex-between">
           <span className="muted small">Nivo ijans</span>
           <span className="small">{urgencyLabel(urgency)}</span>
+        </div>
+        <div className="flex-between" style={{ alignItems: "flex-start", gap: 12 }}>
+          <span className="muted small" style={{ paddingTop: 2 }}>Sentòm ou</span>
+          <span className="small" style={{ textAlign: "right", maxWidth: "70%", whiteSpace: "pre-line" }}>
+            {symptoms.trim().length > 220 ? `${symptoms.trim().slice(0, 220)}…` : symptoms.trim()}
+          </span>
         </div>
         <hr className="divider" />
         {payMode === "simulated" ? (
@@ -585,19 +624,46 @@ function ConsultFlow() {
         </div>
       )}
 
-      {payState === "idle" && payMode === "loading" && (
+      {/* ── Review phase (issue #31): a DELIBERATE confirmation before the
+          MonCash gateway is opened — the patient sees who, what and how
+          much, and explicitly chooses to continue. A missing/invalid price
+          stops the flow with a clear next step. */}
+      {!reviewed && (
+        <div className="stack">
+          {!amountValid && (
+            <div className="alert alert-warning" role="alert">
+              Pri konsiltasyon an pa disponib kounye a. Tanpri, retounen epi eseye ankò — si pwoblèm nan kontinye,
+              chwazi yon lòt espesyalite.
+            </div>
+          )}
+          <button
+            className="btn btn-primary btn-block btn-lg"
+            disabled={!amountValid}
+            onClick={() => setReviewed(true)}
+          >
+            <ShieldCheck size={17} aria-hidden /> Kontinye ak peman an — {formatCurrency(amount)}
+          </button>
+          <p className="tiny muted text-center">
+            {payMode === "simulated"
+              ? "Peman tès — pa gen redireksyon MonCash."
+              : "Apre w fin kontinye, paj peman MonCash la ap louvri pou w finalize peman an."}
+          </p>
+        </div>
+      )}
+
+      {payState === "idle" && payMode === "loading" && reviewed && (
         <button className="btn btn-primary btn-block btn-lg" disabled>
           <span className="spin" aria-hidden /> N ap chaje peman an...
         </button>
       )}
 
-      {payState === "idle" && payMode === "real" && (
+      {payState === "idle" && payMode === "real" && reviewed && (
         <button className="btn btn-primary btn-block btn-lg" onClick={startPayment}>
           <CreditCard size={17} aria-hidden /> Peye {formatCurrency(amount)} ak MonCash
         </button>
       )}
 
-      {payState === "idle" && payMode === "simulated" && (
+      {payState === "idle" && payMode === "simulated" && reviewed && (
         <button className="btn btn-primary btn-block btn-lg" onClick={startSimulatedPayment}>
           <FlaskConical size={17} aria-hidden /> Simile peman an
         </button>

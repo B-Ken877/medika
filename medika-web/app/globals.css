@@ -2517,3 +2517,29 @@ body.has-install-banner .app-main { padding-bottom: calc(var(--bottomnav-h) + 11
   .auth-register-shell .auth-form-pane { padding-top: 24px; }
   .auth-register-shell .auth-form { max-width: 560px !important; }
 }
+
+/* ── Verified doctor badge (issues #30/#32) — shown ONLY for the server's
+   explicit verification_status === 'verified'; never inferred. */
+.badge-verified {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(16, 115, 73, 0.10);
+  color: var(--green-700, #15803d);
+  border: 1px solid rgba(16, 115, 73, 0.30);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.badge-verified-sm { font-size: 10px; padding: 2px 7px; }
+
+/* Doctor profile page (issue #30) */
+.doctor-profile .section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  margin-bottom: 10px;
+}
