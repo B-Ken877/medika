@@ -97,14 +97,16 @@ export default function RegisterPage() {
         </p>
       </aside>
 
+      {/* Brand bar — mobile/tablet only (direct shell child, same as login,
+          so it never sits beside the form inside the pane). */}
+      <header className="auth-mobile-brand">
+        <BrandMark />
+        <span className="brand-word">Medika</span>
+      </header>
+
       {/* Form panel */}
       <div className="auth-form-pane">
-        <div className="auth-mobile-brand">
-          <BrandMark />
-          <span className="brand-word">Medika</span>
-        </div>
-
-        <main className="auth-form" style={{ maxWidth: 440 }}>
+        <main className="auth-form">
           <Link href="/login" className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start", marginBottom: 14 }}>
             <ArrowLeft size={16} aria-hidden /> Retounen
           </Link>

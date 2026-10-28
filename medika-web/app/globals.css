@@ -2451,10 +2451,11 @@ body.has-install-banner .app-main { padding-bottom: calc(var(--bottomnav-h) + 11
   flex: 1;
   min-width: 0;
   display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
   background: #fff;
-  padding: 24px 22px 36px;
+  padding: 30px 22px 36px;
 }
 .auth-register-shell .auth-form {
   width: 100%;
@@ -2505,10 +2506,15 @@ body.has-install-banner .app-main { padding-bottom: calc(var(--bottomnav-h) + 11
 .auth-register-shell .auth-alt a:hover { color: var(--brand-link-hover); }
 .auth-register-shell .auth-form > .btn { margin-bottom: 10px !important; }
 @media (min-width: 900px) {
+  /* Issue #43: same layout system as the login page — a flex row where the
+     brand pane takes a fixed 42% (shared rule) and the form pane flexes.
+     The previous display:grid here silently won the cascade over the generic
+     .auth-shell rules and then collided with the shared
+     .auth-brand-pane { width: 42% } (which resolves against the grid AREA,
+     squeezing the brand pane to ~305px and leaving a dead gap). */
   .auth-register-shell {
-    display: grid;
-    grid-template-columns: minmax(0, 1.04fr) minmax(0, 0.96fr);
-    gap: 0;
+    display: flex;
+    flex-direction: row;
     padding: 20px;
     background: var(--brand-shell);
   }
@@ -2538,10 +2544,30 @@ body.has-install-banner .app-main { padding-bottom: calc(var(--bottomnav-h) + 11
   .auth-register-shell .auth-brand-logo .brand-word { color: #fff; font-size: 26px; font-weight: 750; }
   .auth-register-shell .auth-brand-title { color: #fff; font-size: clamp(30px, 3vw, 42px); line-height: 1.15; font-weight: 750; max-width: 420px; }
   .auth-register-shell .auth-brand-sub { color: rgba(255,255,255,.84); font-size: 15px; line-height: 25px; margin-top: 16px; max-width: 400px; }
-  .auth-register-shell .auth-form-pane { align-items: center; padding: 38px clamp(28px, 4vw, 64px); border-radius: 0 22px 22px 0; }
+  .auth-register-shell .auth-form-pane { justify-content: center; align-items: center; padding: clamp(36px, 5vw, 72px) clamp(28px, 5vw, 76px) 28px; border-radius: 0 22px 22px 0; }
   .auth-register-shell .auth-form { max-width: 520px !important; }
 }
-@media (max-width: 899px) {
+/* Tablet: same focused card treatment as the login page (shared layout rules). */
+@media (min-width: 640px) and (max-width: 899px) {
+  .auth-register-shell { background: #f0f6f3; }
+  .auth-register-shell .auth-mobile-brand { padding: 28px 34px 22px; }
+  .auth-register-shell .auth-form-pane { padding: 34px; }
+  .auth-register-shell .auth-form {
+    max-width: 520px !important;
+    padding: 32px;
+    border: 1px solid #e0eae5;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 12px 38px rgba(23, 58, 46, 0.06);
+  }
+}
+/* Narrow Android screens: same cramped-control protection as login. */
+@media (max-width: 380px) {
+  .auth-register-shell .auth-mobile-brand { padding: 18px 18px 16px; }
+  .auth-register-shell .auth-form-pane { padding: 25px 18px 28px; }
+}
+/* Mobile-only refinements (tablet has its own card treatment above). */
+@media (max-width: 639px) {
   .auth-register-shell .auth-brand-pane { display: none; }
   .auth-register-shell .auth-form-pane { padding-top: 24px; }
   .auth-register-shell .auth-form { max-width: 560px !important; }
