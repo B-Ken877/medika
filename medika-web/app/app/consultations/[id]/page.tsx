@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   ClipboardList,
   Info,
+  MonitorPlay,
   NotebookPen,
   Phone,
   Send,
@@ -30,6 +31,7 @@ import { fileSizeLabel, formatDaySeparator, formatTime } from "@/lib/format";
 import { specialtyLabel, urgencyLabel } from "@/lib/labels";
 import { wsEventToServerMessage } from "@/lib/ws/socket";
 import { PartnerTypingTracker, TypingNotifier } from "@/lib/ws/typing";
+import { PartnerRecordingTracker, RecordingSignaler } from "@/lib/ws/recording";
 import { presenceFromEvent, presenceLabel, type PresenceState } from "@/lib/ws/presence";
 import { applyMessagesRead, receiptFor, unreadIncomingIds, type ReceiptState } from "@/lib/chat/receipts";
 import { insertAtCursor } from "@/lib/chat/emoji";
@@ -45,7 +47,7 @@ import { ReceiptTick } from "@/components/consultation/ReceiptTick";
 import { AttachmentMenu } from "@/components/consultation/AttachmentMenu";
 import { EmojiPicker } from "@/components/consultation/EmojiPicker";
 import { VoiceRecorder } from "@/components/consultation/VoiceRecorder";
-import { RecordingBubble } from "@/components/consultation/RecordingBubble";
+import { RemoteRecordingIndicator } from "@/components/consultation/RemoteRecordingIndicator";
 import { useChatScroll } from "@/components/consultation/useChatScroll";
 
 /** Optimistic entry while a durable send is unresolved. `failed` marks a
@@ -88,6 +90,9 @@ export default function ConsultationChatPage() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [partnerTyping, setPartnerTyping] = useState(false);
+  /** Recipient-side voice-recording activity of the OTHER participant
+   *  (issue #26) — ephemeral remote state, never a local chat-log bubble. */
+  const [partnerRecording, setPartnerRecording] = useState(false);
   const [presence, setPresence] = useState<PresenceState>("unknown");
   const [pending, setPending] = useState<PendingMessage[]>([]);
   const [uploadProgress, setUploadProgress] = useState<{ name: string; pct: number } | null>(null);
@@ -100,6 +105,8 @@ export default function ConsultationChatPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const typingTrackerRef = useRef<PartnerTypingTracker | null>(null);
   const notifierRef = useRef<TypingNotifier | null>(null);
+  const recordingTrackerRef = useRef<PartnerRecordingTracker | null>(null);
+  const recordingSignalerRef = useRef<RecordingSignaler | null>(null);
   const markedRef = useRef<Set<number>>(new Set());
   /** Mirror of `pending` for retry lookups (state is async to read). */
   const pendingRef = useRef<PendingMessage[]>([]);
@@ -113,16 +120,33 @@ export default function ConsultationChatPage() {
 
   const isDoctor = user?.role === "doctor";
 
+  // ── Acceptance transition (issue #33): when a WAITING consultation is
+  // confirmed accepted by the SERVER (refetch, not the event payload), guide
+  // the patient to the video-first room. Duplicate/delayed events are safe —
+  // the transition only ever fires on the real RECHERCHE_MEDECIN → EN_COURS
+  // edge seen by THIS page's state.
+  const prevStatusRef = useRef<string | null>(null);
+  const [justAccepted, setJustAccepted] = useState(false);
+  const applyConsultation = useCallback((c: Consultation) => {
+    if (prevStatusRef.current === "RECHERCHE_MEDECIN" && c.status === "EN_COURS") {
+      setJustAccepted(true);
+    }
+    prevStatusRef.current = c.status;
+    setConsultation(c);
+  }, []);
+
   // ── Data bootstrap ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!token || !consultationId) return;
     markedRef.current = new Set();
+    prevStatusRef.current = null;
+    setJustAccepted(false);
     const controller = new AbortController();
     getConsultation(token, consultationId, controller.signal)
       .then((c) => {
         if (c == null) setNotFound(true);
         else {
-          setConsultation(c);
+          applyConsultation(c);
           setError(null);
         }
       })
@@ -137,7 +161,7 @@ export default function ConsultationChatPage() {
         if (!controller.signal.aborted) setMessages([]);
       });
     return () => controller.abort();
-  }, [token, consultationId]);
+  }, [token, consultationId, applyConsultation]);
 
   // ── Outgoing typing signal (throttled, stopped on empty/blur/unmount) ────
   useEffect(() => {
@@ -163,11 +187,49 @@ export default function ConsultationChatPage() {
     };
   }, [consultationId]);
 
-  // A dropped socket must never leave a permanent "typing" bubble.
+  // ── Outgoing recording ACTIVITY (issue #26) ──────────────────────────────
+  // One signaler per (socket, consultation); it only ever fires while the
+  // recorder's authoritative mode is "recording" — i.e. microphone capture
+  // is genuinely running. Permission requests, preview, upload and retries
+  // all use other modes, so nothing leaks from them.
+  useEffect(() => {
+    if (!socket) return;
+    const signaler = new RecordingSignaler((isRecording) => {
+      socket.sendRecording(consultationId, isRecording);
+    });
+    recordingSignalerRef.current = signaler;
+    return () => {
+      // Leaving the conversation / consultation changed / unmount → stop.
+      signaler.stop();
+      recordingSignalerRef.current = null;
+    };
+  }, [socket, consultationId]);
+
+  // The recorder's mode IS the trigger: "recording" ⟺ capture active.
+  useEffect(() => {
+    if (voiceMode === "recording") recordingSignalerRef.current?.start();
+    else recordingSignalerRef.current?.stop();
+  }, [voiceMode]);
+
+  // ── Incoming recording activity (timeout + reconnect safe) ──────────────
+  useEffect(() => {
+    const tracker = new PartnerRecordingTracker();
+    tracker.onExpire = () => setPartnerRecording(false);
+    recordingTrackerRef.current = tracker;
+    return () => {
+      tracker.clear();
+      recordingTrackerRef.current = null;
+    };
+  }, [consultationId]);
+
+  // A dropped socket must never leave a permanent "typing" or microphone
+  // indicator behind.
   useEffect(() => {
     if (socketStatus !== "open") {
       typingTrackerRef.current?.clear();
       setPartnerTyping(false);
+      recordingTrackerRef.current?.clear();
+      setPartnerRecording(false);
     }
   }, [socketStatus]);
 
@@ -207,6 +269,13 @@ export default function ConsultationChatPage() {
           { consultationId, selfId: user?.id },
         );
         if (next !== undefined) setPartnerTyping(next);
+      } else if (event.type === "recording") {
+        const e = event as { consultationId: string; senderId: string; isRecording: boolean };
+        const next = recordingTrackerRef.current?.applyEvent(
+          { type: "recording", consultationId: e.consultationId, senderId: e.senderId, isRecording: e.isRecording },
+          { consultationId, selfId: user?.id },
+        );
+        if (next !== undefined) setPartnerRecording(next);
       } else if (event.type === "messages:read") {
         const e = event as Parameters<typeof applyMessagesRead>[1];
         if (e.consultationId !== consultationId || !user || e.readerId === user.id) return;
@@ -220,13 +289,13 @@ export default function ConsultationChatPage() {
           const controller = new AbortController();
           getConsultation(token, consultationId, controller.signal)
             .then((c) => {
-              if (c) setConsultation(c);
+              if (c) applyConsultation(c);
             })
             .catch(() => undefined);
         }
       }
     });
-  }, [socket, consultationId, user, token, partnerId]);
+  }, [socket, consultationId, user, token, partnerId, applyConsultation]);
 
   // ── Chat scroll (issue #16): open on the latest message, stick to the
   // bottom only while the user is there, count what arrives while reading
@@ -234,7 +303,7 @@ export default function ConsultationChatPage() {
   // inside a single .chat-log-inner wrapper so resizes (late image loads)
   // keep a pinned user pinned.
   const lastMessageId = messages?.length ? messages[messages.length - 1].id : null;
-  const scrollContentVersion = `${consultationId}:${messages?.length ?? 0}:${lastMessageId ?? ""}:${pending.length}:${partnerTyping ? 1 : 0}`;
+  const scrollContentVersion = `${consultationId}:${messages?.length ?? 0}:${lastMessageId ?? ""}:${pending.length}:${partnerTyping ? 1 : 0}:${partnerRecording ? 1 : 0}`;
   const { logRef, jumpVisible, jumpCount, jumpToLatest } = useChatScroll({
     conversationId: consultationId,
     ready: messages !== null,
@@ -556,6 +625,9 @@ export default function ConsultationChatPage() {
     return <Spinner label="N ap chaje konsiltasyon an..." />;
   }
 
+  // ── Video-first room affordance (issue #33) ─────────────────────────────
+  const roomHref = `/app/consultations/${encodeURIComponent(consultationId)}/room`;
+
   const partnerName = isDoctor ? consultation.patient_name : null;
   const canChat = consultation.status === "EN_COURS";
   const waiting = consultation.status === "RECHERCHE_MEDECIN";
@@ -746,6 +818,28 @@ export default function ConsultationChatPage() {
         </div>
       </header>
 
+      {/* Video-first room entry (issue #33): the consultation's primary
+          surface is the video room; chat is the supporting tool. Shown while
+          the consultation is active — one tap to the room, one tap back. */}
+      {canChat && justAccepted && (
+        <div className="alert alert-success room-entry-bar" role="status">
+          <MonitorPlay size={17} aria-hidden />
+          <span style={{ flex: 1 }}>Doktè a aksepte demann lan — konsiltasyon an kòmanse!</span>
+          <Link href={roomHref} className="btn btn-primary btn-sm">
+            Antre nan sal videyo a
+          </Link>
+        </div>
+      )}
+      {canChat && !justAccepted && (
+        <div className="room-entry-bar quiet" role="presentation">
+          <MonitorPlay size={15} aria-hidden />
+          <span style={{ flex: 1 }} className="tiny">Konsiltasyon an ap dewoule nan sal videyo a.</span>
+          <Link href={roomHref} className="btn btn-secondary btn-sm">
+            Ouvri sal videyo a
+          </Link>
+        </div>
+      )}
+
       {/* Context strip */}
       <div
         className="flex"
@@ -910,10 +1004,11 @@ export default function ConsultationChatPage() {
             )}
           </div>
         ))}
-        {/* Recording status (issue #19): a live in-conversation indicator —
-            NOT a sent message. Shown only while a recording is actually
-            active; removed immediately on stop / cancel / failure. */}
-        {voiceMode === "recording" && <RecordingBubble />}
+        {/* Remote voice-recording activity (issue #26): the OTHER
+            participant's microphone is live — a transient incoming-style
+            status row, NOT a message. The sender's own chat log never shows
+            a recording bubble; their controls live in the composer. */}
+        {partnerRecording && <RemoteRecordingIndicator />}
         {partnerTyping && (
           <div
             className="typing-row"

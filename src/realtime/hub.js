@@ -124,6 +124,9 @@ class RealtimeHub {
           case 'typing':
             await this.handleTyping(user, data);
             break;
+          case 'recording':
+            await this.handleRecording(user, data);
+            break;
           case 'presence:subscribe':
             await this.handlePresenceSubscribe(user, data, ws);
             break;
@@ -271,6 +274,31 @@ class RealtimeHub {
         consultationId: data.consultationId,
         senderId: user.id, // authenticated identity, never client-supplied
         isTyping: Boolean(data.isTyping),
+      });
+    }
+  }
+
+  /** recording (issue #26) — membership-checked relay of voice-recording
+   *  ACTIVITY to the other participant, mirroring handleTyping(): ephemeral
+   *  (never persisted), gated on EN_COURS, identity from the authenticated
+   *  socket. The payload is deliberately minimal — activity boolean only:
+   *  no audio, waveform, duration, filenames or any sensitive content. */
+  async handleRecording(user, data) {
+    if (!data.consultationId) return;
+    const consultation = await consultationsRepo.findById(data.consultationId);
+    if (!consultation ||
+        (consultation.patient_id !== user.id && consultation.doctor_id !== user.id)) {
+      return; // silent drop: no existence leak
+    }
+    if (consultation.status !== 'EN_COURS') return; // closed → no activity relay
+    const recipientId =
+      consultation.patient_id === user.id ? consultation.doctor_id : consultation.patient_id;
+    if (recipientId) {
+      this.publishToUser(recipientId, {
+        type: 'recording',
+        consultationId: data.consultationId,
+        senderId: user.id, // authenticated identity, never client-supplied
+        isRecording: Boolean(data.isRecording),
       });
     }
   }
