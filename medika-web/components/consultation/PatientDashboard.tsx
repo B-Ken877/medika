@@ -151,17 +151,19 @@ export default function PatientDashboard() {
               <div className="row-sub">{current.description || "Pa gen deskripsyon"}</div>
               <div className="row-meta">Demann lan fèt {relativeTime(current.created_at)}</div>
             </div>
-            {/* Issue #33: an ACTIVE consultation's primary surface is the
-                video-first room; waiting/finished ones open the detail chat. */}
+            {/* Issue #56: an ACTIVE consultation's primary surface is the
+                real LiveKit video call; waiting/finished ones open the
+                detail chat. The retired placeholder room is no longer a
+                destination. */}
             <Link
               href={
                 current.status === "EN_COURS"
-                  ? `/app/consultations/${encodeURIComponent(current.id)}/room`
+                  ? `/app/consultations/${encodeURIComponent(current.id)}/call?mode=video`
                   : `/app/consultations/${encodeURIComponent(current.id)}`
               }
               className="btn btn-secondary"
             >
-              {current.status === "EN_COURS" ? "Antre nan sal la" : "Gade detay yo"} <ChevronRight size={15} aria-hidden />
+              {current.status === "EN_COURS" ? "Antre nan apèl la" : "Gade detay yo"} <ChevronRight size={15} aria-hidden />
             </Link>
           </div>
         </section>
@@ -203,7 +205,7 @@ export default function PatientDashboard() {
                 key={c.id}
                 href={
                   c.status === "EN_COURS"
-                    ? `/app/consultations/${encodeURIComponent(c.id)}/room`
+                    ? `/app/consultations/${encodeURIComponent(c.id)}/call?mode=video`
                     : `/app/consultations/${encodeURIComponent(c.id)}`
                 }
                 className="panel-row"

@@ -8,12 +8,23 @@
  *  - Retry is valid only from the failure screen.
  *  - View switching is NOT a call event — it never reaches this machine, so
  *    it cannot end the call, disconnect the room or stop local tracks.
+ *
+ * Issue #56 adds the pre-call wait guarantees:
+ *  - "waiting" exists only BEFORE a room exists (bootstrap stage); a live,
+ *    reconnecting or failed call can never slide back into "waiting".
+ *  - Terminal consultation states become "failed" with kind "ineligible"
+ *    and NO retry affordance — retrying a closed door is a request storm.
+ *  - The eligibility poll cadence is bounded (capped exponential backoff
+ *    plus a hard attempt budget) — no tight loops, no request storms.
  */
 import { describe, expect, it } from "vitest";
 import {
   INITIAL_CALL_STATE,
+  MAX_ELIGIBILITY_ATTEMPTS,
+  TERMINAL_CONSULTATION_STATUSES,
   callPhaseAnnouncement,
   chatControlVisible,
+  eligibilityBackoffMs,
   reduceCallState,
 } from "@/lib/call/phases";
 
@@ -124,6 +135,78 @@ describe("view switching can never affect the call", () => {
   });
 });
 
+describe("reduceCallState — eligibility wait (issue #56)", () => {
+  it("bootstrap can wait: connecting → waiting is a calm, non-error state", () => {
+    const s = reduceCallState(INITIAL_CALL_STATE, { type: "waiting-for-eligibility" });
+    expect(s.phase).toBe("waiting");
+    expect(s.canRetry).toBe(false);
+    expect(s.failureKind).toBe("generic");
+  });
+
+  it("waiting is idempotent while the poll keeps finding RECHERCHE_MEDECIN", () => {
+    const waiting = reduceCallState(INITIAL_CALL_STATE, { type: "waiting-for-eligibility" });
+    expect(reduceCallState(waiting, { type: "waiting-for-eligibility" }).phase).toBe("waiting");
+  });
+
+  it("a live/reconnecting/failed call can NEVER slide back into waiting", () => {
+    const active = reduceCallState(INITIAL_CALL_STATE, { type: "connected" });
+    expect(reduceCallState(active, { type: "waiting-for-eligibility" }).phase).toBe("active");
+    const recon = reduceCallState(active, { type: "reconnecting" });
+    expect(reduceCallState(recon, { type: "waiting-for-eligibility" }).phase).toBe("reconnecting");
+    const failed = reduceCallState(active, { type: "unexpected-disconnect" });
+    expect(reduceCallState(failed, { type: "waiting-for-eligibility" }).phase).toBe("failed");
+  });
+
+  it("waiting can still become active (doctor accepted while patient waited)", () => {
+    const waiting = reduceCallState(INITIAL_CALL_STATE, { type: "waiting-for-eligibility" });
+    const active = reduceCallState(waiting, { type: "connected" });
+    expect(active.phase).toBe("active");
+    expect(active.everConnected).toBe(true);
+  });
+
+  it("terminal status → failed/ineligible with NO retry affordance", () => {
+    const waiting = reduceCallState(INITIAL_CALL_STATE, { type: "waiting-for-eligibility" });
+    const t = reduceCallState(waiting, { type: "terminal-status" });
+    expect(t.phase).toBe("failed");
+    expect(t.failureKind).toBe("ineligible");
+    expect(t.canRetry).toBe(false);
+  });
+
+  it("terminal status is ignored after hang-up (hang-up wins)", () => {
+    const active = reduceCallState(INITIAL_CALL_STATE, { type: "connected" });
+    const ended = reduceCallState(active, { type: "hang-up" });
+    const t = reduceCallState(ended, { type: "terminal-status" });
+    expect(t.phase).toBe("ended");
+    expect(t.canRetry).toBe(false);
+  });
+});
+
+describe("eligibility wait budget (issue #56)", () => {
+  it("backoff starts small, grows exponentially, and is hard-capped", () => {
+    expect(eligibilityBackoffMs(0)).toBe(3000);
+    expect(eligibilityBackoffMs(1)).toBe(4500);
+    expect(eligibilityBackoffMs(3)).toBe(10125);
+    // Cap: no poll ever waits longer than 15s — no request storms, no
+    // multi-minute silent gaps either.
+    expect(eligibilityBackoffMs(10)).toBe(15000);
+    expect(eligibilityBackoffMs(60)).toBe(15000);
+    // Negative attempt is treated as 0 (defensive, pure).
+    expect(eligibilityBackoffMs(-2)).toBe(3000);
+  });
+
+  it("the attempt budget is a hard bound — the loop must stop, not loop forever", () => {
+    expect(MAX_ELIGIBILITY_ATTEMPTS).toBeGreaterThanOrEqual(20);
+    expect(MAX_ELIGIBILITY_ATTEMPTS).toBeLessThanOrEqual(120);
+    // Worst-case quiet wait = sum of capped backoffs ≈ attempts × 15s.
+    const worstCaseMinutes = (MAX_ELIGIBILITY_ATTEMPTS * 15) / 60;
+    expect(worstCaseMinutes).toBeLessThan(15); // bounded, not endless
+  });
+
+  it("terminal statuses are exactly the server's no-call states", () => {
+    expect(TERMINAL_CONSULTATION_STATUSES).toEqual(["REFUSE", "TERMINE", "EXPIRE"]);
+  });
+});
+
 describe("UI helpers", () => {
   it("chat control is offered in safe phases only", () => {
     expect(chatControlVisible("connecting")).toBe(true);
@@ -131,6 +214,9 @@ describe("UI helpers", () => {
     expect(chatControlVisible("reconnecting")).toBe(true);
     expect(chatControlVisible("failed")).toBe(false);
     expect(chatControlVisible("ended")).toBe(false);
+    // Issue #56: pre-acceptance the server does not allow chat messages,
+    // so the in-call chat control is hidden while waiting.
+    expect(chatControlVisible("waiting")).toBe(false);
   });
 
   it("phase announcements never fake a reconnection", () => {
@@ -139,5 +225,6 @@ describe("UI helpers", () => {
     expect(callPhaseAnnouncement("ended")).toBe("Apèl la fini.");
     expect(callPhaseAnnouncement("active")).toBe("Apèl la ap pase");
     expect(callPhaseAnnouncement("connecting")).toBeNull();
+    expect(callPhaseAnnouncement("waiting")).toBeNull(); // component copy
   });
 });

@@ -127,13 +127,23 @@ export default function ConsultationChatPage() {
   // edge seen by THIS page's state.
   const prevStatusRef = useRef<string | null>(null);
   const [justAccepted, setJustAccepted] = useState(false);
-  const applyConsultation = useCallback((c: Consultation) => {
-    if (prevStatusRef.current === "RECHERCHE_MEDECIN" && c.status === "EN_COURS") {
-      setJustAccepted(true);
-    }
-    prevStatusRef.current = c.status;
-    setConsultation(c);
-  }, []);
+  // Issue #56: the consultation experience starts in VIDEO. When the server
+  // confirms the RECHERCHE_MEDECIN → EN_COURS edge on THIS page, navigate
+  // straight to the real LiveKit call (mode=video) instead of only showing
+  // a banner. Duplicate/delayed events stay safe — the edge fires once per
+  // page load; the call page owns the room and re-checks eligibility
+  // server-side (no client-side bypass of the token gate).
+  const applyConsultation = useCallback(
+    (c: Consultation) => {
+      if (prevStatusRef.current === "RECHERCHE_MEDECIN" && c.status === "EN_COURS") {
+        setJustAccepted(true);
+        router.replace(`/app/consultations/${encodeURIComponent(consultationId)}/call?mode=video`);
+      }
+      prevStatusRef.current = c.status;
+      setConsultation(c);
+    },
+    [router, consultationId],
+  );
 
   // ── Data bootstrap ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -736,8 +746,10 @@ export default function ConsultationChatPage() {
     return <Spinner label="N ap chaje konsiltasyon an..." />;
   }
 
-  // ── Video-first room affordance (issue #33) ─────────────────────────────
-  const roomHref = `/app/consultations/${encodeURIComponent(consultationId)}/room`;
+  // ── Video-first call affordance (issue #56): the REAL LiveKit call is
+  // the primary consultation surface; the placeholder room is retired as
+  // a destination (the /room route now only redirects here). ───────────
+  const callHref = `/app/consultations/${encodeURIComponent(consultationId)}/call?mode=video`;
 
   const partnerName = isDoctor ? consultation.patient_name : null;
   const canChat = consultation.status === "EN_COURS";
@@ -929,24 +941,25 @@ export default function ConsultationChatPage() {
         </div>
       </header>
 
-      {/* Video-first room entry (issue #33): the consultation's primary
-          surface is the video room; chat is the supporting tool. Shown while
-          the consultation is active — one tap to the room, one tap back. */}
+      {/* Video-first call entry (issue #56): the consultation's primary
+          surface is the LiveKit video call; chat is the supporting tool.
+          The acceptance transition above already auto-navigates; this bar
+          is the fallback (e.g. if navigation was interrupted). */}
       {canChat && justAccepted && (
         <div className="alert alert-success room-entry-bar" role="status">
           <MonitorPlay size={17} aria-hidden />
           <span style={{ flex: 1 }}>Doktè a aksepte demann lan — konsiltasyon an kòmanse!</span>
-          <Link href={roomHref} className="btn btn-primary btn-sm">
-            Antre nan sal videyo a
+          <Link href={callHref} className="btn btn-primary btn-sm">
+            Antre nan apèl videyo a
           </Link>
         </div>
       )}
       {canChat && !justAccepted && (
         <div className="room-entry-bar quiet" role="presentation">
           <MonitorPlay size={15} aria-hidden />
-          <span style={{ flex: 1 }} className="tiny">Konsiltasyon an ap dewoule nan sal videyo a.</span>
-          <Link href={roomHref} className="btn btn-secondary btn-sm">
-            Ouvri sal videyo a
+          <span style={{ flex: 1 }} className="tiny">Konsiltasyon an ap dewoule nan apèl videyo a.</span>
+          <Link href={callHref} className="btn btn-secondary btn-sm">
+            Ouvri apèl videyo a
           </Link>
         </div>
       )}
