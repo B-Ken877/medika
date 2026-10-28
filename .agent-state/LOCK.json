@@ -1,9 +1,9 @@
 {
-  "run_id": "cron-20261029-0230",
-  "started_at_utc": "2026-10-28T18:33:00Z",
-  "heartbeat_utc": "2026-10-28T18:55:00Z",
-  "active": false,
+  "run_id": "cron-20261029-0240",
+  "started_at_utc": "2026-10-28T18:41:00Z",
+  "heartbeat_utc": "2026-10-28T18:41:00Z",
+  "active": true,
   "owner": "medika-autonomous-agent",
-  "issue": 36,
-  "note": "Run completed: PR #41 conflict-free + verified; issue #36 IN REVIEW. Lock released."
+  "issue": 40,
+  "note": "Verifying PR #42 (issue #40) - existing PR from a racing earlier run; updating/verifying, not duplicating."
 }
