@@ -1,12 +1,12 @@
 # Medika Autonomous Agent State
-Last updated: 2026-10-28T19:25Z (run cron-20261029-0303)
+Last updated: 2026-10-28T19:24Z (run cron-20261029-0322)
 
 ## Active issue
-- NONE IN PROGRESS.
-- #45 IN REVIEW via PR #49 (in-call chat panel + pure call-phase state
-  machine + POST /call/token EN_COURS-only eligibility. Backend 30 files/382
-  tests, web 33 files/407 tests, tsc/lint/build clean, merge-tree vs #46:
-  0 conflicts).
+- #47 IN PROGRESS (run cron-20261029-0322): NEW [HIGH PRIORITY] Keep chat header visible and remove
+  unwanted keyboard toolbar on mobile. Branch fix/issue-47-chat-header-keyboard (from origin/main).
+  Progress: lock acquired, label added. Next action: audit chat screen layout, composer,
+  viewport/keyboard handling; identify black toolbar source; implement fix; tests+build; PR.
+
 
 ## Completed / history
 - #36 CLOSED (owner merged PR #41 at 18:45Z).
@@ -14,7 +14,7 @@ Last updated: 2026-10-28T19:25Z (run cron-20261029-0303)
 - #40 IN REVIEW via PR #46.
 - #45 IN REVIEW via PR #49.
 
-## Open PRs awaiting OWNER review: #46 (issue #40), #49 (issue #45).
+## Open PRs awaiting OWNER review: #49 (issue #45). #46 (issue #40) MERGED by owner at ~19:20Z.
 
 ## Next action (next run)
 1. Check lock -> inspect state -> if no new issues and no owner change
