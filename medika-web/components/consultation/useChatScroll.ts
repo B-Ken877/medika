@@ -15,7 +15,9 @@
  *  4. MISSED-MESSAGES PILL — messages that arrive while the user is scrolled
  *     up are counted and surfaced (`jumpCount`) with a jump affordance.
  *  5. RESIZE PINNING — a ResizeObserver keeps a bottom-pinned user pinned
- *     when content above resizes (chat images finishing their load).
+ *     when content above resizes (chat images finishing their load) AND when
+ *     the container itself resizes (issue #47: Android keyboard open/close).
+ *     A user reading history is never moved by a resize.
  *
  * Pages must render the scrollable children inside ONE wrapper element
  * (`.chat-log-inner`) so the observer can track content growth, and attach
@@ -121,15 +123,23 @@ export function useChatScroll(opts: ChatScrollOptions): ChatScrollState {
 
   // Resize pinning: images and late content above must not unpin a user who
   // is at the bottom — and must never move the viewport for one who is not.
+  // Issue #47: the scroll CONTAINER itself is observed too. On Android the
+  // keyboard opening/closing resizes the container (interactive-widget=
+  // resizes-content shrinks 100dvh); without this observation a bottom-pinned
+  // user would be left staring at the middle of the conversation (the browser
+  // keeps scrollTop while clientHeight shrinks). Re-pinning only happens when
+  // the user is already at the bottom — a reader in the history is never moved.
   useEffect(() => {
     if (!logEl || typeof ResizeObserver === "undefined") return;
     const inner = logEl.firstElementChild;
     if (!(inner instanceof HTMLElement)) return;
-    const observer = new ResizeObserver(() => {
+    const repin = () => {
       if (initialLandRef.current) return;
       if (atBottomRef.current) logEl.scrollTop = logEl.scrollHeight;
-    });
+    };
+    const observer = new ResizeObserver(repin);
     observer.observe(inner);
+    observer.observe(logEl);
     return () => observer.disconnect();
   }, [logEl, ready, conversationId]);
 

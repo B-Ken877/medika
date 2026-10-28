@@ -1087,6 +1087,18 @@ export default function ConsultationChatPage() {
                     placeholder="Ekri mesaj ou..."
                     aria-label="Mesaj ou"
                     maxLength={4000}
+                    /* Issue #47 toolbar audit: the black key/card/location
+                       strip some Android users see above the keyboard is the
+                       keyboard/autofill accessory bar (OS- or keyboard-owned,
+                       e.g. Gboard/Chrome autofill) — web content cannot
+                       remove it. These attributes are the justified levers:
+                       the field is declared non-autofillable (a chat message
+                       is not a credential/card/address), the action key
+                       matches the existing Enter-to-send behavior, and
+                       sentence capitalization stays natural. */
+                    autoComplete="off"
+                    autoCapitalize="sentences"
+                    enterKeyHint="send"
                   />
                   {draft.trim() && (
                     <button
