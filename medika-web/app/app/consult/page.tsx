@@ -36,8 +36,8 @@ import {
   Stethoscope,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
-import { createConsultation, getDoctors, getSpecialtyPrices } from "@/lib/api/endpoints";
-import type { SpecialtyPrice, User } from "@/lib/api/types";
+import { createConsultation, getConsultations, getDoctors, getSpecialtyPrices } from "@/lib/api/endpoints";
+import type { Consultation, SpecialtyPrice, User } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
 import { buildOrderId, createPayment, fetchPaymentMode, openPaymentGateway, verifyPayment, PaymentError } from "@/lib/payment";
 import { formatCurrency } from "@/lib/format";
@@ -69,6 +69,11 @@ function ConsultFlow() {
   const [submitting, setSubmitting] = useState(false);
   /** Set when ?doctor=<id> could not be resolved — surfaced as a notice. */
   const [doctorNotFound, setDoctorNotFound] = useState(false);
+  /** Issue #60: the patient's existing blocking consultation, when one
+   * exists. Set either from an upfront fetch (booking guard) or from a 409
+   * conflict response (authoritative race loser). When set, the booking
+   * wizard is replaced by a guard panel linking back to it. */
+  const [activeConsultation, setActiveConsultation] = useState<Consultation | null>(null);
 
   // Payment state
   const [payState, setPayState] = useState<"idle" | "creating" | "gateway" | "verifying" | "done" | "error">("idle");
@@ -107,6 +112,26 @@ function ConsultFlow() {
     getSpecialtyPrices(token, controller.signal)
       .then((list) => setPrices(Array.isArray(list) ? list : []))
       .catch(() => setPrices([]));
+    return () => controller.abort();
+  }, [token]);
+
+  // Issue #60 booking guard: detect an existing blocking consultation up
+  // front so the patient is never walked through payment for a request the
+  // server would refuse. Best-effort and non-blocking — the server's
+  // one-active enforcement stays authoritative even if this fetch fails or
+  // the state is momentarily stale.
+  useEffect(() => {
+    if (!token) return;
+    const controller = new AbortController();
+    getConsultations(token, controller.signal)
+      .then((list) => {
+        if (controller.signal.aborted) return;
+        const current = (Array.isArray(list) ? list : []).find(
+          (c) => c.status === "RECHERCHE_MEDECIN" || c.status === "EN_COURS",
+        );
+        if (current) setActiveConsultation(current);
+      })
+      .catch(() => undefined); // guard is best-effort; the server still enforces
     return () => controller.abort();
   }, [token]);
 
@@ -389,6 +414,15 @@ function ConsultFlow() {
       router.replace(`/app/consultations/${encodeURIComponent(consultation.id)}`);
     } catch (err) {
       setSubmitting(false);
+      // Issue #60: the server refused because a blocking consultation already
+      // exists (stale guard, double intent, or a race) — switch to the guard
+      // panel with a link back to it. The payment context is kept intact so
+      // nothing is lost; no second consultation is ever created.
+      if (err instanceof ApiError && err.status === 409 && err.existingId) {
+        setActiveConsultation({ id: err.existingId } as Consultation);
+        setPayState("idle");
+        return;
+      }
       setError(
         err instanceof Error
           ? err
@@ -423,6 +457,55 @@ function ConsultFlow() {
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
+
+  // Issue #60: one active consultation per patient. When the patient already
+  // has a blocking consultation — detected up front or via a 409 from the
+  // server — the booking wizard is replaced by this guard panel. The server
+  // side (partial unique indexes + 409 responses) remains the authority;
+  // this only makes the refusal legible with a clear next step.
+  if (activeConsultation) {
+    const detailHref = `/app/consultations/${encodeURIComponent(activeConsultation.id)}`;
+    const callHref = `${detailHref}/call?mode=video`;
+    return (
+      <div className="stack" style={{ maxWidth: 640, margin: "0 auto" }}>
+        <Link href="/app" className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start" }}>
+          <ArrowLeft size={16} aria-hidden /> Retounen
+        </Link>
+        <div className="card" role="status" aria-live="polite">
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+            <span className="brand-mark" aria-hidden>
+              <Stethoscope size={18} />
+            </span>
+            <h1 className="page-title" style={{ fontSize: "1.15rem", margin: 0 }}>
+              Ou gen yon konsiltasyon ki aktif
+            </h1>
+          </div>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Ou pa ka kòmanse yon nouvo konsiltasyon pandan yon lòt toujou ap
+            dewoule pou ou. Tanpri swiv konsiltasyon sa a, oswa tann li fini
+            anvan w kreye yon lòt demann.
+          </p>
+          {activeConsultation.status === "EN_COURS" && (
+            <p className="muted small" style={{ marginTop: 0 }}>
+              Konsiltasyon an ap dewoule kounye a — ou ka antre nan apèl videyo a dirèkteman.
+            </p>
+          )}
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 16 }}>
+            <Link
+              href={activeConsultation.status === "EN_COURS" ? callHref : detailHref}
+              className="btn btn-primary"
+            >
+              {activeConsultation.status === "EN_COURS" ? "Antre nan apèl la" : "Vizite konsiltasyon ou"}
+              <ChevronRight size={16} aria-hidden />
+            </Link>
+            <Link href="/app/consultations" className="btn btn-ghost">
+              Istor konsiltasyon yo
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (step === "intake") {
     return (

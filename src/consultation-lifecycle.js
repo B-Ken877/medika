@@ -44,7 +44,14 @@ const notifications = require('./notifications/emit');
 
 const SYSTEM_SENDER = { sender_id: 'system', sender_name: 'Systeme' };
 
-/** Eligible next doctor for a consultation (never previously offered). */
+/**
+ * Eligible next doctor for a consultation (never previously offered).
+ * Issue #60: a doctor who currently HOLDS another blocking consultation (as
+ * the pending offer holder or in progress) is never offered — the
+ * uq_consultations_doctor_active index would reject the reservation anyway;
+ * excluding them here keeps routing deterministic instead of relying on
+ * conflict fallbacks. The row being routed itself is excluded from the check.
+ */
 const NEXT_ELIGIBLE_DOCTOR_SQL = `
   SELECT u.id, u.name
     FROM users u
@@ -54,6 +61,12 @@ const NEXT_ELIGIBLE_DOCTOR_SQL = `
      AND NOT EXISTS (
        SELECT 1 FROM consultation_offers o
         WHERE o.consultation_id = $2 AND o.doctor_id = u.id
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM consultations c2
+        WHERE c2.doctor_id = u.id
+          AND c2.id <> $2
+          AND c2.status IN ('RECHERCHE_MEDECIN', 'EN_COURS')
      )
    ORDER BY u.rating DESC NULLS LAST, u.created_at ASC, u.id ASC
    LIMIT 1`;
@@ -129,21 +142,72 @@ async function routeWithinTransaction(client, consultation, patientChoiceDoctorI
 }
 
 /**
- * Route a freshly created consultation (issue #25 initial offer).
- * Returns the updated consultation row plus notification hints.
+ * Park a consultation in the waiting state (no eligible or all-busy doctors).
+ * Same state the pool-exhausted branch uses: doctor_id cleared, retry
+ * cooldown set. Only touches this row — can never violate the one-active
+ * indexes (doctor_id becomes NULL).
  */
-async function routeNewConsultation(consultation, { patientChoiceDoctorId = null } = {}) {
+async function parkInWaiting(consultationId) {
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `UPDATE consultations
+          SET doctor_id = NULL,
+              offer_deadline = NULL,
+              reroute_after = now() + make_interval(mins => $2),
+              updated_at = now()
+        WHERE id = $1 AND status = 'RECHERCHE_MEDECIN'
+        RETURNING *`,
+      [consultationId, config.rerouteRetryMinutes]
+    );
+    return { consultation: rows[0] || null, waiting: true, events: ['waiting'] };
+  });
+}
+
+/** One routing attempt in its own transaction (row locked). */
+function routeAttempt(consultationId, patientChoiceDoctorId) {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
       `SELECT * FROM consultations WHERE id = $1 FOR UPDATE`,
-      [consultation.id]
+      [consultationId]
     );
     const current = rows[0];
     if (!current || current.status !== 'RECHERCHE_MEDECIN') {
-      return { consultation: current || consultation, events: [] };
+      return { consultation: current || null, events: [] };
     }
     return routeWithinTransaction(client, current, patientChoiceDoctorId);
   });
+}
+
+/**
+ * Route a freshly created consultation (issue #25 initial offer).
+ * Returns the updated consultation row plus notification hints.
+ *
+ * Issue #60 concurrency: the doctor reservation is the conditional UPDATE
+ * onto consultations.doctor_id, finally refereed by the
+ * uq_consultations_doctor_active partial unique index. If a simultaneous
+ * booking wins the doctor's slot (23505 unique violation), the request is
+ * NOT failed — it falls back to the routing pool once (patient choice is
+ * dropped, the pool excludes busy doctors), and if even that loses the race
+ * it parks in the waiting state. Bounded (max two offers attempts + one
+ * wait), never a hot loop, never a 500; the payment the patient made stays
+ * attached to their (still-pending) consultation.
+ */
+async function routeNewConsultation(consultation, { patientChoiceDoctorId = null } = {}) {
+  try {
+    return await routeAttempt(consultation.id, patientChoiceDoctorId);
+  } catch (err) {
+    if (err && err.code === '23505') {
+      try {
+        return await routeAttempt(consultation.id, null);
+      } catch (err2) {
+        if (err2 && err2.code === '23505') {
+          return parkInWaiting(consultation.id);
+        }
+        throw err2;
+      }
+    }
+    throw err;
+  }
 }
 
 /**
@@ -252,6 +316,41 @@ async function retryWaiting(consultationId, outcome, { adoptLegacy = true } = {}
 }
 
 /**
+ * Bounded pending-request expiry (issue #60 §3): a RECHERCHE_MEDECIN request
+ * older than config.pendingExpiryHours transitions to the terminal EXPIRE
+ * status with close_reason='pending_timeout' and a visible system message —
+ * no pending request is stuck indefinitely. EN_COURS rows are NEVER touched
+ * by this pass (their five-hour expiry is the separate, deliberate issue #25
+ * rule). Idempotent conditional UPDATE: duplicate runs are harmless.
+ */
+async function expireStalePending(consultationId, outcome) {
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `UPDATE consultations
+          SET status = 'EXPIRE',
+              close_reason = 'pending_timeout',
+              offer_deadline = NULL,
+              reroute_after = NULL,
+              updated_at = now()
+        WHERE id = $1
+          AND status = 'RECHERCHE_MEDECIN'
+          AND created_at <= now() - make_interval(hours => $2)
+        RETURNING *`,
+      [consultationId, config.pendingExpiryHours]
+    );
+    if (rows.length === 0) return; // terminal already, too young, or gone
+    outcome.pendingExpired += 1;
+    await client.query(
+      `INSERT INTO messages (consultation_id, sender_id, sender_name, text)
+       VALUES ($1, 'system', 'Systeme', $2)`,
+      [consultationId,
+        'Pa gen doktè ki reponn demann lan nan limit tan an. Li konsidere kòm ekspire — ou ka kreye yon nouvo demann. Istor la konserve.']
+    );
+    outcome.consultation = rows[0];
+  });
+}
+
+/**
  * Process every due deadline. Safe to run concurrently and repeatedly:
  * each consultation is handled under a row lock with conditional updates.
  * Notifications are emitted AFTER commit (never inside a transaction).
@@ -263,7 +362,7 @@ async function retryWaiting(consultationId, outcome, { adoptLegacy = true } = {}
 async function processDueDeadlines({ hub, maxPerRun = 100, adoptLegacy = true } = {}) {
   const outcome = {
     offersExpired: 0, rerouted: 0, waiting: 0, adopted: 0, retried: 0,
-    expired: 0, notified: 0, consultation: null, notifyNewDoctor: null,
+    expired: 0, pendingExpired: 0, notified: 0, consultation: null, notifyNewDoctor: null,
   };
 
   const dueOffers = await query(
@@ -312,6 +411,22 @@ async function processDueDeadlines({ hub, maxPerRun = 100, adoptLegacy = true } 
     emitNotifications(hub, outcome);
   }
 
+  // Issue #60: bounded pending timeout — unanswered requests never wait
+  // forever. Runs last so a same-pass offer/accept wins over expiry.
+  const duePendings = await query(
+    `SELECT id FROM consultations
+      WHERE status = 'RECHERCHE_MEDECIN' AND created_at <= now() - make_interval(hours => $1)
+      ORDER BY created_at ASC LIMIT $2`,
+    [config.pendingExpiryHours, maxPerRun]
+  );
+  for (const row of duePendings.rows) {
+    outcome.consultation = null;
+    await expireStalePending(row.id, outcome).catch((err) => {
+      console.error('[lifecycle] pending-expiry processing failed:', err.code || err.message);
+    });
+    emitNotifications(hub, outcome);
+  }
+
   return {
     offersExpired: outcome.offersExpired,
     rerouted: outcome.rerouted,
@@ -319,6 +434,7 @@ async function processDueDeadlines({ hub, maxPerRun = 100, adoptLegacy = true } 
     adopted: outcome.adopted,
     retried: outcome.retried,
     expired: outcome.expired,
+    pendingExpired: outcome.pendingExpired,
     notified: outcome.notified,
   };
 }
@@ -478,6 +594,8 @@ module.exports = {
   resetEnforceThrottle,
   expireOfferAndReroute,
   expireConsultation,
+  expireStalePending,
   retryWaiting,
+  parkInWaiting,
   SYSTEM_SENDER,
 };

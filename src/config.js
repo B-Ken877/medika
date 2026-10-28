@@ -99,6 +99,13 @@ const config = {
   offerWindowMinutes: parseInt(env('OFFER_WINDOW_MINUTES', '60'), 10),
   consultationExpiryHours: parseInt(env('CONSULTATION_EXPIRY_HOURS', '5'), 10),
   rerouteRetryMinutes: parseInt(env('REROUTE_RETRY_MINUTES', '15'), 10),
+  // Issue #60: bounded pending-request timeout. A RECHERCHE_MEDECIN request
+  // older than this many hours is expired by the deadline processor (with a
+  // visible system message and close_reason='pending_timeout') so no pending
+  // request is stuck indefinitely. In-progress (EN_COURS) consultations are
+  // NEVER expired by this knob — their five-hour deadline
+  // (consultationExpiryHours) is a separate, deliberate product rule.
+  pendingExpiryHours: parseInt(env('PENDING_EXPIRY_HOURS', '4'), 10),
   // NOTE: CRON_SECRET (the shared secret for /api/crons/* — the scheduled
   // deadline processor) is deliberately NOT snapshotted here: the route reads
   // the environment at request time so it can be rotated without a redeploy.

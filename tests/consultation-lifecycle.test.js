@@ -11,7 +11,7 @@
 
 process.env.REQUIRE_PAYMENT = 'false';
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 const h = await import('./helpers');
 
 let r, users, token = {};
@@ -86,6 +86,15 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await h.closeAll();
+});
+
+// Issue #60: the database enforces ONE blocking consultation per patient and
+// per doctor. Every test in this file creates its own consultation, so each
+// starts from released slots (terminal transitions — nothing is deleted).
+// The invariant itself is exercised in tests/consultation-uniqueness.test.js.
+beforeEach(async () => {
+  await query(`UPDATE consultations SET status = 'TERMINE', updated_at = now()
+                WHERE status IN ('RECHERCHE_MEDECIN','EN_COURS')`);
 });
 
 describe('creation routing (initial offer)', () => {
@@ -395,8 +404,11 @@ describe('five-hour expiration after acceptance', () => {
 
 describe('legacy rows + opportunistic enforcement', () => {
   it('the scheduler adopts never-routed legacy requests (patient pick preserved)', async () => {
+    // Issue #60: the one-active invariant forbids two blocking consultations
+    // for ONE patient, so the two legacy fixtures use different patients —
+    // adoption is per-consultation, so the scenario is equivalent.
     const legacyPool = await h.createConsultationFixture({ patientId: users.patient.id });
-    const legacyPicked = await h.createConsultationFixture({ patientId: users.patient.id, doctorId: MG3 });
+    const legacyPicked = await h.createConsultationFixture({ patientId: users.patient2.id, doctorId: MG3 });
 
     await lifecycle.processDueDeadlines({ hub: recordingHub() }); // adoptLegacy: true
 

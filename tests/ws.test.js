@@ -217,15 +217,19 @@ describe('WS messaging — messaging upgrade contracts', () => {
   let consId, closedConsId;
 
   beforeAll(async () => {
+    const repo = (await import('../src/repos/consultations.js')).default;
+    // Issue #60: the one-active invariant releases a participant's prior slots
+    // when a new fixture is created (both fixtures share the doctor), so the
+    // consultation that gets prescribed (closedConsId) is created and
+    // terminated FIRST — then consId is created and stays EN_COURS.
+    const closed = await h.createConsultationFixture({
+      patientId: users.patient2.id, doctorId: users.doctor.id, status: 'EN_COURS',
+    });
+    closedConsId = (await repo.prescribe(closed.id, users.doctor.id, 'òrdònans')).id;
     const cons = await h.createConsultationFixture({
       patientId: users.patient.id, doctorId: users.doctor.id, status: 'EN_COURS',
     });
     consId = cons.id;
-    const repo = (await import('../src/repos/consultations.js')).default;
-    const closed = await h.createConsultationFixture({
-      patientId: users.patient.id, doctorId: users.doctor.id, status: 'EN_COURS',
-    });
-    closedConsId = (await repo.prescribe(closed.id, users.doctor.id, 'òrdònans')).id;
     patientWs = await authSocket('patient');
     doctorWs = await authSocket('doctor');
     await drain(patientWs);
@@ -331,15 +335,19 @@ describe('WS recording activity relay (issue #26)', () => {
   let consId, closedConsId, outsiderWs;
 
   beforeAll(async () => {
+    const repo = (await import('../src/repos/consultations.js')).default;
+    // Issue #60: the one-active invariant releases a participant's prior slots
+    // when a new fixture is created (both fixtures share the doctor), so the
+    // consultation that gets prescribed (closedConsId) is created and
+    // terminated FIRST — then consId is created and stays EN_COURS.
+    const closed = await h.createConsultationFixture({
+      patientId: users.patient2.id, doctorId: users.doctor.id, status: 'EN_COURS',
+    });
+    closedConsId = (await repo.prescribe(closed.id, users.doctor.id, 'òrdònans')).id;
     const cons = await h.createConsultationFixture({
       patientId: users.patient.id, doctorId: users.doctor.id, status: 'EN_COURS',
     });
     consId = cons.id;
-    const repo = (await import('../src/repos/consultations.js')).default;
-    const closed = await h.createConsultationFixture({
-      patientId: users.patient.id, doctorId: users.doctor.id, status: 'EN_COURS',
-    });
-    closedConsId = (await repo.prescribe(closed.id, users.doctor.id, 'òrdònans')).id;
     patientWs = await authSocket('patient');
     doctorWs = await authSocket('doctor');
     outsiderWs = await authSocket('patient2');

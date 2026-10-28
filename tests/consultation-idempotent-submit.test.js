@@ -24,7 +24,7 @@ process.env.REQUIRE_PAYMENT = 'true';
 process.env.PAYMENT_SIMULATION = 'true';
 process.env.PAYMENT_SIMULATION_TEST_USERNAME = 't.patient';
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 const h = await import('./helpers');
 
 let r, users, token = {};
@@ -39,6 +39,15 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await h.closeAll();
+});
+
+// Issue #60: the database enforces ONE blocking consultation per patient —
+// each test starts from released slots. Same-payment replay (issue #40)
+// still works: every test here creates its own payment first.
+beforeEach(async () => {
+  const { query } = await import('../src/db.js').then((m) => (m.default ?? m));
+  await query(`UPDATE consultations SET status = 'TERMINE', updated_at = now()
+                WHERE status IN ('RECHERCHE_MEDECIN','EN_COURS')`);
 });
 
 async function createSimulatedOrder({ patientToken, orderId, amount }) {

@@ -29,13 +29,18 @@ export class ApiError extends Error {
   readonly status: number;
   /** Machine-readable backend error string, safe to log client-side. */
   readonly detail?: string;
+  /** Issue #60: when a 409 is about an already-active consultation, the
+   * backend includes the winning consultation's id so the UI can link the
+   * user straight back to it. Absent for every other error. */
+  readonly existingId?: string | null;
 
-  constructor(code: ApiErrorCode, status: number, message: string, detail?: string) {
+  constructor(code: ApiErrorCode, status: number, message: string, detail?: string, existingId?: string | null) {
     super(message);
     this.name = "ApiError";
     this.code = code;
     this.status = status;
     this.detail = detail;
+    this.existingId = existingId;
   }
 }
 
@@ -171,15 +176,23 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   }
 
   if (!response.ok) {
+    const body = data as Record<string, unknown> | null;
     const backendError =
-      data && typeof data === "object" && "error" in (data as Record<string, unknown>)
-        ? String((data as Record<string, unknown>).error)
+      body && typeof body === "object" && "error" in body
+        ? String(body.error)
+        : undefined;
+    // Issue #60: one-active-consultation conflicts carry a link back to the
+    // existing consultation (existing_id) — surfaced on ApiError.existingId.
+    const existingId =
+      body && typeof body === "object" && typeof body.existing_id === "string"
+        ? body.existing_id
         : undefined;
     throw new ApiError(
       codeForStatus(response.status),
       response.status,
       messageForStatus(response.status),
       backendError,
+      existingId,
     );
   }
 
