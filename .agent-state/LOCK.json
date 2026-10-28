@@ -1,9 +1,9 @@
 {
   "run_id": "cron-20261029-0322",
   "started_at_utc": "2026-10-28T19:24:00Z",
-  "heartbeat_utc": "2026-10-28T19:24:00Z",
-  "active": true,
+  "heartbeat_utc": "2026-10-28T19:38:00Z",
+  "active": false,
   "owner": "medika-autonomous-agent",
-  "issue": 47,
-  "note": "Claimed issue #47 (chat header visible + keyboard toolbar audit). Branch: fix/issue-47-chat-header-keyboard. Next: audit chat layout + implement."
+  "issue": null,
+  "note": "Run completed: issue #47 IN REVIEW via PR #52. Lock released."
 }
