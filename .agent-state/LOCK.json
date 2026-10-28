@@ -1,9 +1,9 @@
 {
   "run_id": "cron-20261029-0358",
   "started_at_utc": "2026-10-28T20:00:00Z",
-  "heartbeat_utc": "2026-10-28T20:15:00Z",
-  "active": true,
+  "heartbeat_utc": "2026-10-28T20:25:00Z",
+  "active": false,
   "owner": "medika-autonomous-agent",
-  "issue": 51,
-  "note": "Working issue #51 on branch fix/issue-51-vercel-preview-provisioning"
+  "issue": null,
+  "note": "Run completed: issue #51 diagnosed (external per-preview resource provisioning) + repo-side mitigation IN REVIEW via PR #57. Lock released."
 }
