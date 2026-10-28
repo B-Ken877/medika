@@ -9,10 +9,23 @@
  *
  * Signaling (ring / accepted / rejected / ended) rides the existing Medika
  * WebSocket, exactly like the Android app.
+ *
+ * Issue #45: the call page now hosts the consultation chat as an in-call
+ * panel (InCallChat) so switching to chat NEVER unmounts this component —
+ * the LiveKit room stays connected and local tracks keep running. Lifecycle
+ * transitions go through the pure state machine in lib/call/phases.ts:
+ *  - "Chat" / "Back to video" are pure view state, never call events;
+ *  - "End call" remains the ONLY user action that disconnects the room and
+ *    sends call:end signaling (kept visually distinct from Chat);
+ *  - a real automatic reconnection (LiveKit) is surfaced as such; an
+ *    unexpected disconnect lands on a failure screen with a REAL retry that
+ *    re-fetches a fresh token — never a fake "reconnecting" message.
  */
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+
+import { Suspense, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
+  MessageCircle,
   Mic,
   MicOff,
   Phone,
@@ -32,8 +45,20 @@ import { useSocket } from "@/lib/ws/socket-context";
 import { getCallToken } from "@/lib/api/endpoints";
 import { ApiError } from "@/lib/api/client";
 import { Spinner } from "@/components/ui/primitives";
+import InCallChat from "@/components/consultation/InCallChat";
+import {
+  INITIAL_CALL_STATE,
+  chatControlVisible,
+  reduceCallState,
+} from "@/lib/call/phases";
 
 type CallPhase = "connecting" | "active" | "ended" | "failed";
+
+/** livekit-client classifies permission denials by constructor name — key on
+ *  the NAME (stable across versions), never on the message text. */
+function isPermissionError(err: unknown): boolean {
+  return err instanceof Error && err.name === "MediaDevicePermissionDeniedError";
+}
 
 function CallScreen() {
   const { id } = useParams<{ id: string }>();
@@ -44,44 +69,46 @@ function CallScreen() {
   const { socket } = useSocket();
   const router = useRouter();
 
-  const [phase, setPhase] = useState<CallPhase>("connecting");
+  const [state, dispatch] = useReducer(reduceCallState, INITIAL_CALL_STATE);
   const [statusText, setStatusText] = useState("N ap konekte ak apèl la...");
+  const [error, setError] = useState<string | null>(null);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(mode === "video");
-  const [error, setError] = useState<string | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   const roomRef = useRef<Room | null>(null);
   const localVideoRef = useRef<HTMLDivElement>(null);
   const remoteVideoRef = useRef<HTMLDivElement>(null);
   const endedRef = useRef(false);
-  const connectedOnceRef = useRef(false);
+  /** call:start is signaled ONCE per page session — retries never re-ring. */
+  const startCallSentRef = useRef(false);
 
-  // ── Teardown ──────────────────────────────────────────────────────────────
+  // ── Teardown (the ONLY room-disconnecting path) ──────────────────────────
   const endCall = useCallback(
-    async (reason?: string) => {
+    (reason?: string) => {
       if (endedRef.current) return;
       endedRef.current = true;
+      dispatch({ type: "hang-up" });
       socket?.endCall(consultationId);
       const room = roomRef.current;
       roomRef.current = null;
       try {
-        if (room) {
-          room.disconnect();
-        }
+        room?.disconnect();
       } catch {
         // ignore
       }
-      setPhase("ended");
       setStatusText(reason ?? "Apèl la fini.");
       setTimeout(() => router.replace(`/app/consultations/${encodeURIComponent(consultationId)}`), 900);
     },
     [socket, consultationId, router],
   );
 
-  // ── Setup ─────────────────────────────────────────────────────────────────
+  // ── Room wiring + connect (re-runs on explicit retry via `attempt`) ──────
   useEffect(() => {
-    if (!token || !consultationId || roomRef.current) return;
+    if (!token || !consultationId) return;
     let disposed = false;
+    endedRef.current = false;
     const room = new Room({ adaptiveStream: true, dynacast: true });
     roomRef.current = room;
 
@@ -100,8 +127,7 @@ function CallScreen() {
     room
       .on(RoomEvent.TrackSubscribed, (track) => {
         attachRemote(track);
-        connectedOnceRef.current = true;
-        setPhase("active");
+        dispatch({ type: "connected" });
         setStatusText("Apèl la ap pase");
       })
       .on(RoomEvent.ParticipantConnected, () => {
@@ -110,11 +136,20 @@ function CallScreen() {
       .on(RoomEvent.ParticipantDisconnected, () => {
         setStatusText("Lòt moun nan kite apèl la");
       })
+      .on(RoomEvent.Reconnecting, () => {
+        // LiveKit IS automatically retrying — this label is TRUE.
+        dispatch({ type: "reconnecting" });
+        setStatusText("Rezo a entèwopti. N ap rekonekte otomatikman...");
+      })
+      .on(RoomEvent.Reconnected, () => {
+        dispatch({ type: "reconnected" });
+        setStatusText("Koneksyon an retabli.");
+      })
       .on(RoomEvent.Disconnected, () => {
-        // Only treat as a lost call if the connection had actually been
-        // established — a failed initial connect is handled by the catch
-        // below (which shows the error screen instead of bouncing back).
-        if (!endedRef.current && connectedOnceRef.current) endCall("Koneksyon an koupe. N ap eseye rekonekte.");
+        if (endedRef.current || disposed) return;
+        // Unexpected drop — surface a REAL retry; never claim reconnection.
+        dispatch({ type: "unexpected-disconnect" });
+        setStatusText("Koneksyon an koupe.");
       })
       .on(RoomEvent.TrackUnsubscribed, (track) => {
         try {
@@ -130,8 +165,11 @@ function CallScreen() {
         const res = await getCallToken(token, consultationId, mode === "video");
         if (disposed) return;
 
-        // Notify the partner via the Medika WS channel (same as Android).
-        socket?.startCall(consultationId, user?.name ?? "Apèl", mode, res.roomName);
+        // Notify the partner ONCE per session (retries never re-ring).
+        if (!startCallSentRef.current) {
+          startCallSentRef.current = true;
+          socket?.startCall(consultationId, user?.name ?? "Apèl", mode, res.roomName);
+        }
 
         // Mixed-content guard: when this app is served over HTTPS, an
         // insecure ws:// LiveKit URL would be blocked by the browser.
@@ -143,14 +181,27 @@ function CallScreen() {
 
         await room.connect(url, res.token);
         if (disposed) return;
-        connectedOnceRef.current = true;
         setStatusText("N ap tann lòt moun nan konekte...");
 
-        // Publish local mic (and camera for video mode).
-        await room.localParticipant.setMicrophoneEnabled(true);
-        if (mode === "video") {
-          await room.localParticipant.setCameraEnabled(true);
+        // Publish local mic (and camera for video mode). Permission denials
+        // get their own user-facing state instead of a generic failure.
+        try {
+          await room.localParticipant.setMicrophoneEnabled(true);
+          if (mode === "video") {
+            await room.localParticipant.setCameraEnabled(true);
+          }
+        } catch (mediaErr) {
+          if (disposed) return;
+          if (isPermissionError(mediaErr)) {
+            dispatch({ type: "connect-failed", kind: "permission" });
+            setStatusText(
+              "Nou pa gen pèmisyon mikwo/kamera. Oktroye pèmisyon yo nan navigatè a, apre sa eseye ankò.",
+            );
+            return;
+          }
+          throw mediaErr;
         }
+
         if (localVideoRef.current) {
           const localPub = room.localParticipant.getTrackPublication(Track.Source.Camera) as
             | LocalTrackPublication
@@ -170,8 +221,7 @@ function CallScreen() {
         }
       } catch (err) {
         if (disposed) return;
-        endedRef.current = true;
-        setPhase("failed");
+        dispatch({ type: "connect-failed", kind: "generic" });
         setError(
           err instanceof ApiError
             ? err.message
@@ -190,9 +240,10 @@ function CallScreen() {
           // ignore
         }
       }
+      roomRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, consultationId, mode]);
+  }, [token, consultationId, mode, attempt]);
 
   // React to partner hang-up over the Medika WS.
   useEffect(() => {
@@ -202,6 +253,7 @@ function CallScreen() {
         (event.type === "call:ended" || event.type === "call:rejected") &&
         (event as { consultationId?: string }).consultationId === consultationId
       ) {
+        dispatch({ type: "partner-hung-up" });
         endCall("Lòt moun nan rakroche.");
       }
     });
@@ -222,15 +274,50 @@ function CallScreen() {
     setCamOn(!camOn);
   };
 
+  /** REAL retry: reset the failure screen and rebuild the room with a fresh
+   *  token (the old token may be expired — never reuse it blindly). */
+  const retry = useCallback(() => {
+    if (!state.canRetry || state.phase !== "failed") return;
+    setError(null);
+    setStatusText("N ap konekte ak apèl la...");
+    dispatch({ type: "retry-requested" });
+    setAttempt((a) => a + 1);
+  }, [state.canRetry, state.phase]);
+
+  // View-only toggle — touches NO room state; the panel opens over the call.
+  const openChat = useCallback(() => setChatOpen(true), []);
+  const closeChat = useCallback(() => setChatOpen(false), []);
+  const endFromChat = useCallback(() => {
+    setChatOpen(false);
+    endCall();
+  }, [endCall]);
+
+  const showChatControl = chatControlVisible(state.phase) && !chatOpen;
+
   return (
-    <div className="call-shell" role="dialog" aria-label={`Apèl ${mode === "video" ? "videyo" : "vwa"} ap pase`}>
+    <div
+      className={`call-shell${chatOpen ? " chat-open" : ""}`}
+      role="dialog"
+      aria-label={`Apèl ${mode === "video" ? "videyo" : "vwa"} ap pase`}
+    >
       <div className="call-videos">
         <div className="call-remote" ref={remoteVideoRef} aria-hidden={mode === "voice"} />
         {mode === "video" && <div className="call-local" ref={localVideoRef} aria-label="Kamera w" />}
         <div className="call-status" role="status" aria-live="polite">
-          {phase === "failed" ? (error ?? "Apèl la pa reyisi") : statusText}
-          {phase === "failed" && (
+          {state.phase === "failed"
+            ? (error ?? statusText)
+            : state.phase === "ended"
+              ? statusText
+              : statusText}
+          {(state.phase === "failed" || state.phase === "ended") && (
             <div style={{ marginTop: 6 }}>
+              {state.phase === "failed" && state.canRetry && (
+                <>
+                  <button className="btn btn-primary btn-sm" onClick={retry}>
+                    Eseye ankò
+                  </button>{" "}
+                </>
+              )}
               <button
                 className="btn btn-secondary btn-sm"
                 onClick={() => router.replace(`/app/consultations/${encodeURIComponent(consultationId)}`)}
@@ -242,7 +329,7 @@ function CallScreen() {
         </div>
       </div>
 
-      {phase === "connecting" && (
+      {state.phase === "connecting" && !chatOpen && (
         <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", zIndex: 4 }}>
           <div style={{ textAlign: "center" }}>
             <Phone size={34} style={{ margin: "0 auto 10px" }} aria-hidden />
@@ -260,10 +347,34 @@ function CallScreen() {
             {camOn ? <VideoIcon size={22} /> : <VideoOff size={22} />}
           </button>
         )}
+        {/* Chat switch — pure view state; never disconnects the room. */}
+        {showChatControl && (
+          <button
+            className="call-btn chat"
+            onClick={openChat}
+            aria-label="Ouvri chat pandan apèl la"
+            title="Ouvri chat pandan apèl la"
+          >
+            <MessageCircle size={22} />
+          </button>
+        )}
         <button className="call-btn end" onClick={() => endCall()} aria-label="Fini apèl la" title="Fini apèl la">
           <PhoneOff size={22} />
         </button>
       </div>
+
+      {/* In-call chat overlay — mounted ONLY while open; closing it unmounts
+          the panel but never the call page, so the room stays connected. */}
+      {chatOpen && (
+        <InCallChat
+          consultationId={consultationId}
+          token={token}
+          user={user ? { id: user.id, name: user.name, role: user.role } : null}
+          socket={socket}
+          onClose={closeChat}
+          onEndCall={endFromChat}
+        />
+      )}
     </div>
   );
 }
@@ -275,3 +386,5 @@ export default function CallPage() {
     </Suspense>
   );
 }
+
+export type { CallPhase };
