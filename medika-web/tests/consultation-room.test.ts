@@ -1,18 +1,22 @@
 /**
- * Consultation room — video-first placeholder (issue #33) tests.
+ * Consultation ROOM route (issue #56) tests.
+ *
+ * Issue #56 RETIRES the issue #33 video-first PLACEHOLDER as a destination:
+ * the real LiveKit call page (../call) is the primary consultation surface
+ * and it handles waiting/eligibility/terminal states itself, server-gated.
  *
  * Contracts verified (source-contract pattern — no jsdom in this package):
- *  - the room route exists and its dominant surface is a clearly labelled
- *    video PLACEHOLDER;
- *  - no LiveKit usage, no token minting, no media permissions, no claim of a
- *    live call (scope constraint of the testing phase);
- *  - obvious Chat switch to the EXISTING chat route for the same
- *    consultation, and an equally obvious way back (room entry bar);
- *  - server-authoritative state via refetch on consultation:updated and on
- *    socket reconnect (refresh/delayed/duplicate events safe);
- *  - patient entries route ACTIVE consultations to the room (video-first),
- *    everything else to the existing chat;
- *  - chat functionality, payment and lifecycle rules untouched.
+ *  - the /room route still EXISTS (stale links must resolve) but is a
+ *    compact compatibility redirect to the real call (mode=video);
+ *  - the placeholder UI is gone — no fake call affordances, no duplicate
+ *    voice/video buttons, no second chat entry;
+ *  - the redirect page itself never touches LiveKit/tokens/media;
+ *  - the chat page's acceptance transition now navigates DIRECTLY to the
+ *    real call (patient never detours through the placeholder), while
+ *    duplicate realtime events still cannot loop navigation;
+ *  - patient dashboard entries route ACTIVE consultations to the real call;
+ *  - the 5-hour expiry display survives on the chat page (server rule
+ *    untouched — covered by the backend suite).
  */
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
@@ -20,92 +24,95 @@ import { resolve } from "node:path";
 
 const read = (p: string) => readFileSync(resolve(__dirname, p), "utf8");
 
-describe("consultation room page (issue #33)", () => {
+describe("consultation room route — compatibility redirect (issue #56)", () => {
   const room = read("../app/app/consultations/[id]/room/page.tsx");
 
   it("exists as a dedicated route under the consultation", () => {
     expect(room.length).toBeGreaterThan(0);
   });
 
-  it("dominant surface is a labelled video placeholder with identity + status", () => {
-    expect(room).toContain('className={`room-placeholder ${waiting ? "waiting" : canChat ? "active" : "terminal"}`}');
-    expect(room).toContain('aria-label="Zòn videyo konsiltasyon an"');
-    expect(room).toContain("<Avatar");
-    expect(room).toContain("presenceLabel(presence)");
+  it("redirects stale visits to the REAL call, video mode", () => {
+    expect(room).toContain("router.replace(");
+    expect(room).toContain("/call?mode=video");
+    expect(room).toContain("encodeURIComponent");
+    // The redirect must be unconditional — no eligibility guessing here;
+    // the call page owns waiting/eligibility/terminal states.
+    expect(room).not.toMatch(/status\s*===\s*"EN_COURS"/);
   });
 
-  it("does NOT pretend a call is connected (honest placeholder copy)", () => {
-    expect(room).toMatch(/Koneksyon\s+videyo dirèk ap disponib byento/);
-    expect(room).toContain("VideoOff");
+  it("retires the placeholder UI entirely (no fake call affordances)", () => {
+    // Old placeholder affordances that must NOT come back:
+    expect(room).not.toContain("Ouvri chat la");
+    expect(room).not.toContain("Apèl vwa");
+    expect(room).not.toContain("Apèl videyo");
+    expect(room).not.toContain("room-placeholder");
+    expect(room).not.toContain("Koneksyon videyo dirèk");
+    // No status polling of its own — it is a redirect, not a mini-app.
+    expect(room).not.toContain("getConsultation");
   });
 
-  it("never joins LiveKit, mints tokens or requests media permissions", () => {
+  it("the redirect page never joins LiveKit, mints tokens or requests media", () => {
     expect(room).not.toContain("livekit");
     expect(room).not.toContain("getCallToken");
     expect(room).not.toContain("getUserMedia");
     expect(room).not.toContain("new Room(");
-    // It links to the EXISTING call routes only via plain navigation.
-    expect(room).toContain("/call?mode=voice");
-    expect(room).toContain("/call?mode=video");
   });
 
-  it("offers an obvious Chat action to the EXISTING chat route (same consultation)", () => {
-    expect(room).toContain("const chatHref = `/app/consultations/${encodeURIComponent(consultationId)}`");
-    expect(room).toContain("Ouvri chat la");
-    expect(room).toContain("<MessageCircle");
-  });
-
-  it("derives state from the SERVER and refetches on updates + reconnects", () => {
-    expect(room).toContain("getConsultation(token, consultationId, controller.signal)");
-    expect(room).toMatch(/consultation:updated[\s\S]*?if \(e\.id === consultationId\) load\(\);/);
-    // Reconnect safety: missed events are healed by a refetch + presence resubscribe.
-    expect(room).toMatch(/socketStatus === "open"[\s\S]*?sendPresenceSubscribe\(consultationId\);[\s\S]*?load\(\);/);
-  });
-
-  it("understands waiting, terminal, loading and error states", () => {
-    expect(room).toContain("N ap tann doktè a aksepte demann lan");
-    expect(room).toContain("Konsiltasyon sa a fini.");
-    expect(room).toContain("Konsiltasyon sa a ekspire otomatikman apre 5 zè.");
-    expect(room).toContain("N ap chaje sal konsiltasyon an...");
-    expect(room).toContain("Nou pa t kapab chaje sal konsiltasyon an");
-  });
-
-  it("preserves the 5-hour expiry rule display without altering it", () => {
-    expect(room).toContain("<OfferCountdown");
-    expect(room).toContain("warnUnderSeconds={30 * 60}");
+  it("documents WHY the route survives (retired, not deleted)", () => {
+    expect(room).toContain("RETIRED");
+    expect(room).toContain("issue #56");
   });
 });
 
-describe("chat page ↔ room switching (issue #33)", () => {
+describe("chat page ↔ real call (issue #56)", () => {
   const page = read("../app/app/consultations/[id]/page.tsx");
 
-  it("the chat page carries an obvious room entry while the consultation is active", () => {
-    expect(page).toContain("Ouvri sal videyo a");
-    expect(page).toContain('const roomHref = `/app/consultations/${encodeURIComponent(consultationId)}/room`');
+  it("every room-entry affordance targets the REAL call, video mode", () => {
+    expect(page).toContain(
+      "const callHref = `/app/consultations/${encodeURIComponent(consultationId)}/call?mode=video`;",
+    );
+    expect(page).not.toContain("`/app/consultations/${encodeURIComponent(consultationId)}/room`");
+    expect(page).toContain("Antre nan apèl videyo a");
+    expect(page).toContain("Ouvri apèl videyo a");
   });
 
-  it("acceptance guides the patient to the room (server-confirmed transition only)", () => {
+  it("acceptance navigates DIRECTLY to the call (server-confirmed transition only)", () => {
+    // The transition still consumes refetched SERVER state, not event payloads.
     expect(page).toMatch(/prevStatusRef\.current === "RECHERCHE_MEDECIN" && c\.status === "EN_COURS"/);
-    expect(page).toContain("Antre nan sal videyo a");
-    // The transition tracker consumes refetched SERVER state, not event payloads.
+    // Issue #56: the edge auto-navigates to the real call — video is the
+    // primary experience; the banner is only a fallback.
+    expect(page).toMatch(
+      /setJustAccepted\(true\);\s*router\.replace\(`\/app\/consultations\/\$\{encodeURIComponent\(consultationId\)\}\/call\?mode=video`\);/,
+    );
     expect(page).toMatch(/consultation:updated[\s\S]*?getConsultation[\s\S]*?applyConsultation\(c\)/);
   });
 
-  it("duplicate realtime events cannot loop navigation (no auto-redirect)", () => {
-    // The chat page GUIDES (banner + CTA); it never router.push'es to the
-    // room on its own — the user navigates explicitly.
-    const pushes = page.match(/router\.push\([^)]*\)/g) ?? [];
-    expect(pushes.every((p) => !p.includes("/room"))).toBe(true);
+  it("navigation can only ever target the call — never the retired placeholder", () => {
+    const navigations = [
+      ...(page.match(/router\.(?:push|replace)\([^)]*\)/g) ?? []),
+      ...(page.match(/href=\{`[^`]*\}`/g) ?? []),
+    ];
+    expect(navigations.length).toBeGreaterThan(0);
+    for (const nav of navigations) {
+      expect(nav.includes("/room")).toBe(false);
+    }
+  });
+
+  it("the 5-hour expiry display survives on the chat page (rule untouched)", () => {
+    expect(page).toContain("<OfferCountdown");
+    expect(page).toContain("warnUnderSeconds={30 * 60}");
   });
 });
 
-describe("patient dashboard entries (issue #33)", () => {
+describe("patient dashboard entries (issue #56)", () => {
   const dash = read("../components/consultation/PatientDashboard.tsx");
 
-  it("ACTIVE consultations open the video-first room", () => {
+  it("ACTIVE consultations open the REAL call (video mode)", () => {
     expect(dash).toContain('c.status === "EN_COURS"');
-    expect(dash).toContain("`/app/consultations/${encodeURIComponent(c.id)}/room`");
-    expect(dash).toContain('"Antre nan sal la"');
+    expect(dash).toContain("`/app/consultations/${encodeURIComponent(c.id)}/call?mode=video`");
+    expect(dash).toContain('"Antre nan apèl la"');
+    // The placeholder is no longer a destination anywhere in the dashboard.
+    expect(dash).not.toContain("/room");
   });
 
   it("waiting/finished consultations still open the existing chat", () => {
@@ -114,13 +121,10 @@ describe("patient dashboard entries (issue #33)", () => {
   });
 });
 
-describe("room styles (issue #33)", () => {
+describe("room styles (issue #33 — reused by the call-entry bars)", () => {
   const css = read("../app/globals.css");
 
-  it("ships a dominant, professional video stage", () => {
-    expect(css).toContain(".room-placeholder {");
-    expect(css).toContain(".room-stage {");
+  it("keeps the entry-bar styles the chat page still uses", () => {
     expect(css).toContain(".room-entry-bar {");
-    expect(css).toContain(".room-controls {");
   });
 });

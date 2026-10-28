@@ -138,7 +138,12 @@ export default function DoctorDashboard() {
     try {
       await acceptConsultation(token, id);
       showToast("Konsiltasyon an aksepte.");
-      router.push(`/app/consultations/${encodeURIComponent(id)}`);
+      // Issue #56: the accepted consultation's primary surface is the real
+      // LiveKit video call — the doctor goes straight there, not to the
+      // chat page or the retired placeholder room. The call page itself
+      // handles the patient-not-yet-present wait and the server-side
+      // eligibility gate stays authoritative.
+      router.push(`/app/consultations/${encodeURIComponent(id)}/call?mode=video`);
     } catch (err) {
       // 404/409 → someone else took it or it changed; refresh the list.
       showToast(err instanceof ApiError ? err.message : "Aksyon an pa t posib. Nou ap refrèchi lis la.");
