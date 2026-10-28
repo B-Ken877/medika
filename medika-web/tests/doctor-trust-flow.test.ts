@@ -105,9 +105,11 @@ describe("pre-payment review step (issue #31)", () => {
   });
 
   it("changing the doctor resets the review state (no stale reuse)", () => {
-    expect(page).toMatch(/const selectDoctor = \(doc: User\) => \{[\s\S]*?setReviewed\(false\);/);
+    // Issue #40 replaced inline selection with profile navigation; the review
+    // reset still happens on every path that (re)enters the payment step.
     expect(page).toMatch(/const backToDoctors = \(\) => \{[\s\S]*?setReviewed\(false\);/);
     expect(page).toMatch(/if \(selectedDoctor && selectedDoctor\.specialty === specialty\) \{[\s\S]*?setReviewed\(false\);/);
+    expect(page).toMatch(/if \(draft && resumeFromProfile\) \{[\s\S]{0,160}setReviewed\(false\);/);
   });
 
   it("keeps the server-verified payment gates and honest simulation notices", () => {

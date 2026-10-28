@@ -42,16 +42,19 @@ const specialtySelect = readFileSync(
 );
 
 describe("consult flow — directory entry (?doctor=) goes through intake", () => {
-  it("never sets the payment step directly from the preselected-doctor effect", () => {
-    // The effect body between "preselectedDoctorId" and its closing must not
-    // contain a step jump. Extract the effect block conservatively.
+  it("a FRESH directory entry never jumps to payment; a resumed draft does (issue #40)", () => {
+    // The effect body between "preselectedDoctorId" and its closing.
     const effectStart = consultPage.indexOf("if (!preselectedDoctorId || !token) return;");
-    const effectEnd = consultPage.indexOf("}, [preselectedDoctorId, token]);");
+    const effectEnd = consultPage.indexOf("}, [preselectedDoctorId, token, resumeFromProfile]);");
     expect(effectStart).toBeGreaterThan(-1);
     expect(effectEnd).toBeGreaterThan(effectStart);
     const effectBody = consultPage.slice(effectStart, effectEnd);
-    expect(effectBody).not.toContain('setStep("payment")');
-    expect(effectBody).not.toContain('setStep("doctors")');
+    // The step jump is gated on a RESTORED DRAFT + resume=1 (returning from
+    // the doctor profile); a fresh entry stays on the full intake.
+    expect(effectBody).toMatch(/if \(draft && resumeFromProfile\) \{[\s\S]{0,120}setStep\("payment"\)/);
+    expect(effectBody).toContain("// Fresh entry (no draft): stay on the FULL intake");
+    // The draft restores the patient's typed intake — never retyped.
+    expect(effectBody).toContain("setSymptoms(draft.symptoms)");
     // The doctor is resolved and kept selected, with his specialty prefilled.
     expect(effectBody).toContain("setSelectedDoctor(doc)");
     expect(effectBody).toContain("setSpecialty(doc.specialty)");
@@ -132,8 +135,11 @@ describe("consult flow — directory entry (?doctor=) goes through intake", () =
     expect(consultPage).toContain("label: specialtyLabel(p.name)");
   });
 
-  it("keeps anti-double-submit and payment verification intact", () => {
-    expect(consultPage).toContain("if (!token || !selectedDoctor || submitting) return;");
+  it("keeps anti-double-submit and payment verification intact (issue #40 hardened)", () => {
+    // State guard + SYNCHRONOUS ref guard (React state is async — two rapid
+    // taps could both pass the state check; the ref cannot).
+    expect(consultPage).toContain("if (!token || !selectedDoctor || submitting || submitInFlightRef.current) return;");
+    expect(consultPage).toContain("submitInFlightRef.current = true; // synchronous anti-double-submit");
     expect(consultPage).toContain("if (payState === \"verifying\") return;");
     expect(consultPage).toContain("await verifyPayment(orderIdRef.current)");
     // Payment success is only shown after verification confirms it.

@@ -126,7 +126,10 @@ describe("consult payment step — simulated mode (server-driven)", () => {
     expect(consultPage).toContain("Simile peman an");
     expect(consultPage).toContain("Mòd tès la aktive. Peman sa a se yon simulation; pa gen okenn lajan k ap deplase.");
     expect(consultPage).toContain("N ap konfime peman tès la...");
-    expect(consultPage).toContain("Peman tès la reyisi. Konsiltasyon ou a konfime.");
+    // Issue #40: the success copy confirms the payment; the consultation
+    // request is then submitted AUTOMATICALLY (no second patient action).
+    expect(consultPage).toContain("Peman tès la reyisi.");
+    expect(consultPage).toContain("N ap voye demann ou a otomatikman...");
     expect(consultPage).toContain("Nou pa t kapab konfime peman tès la. Tanpri, eseye ankò.");
   });
 

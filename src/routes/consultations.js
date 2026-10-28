@@ -79,6 +79,18 @@ router.post('/consultations', authenticate, requireRole('patient'), async (req, 
         requiredAmount: price,
       });
       if (payment.error) {
+        // Issue #40 — idempotent replay: the SAME verified payment already
+        // created a consultation for THIS patient (double-click, refresh or
+        // a retry of the same logical intent). The payment row is proven to
+        // belong to the requester (checked in resolveVerifiedPayment), so
+        // the consultation it bought IS this patient's request. Return it
+        // instead of a confusing 409 — never create a duplicate.
+        if (payment.errorStatus === 409 && payment.row && payment.row.consultation_id) {
+          const existing = await consultationsRepo.findById(payment.row.consultation_id);
+          if (existing && existing.patient_id === req.user.id) {
+            return res.json({ ...consultationsRepo.consToApi(existing), payment_replayed: true });
+          }
+        }
         return res.status(payment.errorStatus || 402).json({ error: payment.error });
       }
     }
@@ -100,8 +112,17 @@ router.post('/consultations', authenticate, requireRole('patient'), async (req, 
       const attached = await paymentsRepo.attachToConsultation(payment.row.id, id);
       if (!attached) {
         // Lost the race → the same payment already bought another consultation.
-        // Remove the just-created consultation to keep state consistent.
+        // Remove the just-created (duplicate) consultation and replay the
+        // winner: the payment belongs to THIS patient, so the consultation it
+        // bought is their own request (issue #40 — no duplicate, no 409).
         await consultationsRepo.adminDelete(id);
+        const winner = await paymentsRepo.findByOrderId(payment.row.order_id);
+        if (winner && winner.consultation_id) {
+          const existing = await consultationsRepo.findById(winner.consultation_id);
+          if (existing && existing.patient_id === req.user.id) {
+            return res.json({ ...consultationsRepo.consToApi(existing), payment_replayed: true });
+          }
+        }
         return res.status(409).json({ error: 'Ce paiement a deja ete utilise pour une autre consultation' });
       }
     }
@@ -169,7 +190,9 @@ async function resolveVerifiedPayment({ patientId, orderId, transactionId, requi
     return { error: 'Paiement non associe a ce compte' };
   }
   if (row.consultation_id) {
-    return { error: 'Ce paiement a deja ete utilise pour une autre consultation', errorStatus: 409 };
+    // Issue #40: include the row so the caller can attempt an idempotent
+    // replay (same verified payment, same patient → same consultation).
+    return { error: 'Ce paiement a deja ete utilise pour une autre consultation', errorStatus: 409, row };
   }
 
   if (row.status !== 'PAID') {
