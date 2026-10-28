@@ -1,0 +1,58 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "web": {
+      "root": "medika-web",
+      "framework": "nextjs"
+    },
+    "admin": {
+      "root": "medika-admin",
+      "framework": "nextjs"
+    },
+    "api": {
+      "root": ".",
+      "framework": "express",
+      "entrypoint": "server.js",
+      "functions": {
+        "server.js": {
+          "maxDuration": 300
+        }
+      }
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": { "service": "api" } },
+    { "source": "/api", "destination": { "service": "api" } },
+    { "source": "/payment/(.*)", "destination": { "service": "api" } },
+    { "source": "/payment", "destination": { "service": "api" } },
+    { "source": "/uploads/(.*)", "destination": { "service": "api" } },
+    { "source": "/uploads", "destination": { "service": "api" } },
+    { "source": "/ws", "destination": { "service": "api" } },
+    { "source": "/admin", "destination": { "service": "admin" } },
+    { "source": "/admin/(.*)", "destination": { "service": "admin" } },
+    { "source": "/(.*)", "destination": { "service": "web" } }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "no-referrer" }
+      ]
+    },
+    {
+      "source": "/payment/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    },
+    {
+      "source": "/uploads/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "private, max-age=0, no-store" }
+      ]
+    }
+  ]
+}

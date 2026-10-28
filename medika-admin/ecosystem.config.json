@@ -1,0 +1,12 @@
+{
+  "apps": [
+    {
+      "name": "medika-admin",
+      "cwd": "/root/medika-android/medika-admin",
+      "script": "npx",
+      "args": "next start -p 4000",
+      "instances": 1,
+      "exec_mode": "fork"
+    }
+  ]
+}

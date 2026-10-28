@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Use AppCompat theme as the base. ZEGOCLOUD UIKit activities extend
+         AppCompatActivity, which requires an AppCompat theme (or descendant).
+         Using the platform Material theme here caused crashes when Zego's
+         CallInviteActivity launched. -->
+    <style name="Theme.MyApplication" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- AppCompat attributes needed by Zego's activities -->
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+</resources>

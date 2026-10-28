@@ -1,0 +1,64 @@
+# Built application
+*.apk
+*.ap_
+*.aab
+
+# Files for the ART/Dalvik VM
+*.dex
+
+# Java class files
+*.class
+
+# Generated files
+bin/
+gen/
+out/
+
+# Gradle files
+.gradle/
+build/
+app/build/
+
+# Local configuration
+local.properties
+
+# Android Studio
+*.iml
+.idea/
+.navigation/
+captures/
+
+# Keystore files (keep out of version control)
+*.jks
+*.keystore
+
+# External native build folder
+.cxx/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Environment files with secrets
+.env
+app/.env
+medika-web/.env
+medika-web/.env*.local
+medika-admin/.env
+medika-admin/.env*.local
+
+# ─── Backend (Node) ───────────────────────────────────────────────────────────
+node_modules/
+coverage/
+.vitest/
+*.log
+.vercel/
+
+# Runtime data — NEVER commit patient data, uploads or local databases
+data/
+uploads/
+.pgdata/
+*.sqlite
+
+# Kotlin build noise
+.kotlin/

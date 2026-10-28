@@ -1,0 +1,48 @@
+# Scheduled consultation-deadline processor (issue #25).
+#
+# Runs every 10 minutes against the production API so due offer timeouts,
+# rerouting and five-hour expirations are applied even when nobody is using
+# the app (the API also enforces deadlines opportunistically on reads, so
+# this workflow is an enhancement, never a correctness dependency).
+#
+# One-time setup (repo owner):
+#   1. Generate a random secret, e.g.:  openssl rand -hex 32
+#   2. Add it as the CRON_SECRET environment variable on the Vercel project
+#      (Production scope).
+#   3. Add the same value as the CRON_SECRET repository secret on GitHub
+#      (Settings → Secrets and variables → Actions).
+#   4. Optionally set PRODUCTION_URL (defaults to the known deployment).
+#
+# Without CRON_SECRET the workflow exits silently — nothing breaks.
+name: Consultation deadline scheduler
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: consultation-deadlines
+  cancel-in-progress: false
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger deadline processing
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          PRODUCTION_URL: ${{ secrets.PRODUCTION_URL }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "CRON_SECRET is not configured — skipping (see the setup notes in this workflow)."
+            exit 0
+          fi
+          URL="${PRODUCTION_URL:-https://medika-ecru.vercel.app}/api/crons/consultation-deadlines"
+          echo "Processing due consultation deadlines at $URL ..."
+          curl -fsS --max-time 90 --retry 2 \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "$URL"

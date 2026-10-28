@@ -1,0 +1,61 @@
+{
+  "name": "Medika",
+  "short_name": "Medika",
+  "description": "Medika ede w jwenn doktè ann Ayiti pou konsiltasyon, swivi medikal ak echanj anliy.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f5f8f7",
+  "theme_color": "#145b50",
+  "lang": "ht",
+  "dir": "ltr",
+  "categories": ["medical", "health", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nouvelle konsiltasyon",
+      "short_name": "Konsiltasyon",
+      "description": "Di nou sa w ap santi epi jwenn yon doktè",
+      "url": "/app/consult"
+    },
+    {
+      "name": "Konsiltasyon yo",
+      "short_name": "Konsiltasyon",
+      "description": "Gade konsiltasyon k ap vini yo ak sa ki pase yo",
+      "url": "/app/consultations"
+    },
+    {
+      "name": "Dosisye medikal mwen",
+      "short_name": "Dosisye",
+      "description": "Alèji, tretman ak istwa medikal",
+      "url": "/app/dossier"
+    }
+  ]
+}
