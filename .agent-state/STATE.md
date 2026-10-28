@@ -1,29 +1,23 @@
 # Medika Autonomous Agent State
-Last updated: 2026-10-28T18:55Z (run cron-20261029-0230)
+Last updated: 2026-10-28T18:41Z (run cron-20261029-0240)
 
 ## Active issue
-- NONE IN PROGRESS. Issue #36 -> IN REVIEW (awaiting owner review/merge of PR #41).
+- #40 (bug, high priority) - IN PROGRESS (verification phase)
+- Branch: fix/issue-40-profile-selection-auto-submit
+- PR: #42 (open, mergeable, created by an overlapping run at 18:31Z - NOT duplicated)
+- Progress: PR exists with documented results; this run independently verifies
+  backend/web tests + tsc/lint/build, reviews payment-idempotency diff for
+  security compliance, then marks #40 IN REVIEW.
 
-## Last completed work (run cron-20261029-0230)
-- PR #41 had mergeable_state=dirty: branch carried duplicate trust-flow commit f6c40f4
-  vs main's merged trust impl (PR #39). Fixed by rebasing only the notifications commit
-  (aecd67f -> b74728c) onto main 991aeee, dropping the duplicate trust commit.
-- PR #41 now mergeable/clean, body updated with rebase note + fresh results.
-- Verified on rebased code: backend 29 files/376 tests PASS, web 30 files/378 tests PASS,
-  tsc clean, next lint clean, next build clean. (Actually executed, not fabricated.)
+## Previous work
+- #36 IN REVIEW via PR #41 (rebased onto main 991aeee, clean, verified
+  376+378 tests green in run cron-20261029-0230).
 
-## Persistent-state mechanism
-- This branch (agent-state) holds STATE.md + LOCK.json (best-effort GitHub-based lock).
-- Lock rule: if LOCK.json has active=true AND heartbeat_utc < 45 min old, another run is
-  considered active -> do NOT start work, report and exit.
-- Limitation: GitHub API has no atomic test-and-set; concurrent runs racing within the
-  same few seconds could both read a stale lock. Best effort, not a hard guarantee.
+## Cross-PR note
+- PR #41 and PR #42 both touch src/routes/consultations.js and
+  medika-web/tests/consult-flow.test.ts. Whichever merges second needs a rebase.
+- Issue #43 (NEW [UI] login/register pages) exists, no priority label, no PR - queued.
 
-## Issue queue
-1. #40 (bug, high priority) "Simplify doctor selection and automatically submit
-   consultation after verified payment" - NEXT ELIGIBLE, not started, no PR yet.
-2. #36 IN REVIEW - revisit only if owner requests changes on PR #41.
-
-## Next action (next run)
-1. Read LOCK.json; if stale/free, claim #40: label IN PROGRESS, save number/branch/progress here.
-2. Audit doctor-selection + post-payment flow, implement focused fix on branch fix/issue-40-*, tests, verify, one PR.
+## Next action
+Run backend npm test, web vitest/tsc/lint/build on PR #42 branch; inspect diff;
+if green: comment results on PR #42, label #40 IN REVIEW, release lock.
