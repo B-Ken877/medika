@@ -398,7 +398,10 @@ export function InCallChat({
         )}
       </div>
 
-      <form className="call-chat-composer" onSubmit={handleSubmit}>
+      {/* Issue #53 — form-level autocomplete=off contract (chat message is
+          not autofill-eligible; suppresses Chrome's black autofill accessory
+          strip above the keyboard). */}
+      <form className="call-chat-composer" autoComplete="off" onSubmit={handleSubmit}>
         <label htmlFor="call-chat-input" className="sr-only">
           Ekri yon mesaj
         </label>
@@ -411,6 +414,11 @@ export function InCallChat({
           onKeyDown={onKeyDown}
           placeholder="Ekri yon mesaj..."
           autoComplete="off"
+          /* Composer contract parity with the consultation/ticket chats
+             (issue #53): sentence capitalization stays natural and the
+             action key matches the Enter-to-send handler below. */
+          autoCapitalize="sentences"
+          enterKeyHint="send"
           disabled={!token}
         />
         <button

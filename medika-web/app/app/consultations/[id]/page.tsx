@@ -1157,7 +1157,13 @@ export default function ConsultationChatPage() {
       {/* Composer — the normal row is REPLACED by the voice surface while a
           recording / preview / upload is active (one authoritative mode). */}
       {canChat ? (
-        <form className="chat-composer" onSubmit={onSend}>
+        /* Issue #53: form-level autocomplete=off is the strongest Chromium
+           signal that this form is not autofill-eligible (a chat message is
+           not a credential/address/payment), suppressing Chrome's black
+           autofill accessory strip above the Android keyboard. The Gboard
+           suggestion strip (dark theme) cannot be hidden by web content —
+           see docs/MOBILE_KEYBOARD_SUGGESTION_BAR.md for identification. */
+        <form className="chat-composer" autoComplete="off" onSubmit={onSend}>
           {voiceMode === "idle" && uploadProgress ? (
             <div className="upload-progress" role="status" aria-label="N ap voye fichye a">
               <span className="tiny upload-name">{uploadProgress.name}</span>
