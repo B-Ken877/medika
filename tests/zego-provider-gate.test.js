@@ -1,12 +1,10 @@
 /**
  * Call provider rollout gate (issue #62).
  *
- * config.callProvider implements the fail-safe rollout boundary:
- *   'zego' is honored ONLY on preview/development deployments —
- *   any production deployment (VERCEL_ENV other than preview/development,
- *   or NODE_ENV=production off-Vercel) keeps LiveKit, even when
- *   CALL_PROVIDER=zego and the ZEGOCLOUD_* vars are present.
- * Unknown CALL_PROVIDER values fail closed to 'livekit'.
+ * config.callProvider is opt-in in every environment:
+ *   'livekit' is the safe default; 'zego' is honored only when explicitly
+ *   selected by the server environment. Unknown values fail closed to livekit.
+ * The client cannot select the provider.
  */
 'use strict';
 
@@ -48,12 +46,17 @@ describe('callProvider rollout gate', () => {
     expect(await providerFor({ CALL_PROVIDER: 'zego', NODE_ENV: 'development' })).toBe('zego');
   });
 
-  it('NEVER honors zego in production (fail-safe rollout boundary)', async () => {
-    expect(await providerFor({ CALL_PROVIDER: 'zego', VERCEL_ENV: 'production' })).toBe('livekit');
-    // Unknown VERCEL_ENV values fail closed to production semantics:
-    expect(await providerFor({ CALL_PROVIDER: 'zego', VERCEL_ENV: 'staging?' })).toBe('livekit');
-    // Off-Vercel production build:
-    expect(await providerFor({ CALL_PROVIDER: 'zego', NODE_ENV: 'production' })).toBe('livekit');
+  it('honors explicit zego selection in production deployments', async () => {
+    expect(await providerFor({ CALL_PROVIDER: 'zego', VERCEL_ENV: 'production' })).toBe('zego');
+    expect(await providerFor({ CALL_PROVIDER: 'zego', NODE_ENV: 'production' })).toBe('zego');
+  });
+
+  it('keeps LiveKit as the production default when no provider is configured', async () => {
+    expect(await providerFor({ VERCEL_ENV: 'production', NODE_ENV: 'production' })).toBe('livekit');
+  });
+
+  it('fails closed for unknown VERCEL_ENV when provider is not explicitly zego', async () => {
+    expect(await providerFor({ VERCEL_ENV: 'staging?' })).toBe('livekit');
   });
 
   it('falls back to livekit for unknown CALL_PROVIDER values', async () => {

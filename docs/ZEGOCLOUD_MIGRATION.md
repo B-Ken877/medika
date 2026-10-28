@@ -1,8 +1,10 @@
 # ZEGOCLOUD migration — LiveKit → ZEGOCLOUD (web PWA calls), issue #62
 
 Controlled migration of Medika's **web** doctor–patient video/audio calls from
-LiveKit to ZEGOCLOUD. Production keeps LiveKit until the ZEGOCLOUD flow has
-passed real two-device testing and the owner explicitly accepts the switch.
+LiveKit to ZEGOCLOUD. LiveKit remains the default and rollback provider;
+production opts into ZEGO only through an explicit server-side environment
+setting after the intended ZEGO project credentials are configured. A real
+two-device test is still required before declaring the migration verified.
 
 ## 1. Audit findings (code traced before any change)
 
@@ -73,11 +75,11 @@ passed real two-device testing and the owner explicitly accepts the switch.
 
 **Server-side provider switch (fail-safe)**
 - `CALL_PROVIDER` env: `livekit` (default) | `zego`.
-- `config.callProvider` honors `zego` ONLY on preview/development
-  deployments (VERCEL_ENV preview/development, or non-production off-Vercel).
-  On ANY production deployment `zego` is ignored and LiveKit is used — even
-  if `CALL_PROVIDER=zego` and the ZEGOCLOUD_* variables leak into production
-  scope. Unknown values fail closed to `livekit`.
+- `config.callProvider` honors `zego` only when explicitly selected through
+  the server-side `CALL_PROVIDER=zego` environment variable in any deployment
+  scope. The default is `livekit`; unknown values fail closed to `livekit`.
+  The browser cannot select the provider. Production ZEGO credentials must
+  belong to the intended production project, not a temporary test project.
 - `POST /api/call/token` runs the SAME authorization funnel for both
   providers: authenticate → membership 403 → provider availability 503 (with
   a provider-specific, no-fallback error) → `EN_COURS`-only 403 → mint.
@@ -119,14 +121,16 @@ passed real two-device testing and the owner explicitly accepts the switch.
 - Added `zego-express-engine-webrtc` (^3.13.0) to `medika-web` only.
 - LiveKit dependencies are intentionally NOT removed yet (see rollout).
 
-## 4. Environment variables (Preview/Development only)
+## 4. Environment variables (scope-specific)
 
-Configured by the owner in Vercel for the `medika` project (Preview and
-Development scopes only, NOT Production):
+Configure the variables in Vercel for each environment that should use ZEGO.
+For production, use the intended production ZEGO project credentials; never
+copy temporary test-project credentials into Production. Keep LiveKit
+credentials configured as a rollback path.
 
 | Variable | Role | Exposure |
 |---|---|---|
-| `CALL_PROVIDER` | `zego` to switch non-production calls to ZEGO | server |
+| `CALL_PROVIDER` | `zego` to explicitly switch this deployment scope to ZEGO; default/rollback is `livekit` | server |
 | `ZEGOCLOUD_APP_ID` | ZEGO project id (number) | server + sent to browser in the token response (public by design) |
 | `ZEGOCLOUD_SERVER_URL` | public engine endpoint (wss://…) from the ZEGO console | server + sent to browser (public by design) |
 | `ZEGOCLOUD_SERVER_SECRET` | token04 minting secret (32 chars) | **server only — never client, never logs** |
@@ -139,18 +143,22 @@ LiveKit production deployments.
 
 ## 5. Rollout boundary and rollback
 
-- Production continues on LiveKit with zero code-path change: `config.callProvider`
-  collapses to `livekit` on production deployments regardless of env vars.
-- Rollback = remove `CALL_PROVIDER=zego` (or set `livekit`) on the Vercel
-  Preview/Development scopes. No code or dependency change required.
+- Production continues on LiveKit by default until `CALL_PROVIDER=zego` is
+  explicitly configured in the Vercel Production scope and a new deployment
+  is created.
+- Rollback = set `CALL_PROVIDER=livekit` (or remove `CALL_PROVIDER`) in the
+  relevant Vercel scope, then redeploy. Keep LiveKit credentials configured.
+- Do not activate Production until the correct production App ID, Server URL,
+  and Server Secret have been configured securely in Vercel.
 - LiveKit code and dependencies remain in place until acceptance; removal is
   a separate, explicitly documented cleanup decision.
 
 ## 6. Manual two-device test steps (owner / preview devices)
 
-Environment: Vercel Preview deployment with `CALL_PROVIDER=zego` and the
-`ZEGOCLOUD_*` Preview variables set. Use one doctor device and one patient
-device (browser or PWA), on different networks if possible.
+Environment: a Vercel deployment with `CALL_PROVIDER=zego` and matching
+`ZEGOCLOUD_*` variables configured for that deployment's scope. Use one
+doctor device and one patient device (browser or PWA), on different networks
+if possible.
 
 1. **Connect** — patient opens an `EN_COURS` consultation → call page; doctor
    does the same. Both reach the branded call UI with connecting state first.
