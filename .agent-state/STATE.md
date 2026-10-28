@@ -1,29 +1,29 @@
 # Medika Autonomous Agent State
-Last updated: 2026-10-29T02:35:00+08:00 (UTC 2026-10-28T18:35Z)
+Last updated: 2026-10-28T18:55Z (run cron-20261029-0230)
 
 ## Active issue
-- Issue: #36 (HIGH PRIORITY - push notification system)
-- Branch: feat/issue-36-push-notifications
-- PR: #41 (open, had mergeable_state=dirty vs main)
-- Status: IN PROGRESS - resolving merge conflicts with main
+- NONE IN PROGRESS. Issue #36 -> IN REVIEW (awaiting owner review/merge of PR #41).
 
-## Context
-- PR branch diverged at 90a1883; contains duplicate trust-flow commit f6c40f4
-  (main got its own trust impl via 04360efd + follow-ups ce671b74/3fd52a8/21e9f9f/991aeee)
-- Plan: rebase only the notifications commit (aecd67f) onto current main,
-  resolve conflicts in shared files, re-run tests, update PR #41, mark IN REVIEW.
+## Last completed work (run cron-20261029-0230)
+- PR #41 had mergeable_state=dirty: branch carried duplicate trust-flow commit f6c40f4
+  vs main's merged trust impl (PR #39). Fixed by rebasing only the notifications commit
+  (aecd67f -> b74728c) onto main 991aeee, dropping the duplicate trust commit.
+- PR #41 now mergeable/clean, body updated with rebase note + fresh results.
+- Verified on rebased code: backend 29 files/376 tests PASS, web 30 files/378 tests PASS,
+  tsc clean, next lint clean, next build clean. (Actually executed, not fabricated.)
 
-## Progress
-- [x] Inspected issues/PRs/branches; labels IN PROGRESS/IN REVIEW/BLOCKED created
-- [x] Issue #36 labeled IN PROGRESS
-- [x] Lock + state saved on agent-state branch
-- [ ] Rebase notifications commit onto main
-- [ ] Resolve conflicts
-- [ ] Run tests (backend, web, tsc, lint, build)
-- [ ] Push, update PR body, mark IN REVIEW
+## Persistent-state mechanism
+- This branch (agent-state) holds STATE.md + LOCK.json (best-effort GitHub-based lock).
+- Lock rule: if LOCK.json has active=true AND heartbeat_utc < 45 min old, another run is
+  considered active -> do NOT start work, report and exit.
+- Limitation: GitHub API has no atomic test-and-set; concurrent runs racing within the
+  same few seconds could both read a stale lock. Best effort, not a hard guarantee.
 
-## Next action
-Rebase aecd67f onto origin/main; reconcile shared files (users.js, wallet.js, consultations.js, hub.js, helpers.js).
+## Issue queue
+1. #40 (bug, high priority) "Simplify doctor selection and automatically submit
+   consultation after verified payment" - NEXT ELIGIBLE, not started, no PR yet.
+2. #36 IN REVIEW - revisit only if owner requests changes on PR #41.
 
-## Issue queue (after #36)
-- #40 (bug, high priority) - simplify doctor selection + auto-submit after verified payment. NOT started.
+## Next action (next run)
+1. Read LOCK.json; if stale/free, claim #40: label IN PROGRESS, save number/branch/progress here.
+2. Audit doctor-selection + post-payment flow, implement focused fix on branch fix/issue-40-*, tests, verify, one PR.
