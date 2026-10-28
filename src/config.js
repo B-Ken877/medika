@@ -71,10 +71,10 @@ const config = {
   livekitApiKey: env('LIVEKIT_API_KEY', ''),
   livekitApiSecret: env('LIVEKIT_API_SECRET', ''),
 
-  // ─── ZEGOCLOUD (issue #62 — Preview/Development rollout ONLY) ─────────────
-  // Temporary test project. APP_ID and SERVER_URL are client-visible (the
-  // browser engine needs both); SERVER_SECRET and APP_SIGN are server-only
-  // and must NEVER reach client bundles, logs or Production scope.
+  // ─── ZEGOCLOUD (web call provider; explicit opt-in per deployment) ─────────
+  // APP_ID and SERVER_URL are client-visible (the browser engine needs both);
+  // SERVER_SECRET and APP_SIGN are server-only and must NEVER reach client
+  // bundles or logs. Use the intended ZEGO project credentials in each scope.
   zegoCloudAppId: (() => {
     const raw = env('ZEGOCLOUD_APP_ID', '');
     if (!raw) return 0;
@@ -85,18 +85,14 @@ const config = {
   zegoCloudServerSecret: env('ZEGOCLOUD_SERVER_SECRET', ''), // backend only; exactly 32 chars
   zegoCloudAppSign: env('ZEGOCLOUD_APP_SIGN', ''),        // backend only; unused by token04 auth
 
-  // Effective call provider. 'zego' is honored ONLY on preview/development
-  // deployments — a production deployment ALWAYS stays on livekit even if
-  // CALL_PROVIDER=zego and the ZEGOCLOUD_* vars leak into production scope
-  // (fail-safe rollout boundary, issue #62).
+  // Effective call provider. Production remains on LiveKit by default, but
+  // the operator can explicitly opt in with CALL_PROVIDER=zego after setting
+  // the correct production ZEGO credentials. Unknown values fail closed.
+  // Rollback is immediate at the next deployment by setting CALL_PROVIDER=livekit
+  // (or removing CALL_PROVIDER); no provider is selected by client input.
   callProvider: (() => {
     const requested = env('CALL_PROVIDER', 'livekit');
-    const provider = requested === 'zego' ? 'zego' : 'livekit';
-    if (provider === 'zego' && isProductionDeployment()) {
-      console.warn('[config] CALL_PROVIDER=zego ignored on a production deployment — staying on livekit (issue #62 rollout boundary)');
-      return 'livekit';
-    }
-    return provider;
+    return requested === 'zego' ? 'zego' : 'livekit';
   })(),
 
   // ─── MonCash payments ──────────────────────────────────────────────────────
