@@ -249,3 +249,12 @@ Next action (next run):
 - Action: owner-side diagnostic comment posted on PR #67 (issuecomment-6485107324, 01:13:09Z) with CLI inspect command; agent has no Vercel access. No code changes, no tests re-run (nothing modified by agent this run).
 - #66 remains open + IN REVIEW via PR #67 (owner review + two-device verification pending; owner closes issues per established pattern). Main production still serving d48258b build (bbd0070 deploy pending owner retry after rate-limit window).
 - Next action (next run): check lock -> state -> owner feedback on PR #67/#66 (reviews, merge) + Vercel statuses (bbd0070 retry outcome, b2dca3c preview). If Vercel logs reveal a real build error: fix on feat/zego-only-provider. If PR #67 merged: verify merge, post owner-side checklist (two-device verification script, ZEGO creds scoping + rotation, Android Gradle build — not runnable in agent env). QUEUE EMPTY otherwise.
+
+## Run cron-202610300059 — STARTED issue #68 (Fix ZEGOCLOUD integration using official SDK repo)
+
+- PR #67 (issue #66) MERGED by owner at 2026-10-29T01:23:26Z as 082aa6c = current main HEAD.
+- Only open issue #68 (bug, NEW; title carries HIGH PRIORITY; owner-created 2026-10-29T15:06:31Z) claimed: IN PROGRESS label added (bug+NEW preserved), LOCK acquired (484db07), active run cron-202610300059.
+- Branch (to create): fix/issue-68-zegocloud-official-sdk from main @ 082aa6c.
+- KEY EVIDENCE ALREADY: Vercel deploy of 082aa6c FAILED at 01:23:29Z with build-rate-limit target URL (same class as bbd0070). Production likely still serving d48258b build (deployed 22:27:24Z 10-28) whose callProvider gate forces LiveKit in production -> explains "app still shows LiveKit" WITHOUT any active-code defect. Must still audit code for real ZEGO integration defects per issue body.
+- Audit plan: (1) installed ZEGO package/version + API match vs official repo zego_uikit_prebuilt_web; (2) token04 minting correctness; (3) loginRoom/create engine usage; (4) web session + call page + chat preservation; (5) provider selection + env var scoping; (6) any stale LiveKit runtime path; (7) PWA/service-worker stale-cache angle; (8) deployment commit evidence.
+- Next action: complete audit -> focused fix -> tests -> vitest/tsc/lint/build -> PR -> IN REVIEW.
