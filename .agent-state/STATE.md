@@ -1,17 +1,13 @@
 Last updated: 2026-10-29T19:33:56Z (cron-202610300304)
 
 ## Active issue
-- #71 DONE: owner merged PR #75 as main 9549a7c at 19:34:57Z; production deploy
-  SUCCESS; stale IN REVIEW removed (labels: enhancement, high priority, NEW).
-  (Was IN REVIEW via PR #75 / branch fix/issue-71-desktop-nav-calm-expiration)
-  (bb61da1). Scope done: (A) desktop header-nav >=900px w/ shared navLink renderer,
-  compact 900-1100px, bottom bar contract untouched; (B) ALL ticking countdowns removed
-  (OfferCountdown/formatCountdown/.offer-countdown CSS deleted), chat page calm static
-  copy, NEW idempotent durable pre-expiration reminder (consultation:expiry-reminder,
-  EXPIRY_REMINDER_MINUTES=45, per-party, no schema change, dispatch-time preferences).
-  Tests: 480 web + 423 backend PASS; typecheck/lint/build clean; visual evidence
-  docs/evidence/issue-71/ (9 screenshots + evidence.json, fixture users only).
-  Owner next: review PR #75, merge, device verification. Do NOT mark DONE unverified.
+- #72 IN PROGRESS (run cron-202610300330), branch fix/issue-72-notifications-webpush
+  (from main 9549a7c). Two workstreams: (A) in-app — bell unread badge in AppShell,
+  durable server-authoritative count, WS-prompted refresh, sync across refresh/
+  reconnect/devices; (B) end-to-end Web Push — SW push handler, permission UX,
+  PushSubscription mgmt (multi-device), server send via VAPID, 404/410 cleanup.
+  VAPID env config is OWNER-ONLY (per #50) — document env vars, never touch prod.
+  NOTE: #74 (UI/UX responsive, NEW 19:31Z) queued after #72.
 
 ## Recently completed
 - #70 CLOSED: owner merged PR #73 as main 3c67168 (19:05:08Z); Vercel deploy SUCCESS
