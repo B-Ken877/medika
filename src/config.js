@@ -108,6 +108,13 @@ const config = {
   offerWindowMinutes: parseInt(env('OFFER_WINDOW_MINUTES', '60'), 10),
   consultationExpiryHours: parseInt(env('CONSULTATION_EXPIRY_HOURS', '5'), 10),
   rerouteRetryMinutes: parseInt(env('REROUTE_RETRY_MINUTES', '15'), 10),
+  // Issue #71: ONE gentle pre-expiration reminder per party, emitted by the
+  // deadline processor when an EN_COURS consultation's expires_at falls
+  // within this many minutes. Delivery is idempotent by the notification
+  // idempotency_key (no schema change, no duplicate on repeated scans) and
+  // respects the existing per-category notification preferences at dispatch.
+  // It is a calm heads-up, NOT a deadline change and NOT a live timer.
+  expiryReminderMinutes: parseInt(env('EXPIRY_REMINDER_MINUTES', '45'), 10),
   // Issue #60: bounded pending-request timeout. A RECHERCHE_MEDECIN request
   // older than this many hours is expired by the deadline processor (with a
   // visible system message and close_reason='pending_timeout') so no pending

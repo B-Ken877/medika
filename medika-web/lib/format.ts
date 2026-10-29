@@ -83,22 +83,11 @@ export function statusBadgeClass(status: string): string {
 }
 
 /**
- * Human countdown for server-persisted deadlines (epoch seconds).
- * Kreyòl: "54 min", "2 zè 10 min", "Ekspire" when past. Pure function —
- * callers tick with their own timer and re-render.
+ * Human countdown for server-persisted deadlines (epoch seconds) — REMOVED
+ * (issue #71): live ticking countdowns were perceived as pressure. Deadlines
+ * remain server-authoritative; the UI now uses calm static copy and a
+ * durable server-side pre-expiration reminder notification.
  */
-export function formatCountdown(deadlineEpochSeconds: number | null | undefined, nowMs: number = Date.now()): string {
-  if (!deadlineEpochSeconds) return "";
-  const remainingMs = deadlineEpochSeconds * 1000 - nowMs;
-  if (remainingMs <= 0) return "Ekspire";
-  const totalSeconds = Math.floor(remainingMs / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours > 0) return minutes > 0 ? `${hours} zè ${minutes} min` : `${hours} zè`;
-  if (minutes > 0) return `${minutes} min`;
-  return `${seconds} s`;
-}
 
 export function formatCurrency(amount: number | null | undefined): string {
   if (amount === null || amount === undefined) return "—";

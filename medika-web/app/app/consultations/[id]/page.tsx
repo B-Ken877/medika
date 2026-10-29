@@ -46,7 +46,6 @@ import {
 import type { VoiceMode } from "@/lib/chat/voice";
 import { uploadConsultationAttachment } from "@/lib/api/endpoints";
 import { Avatar, ErrorAlert, Spinner } from "@/components/ui/primitives";
-import OfferCountdown from "@/components/consultation/OfferCountdown";
 import { PrescriptionModal } from "@/components/consultation/PrescriptionModal";
 import { PrescriptionPanel } from "@/components/consultation/PrescriptionPanel";
 import { SecureMedia } from "@/components/consultation/SecureMedia";
@@ -996,8 +995,11 @@ export default function ConsultationChatPage() {
       )}
       {canChat && consultation.expires_at != null && (
         <div className="alert alert-info" style={{ margin: 12, marginBottom: 0 }} role="status">
-          <OfferCountdown deadline={consultation.expires_at} label="Konsiltasyon an ekspire nan:" warnUnderSeconds={30 * 60} />{" "}
-          L istorik mesaj yo ap konsève.
+          {/* Issue #71: calm static copy instead of a ticking countdown. The
+              deadline itself stays server-authoritative (expires_at enforced
+              by the lifecycle engine); a durable pre-expiration reminder is
+              delivered through the notification system near the end. */}
+          Konsiltasyon sa a disponib jiska 5 èdtan apre doktè a aksepte. Istorik mesaj yo ap konsève.
         </div>
       )}
       {refused && (

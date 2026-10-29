@@ -1,23 +1,20 @@
 /**
- * Issue #24 + #25 web UI tests:
- *   * formatCountdown (offer window / 5-hour expiry display)
+ * Issue #24 + #25 + #71 web UI tests:
  *   * EXPIRE status labels + badge classes
- *   * OfferCountdown component (renderToString smoke + server-deadline source)
+ *   * Issue #71: NO ticking countdown anywhere — calm static copy on the chat
+ *     page; deadlines stay server-authoritative (types keep expires_at /
+ *     offer_deadline); the pre-expiration reminder lives server-side
  *   * Wallet page contracts: read-only (NO withdraw/request button), wired to
  *     GET /api/doctor/wallet, patient-inaccessible by server design
- *   * DoctorDashboard / chat page source contracts (countdown chips, EXPIRE
- *     banner, wallet card)
+ *   * DoctorDashboard / chat page source contracts (EXPIRE banner, wallet card)
  */
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as fs from "node:fs";
-import React, { createElement } from "react";
-import { renderToString } from "react-dom/server";
 
-import { formatCountdown, statusBadgeClass } from "@/lib/format";
+import { statusBadgeClass } from "@/lib/format";
 import { consultationStatusLabel } from "@/lib/labels";
-import OfferCountdown from "@/components/consultation/OfferCountdown";
 
 const webRoot = join(__dirname, "..");
 const readSrc = (rel: string) => readFileSync(join(webRoot, rel), "utf8");
@@ -26,33 +23,6 @@ const readCode = (rel: string) =>
   readSrc(rel)
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/^\s*\/\/.*$/gm, "");
-
-describe("formatCountdown", () => {
-  const now = 1_800_000_000_000; // fixed clock
-
-  it("formats minutes", () => {
-    expect(formatCountdown(Math.floor(now / 1000) + 54 * 60, now)).toBe("54 min");
-  });
-
-  it("formats hours and minutes", () => {
-    expect(formatCountdown(Math.floor(now / 1000) + (4 * 3600 + 59 * 60), now)).toBe("4 zè 59 min");
-    expect(formatCountdown(Math.floor(now / 1000) + 5 * 3600, now)).toBe("5 zè");
-  });
-
-  it("formats seconds under a minute", () => {
-    expect(formatCountdown(Math.floor(now / 1000) + 9, now)).toBe("9 s");
-  });
-
-  it("expired deadlines read 'Ekspire'", () => {
-    expect(formatCountdown(Math.floor(now / 1000) - 1, now)).toBe("Ekspire");
-    expect(formatCountdown(Math.floor(now / 1000), now)).toBe("Ekspire");
-  });
-
-  it("empty for missing deadlines", () => {
-    expect(formatCountdown(null, now)).toBe("");
-    expect(formatCountdown(undefined, now)).toBe("");
-  });
-});
 
 describe("EXPIRE status (issue #25)", () => {
   it("has a Kreyòl label and a badge class", () => {
@@ -67,16 +37,18 @@ describe("EXPIRE status (issue #25)", () => {
     expect(src).toMatch(/[Ii]storik mesaj yo kons[eè]ve/);
   });
 
-  it("the chat page shows the five-hour countdown banner while EN_COURS", () => {
-    const src = readSrc("app/app/consultations/[id]/page.tsx");
+  it("the chat page uses CALM STATIC COPY for the five-hour window (issue #71)", () => {
+    const src = readCode("app/app/consultations/[id]/page.tsx");
     expect(src).toContain("consultation.expires_at != null");
-    expect(src).toContain("Konsiltasyon an ekspire nan:");
+    expect(src).toContain("Konsiltasyon sa a disponib jiska 5 èdtan apre doktè a aksepte");
+    expect(src).not.toContain("OfferCountdown");
   });
 
-  it("the doctor dashboard shows the acceptance-window countdown on queue rows", () => {
-    const src = readSrc("components/consultation/DoctorDashboard.tsx");
-    expect(src).toContain("Tan pou aksepte:");
-    expect(src).toContain("c.offer_deadline != null");
+  it("the doctor dashboard renders NO acceptance-window or expiry countdown (issue #71)", () => {
+    const src = readCode("components/consultation/DoctorDashboard.tsx");
+    expect(src).not.toContain("OfferCountdown");
+    expect(src).not.toContain("Tan pou aksepte:");
+    expect(src).not.toContain("Ekspire nan:");
   });
 
   it("the doctor dashboard counts EXPIRE consultations in the done bucket", () => {
@@ -85,31 +57,24 @@ describe("EXPIRE status (issue #25)", () => {
   });
 });
 
-describe("OfferCountdown component", () => {
-  it("renders the remaining time from a server-persisted deadline", () => {
-    const deadline = Math.floor(Date.now() / 1000) + 30 * 60;
-    const html = renderToString(
-      createElement(OfferCountdown, { deadline, label: "Tan pou aksepte:" }),
-    );
-    expect(html).toContain("Tan pou aksepte:");
-    expect(html).toMatch(/\d+ min/);
+describe("no ticking countdown anywhere (issue #71)", () => {
+  it("the OfferCountdown component is removed", () => {
+    expect(fs.existsSync(join(webRoot, "components/consultation/OfferCountdown.tsx"))).toBe(false);
   });
 
-  it("renders nothing without a deadline", () => {
-    expect(renderToString(createElement(OfferCountdown, { deadline: null }))).toBe("");
-    expect(renderToString(createElement(OfferCountdown, { deadline: undefined }))).toBe("");
+  it("formatCountdown is removed from lib/format.ts", () => {
+    expect(readSrc("lib/format.ts")).not.toContain("formatCountdown");
   });
 
-  it("renders 'Ekspire' once the deadline passed", () => {
-    const deadline = Math.floor(Date.now() / 1000) - 5;
-    const html = renderToString(createElement(OfferCountdown, { deadline }));
-    expect(html).toContain("Ekspire");
+  it("the .offer-countdown CSS contract is removed", () => {
+    const css = readSrc("app/globals.css");
+    expect(css).not.toContain(".offer-countdown");
   });
 
-  it("only ever renders the SERVER-provided deadline value (no client-side math)", () => {
-    const src = readSrc("components/consultation/OfferCountdown.tsx");
-    expect(src).toContain("formatCountdown(deadline, nowMs)");
-    expect(src).not.toMatch(/Date\.now\(\)\s*\+/); // never extends/recomputes the deadline
+  it("deadline fields stay server-authoritative API data (types untouched)", () => {
+    const types = readSrc("lib/api/types.ts");
+    expect(types).toContain("expires_at");
+    expect(types).toContain("offer_deadline");
   });
 });
 

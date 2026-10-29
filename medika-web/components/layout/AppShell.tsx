@@ -2,8 +2,9 @@
 
 /**
  * Authenticated app shell — Clinical Calm redesign.
- * 68px white header: brand (logo + wordmark), offline indicator, notifications,
- * and an account menu (avatar + name → profile / logout dropdown).
+ * 68px white header: brand (logo + wordmark), offline indicator, desktop
+ * primary navigation (>=900px, issue #71), notifications, and an account
+ * menu (avatar + name → profile / logout dropdown).
  * Role-aware bottom navigation on small screens + content area.
  * Redirects to /login when unauthenticated; restores session first.
  */
@@ -125,6 +126,25 @@ export function AppShell({ children }: { children: ReactNode }) {
   const isConsultationChat =
     /^\/app\/consultations\/[^/]+$/.test(pathname ?? "");
 
+  /**
+   * Shared navigation link renderer — issue #71. Both navigation surfaces
+   * (desktop header nav and mobile bottom bar) MUST use the identical
+   * role-aware destinations and the identical active-state rule, so the
+   * two can never drift apart.
+   */
+  const navLink = (
+    { href, label, icon: Icon, exact }: (typeof items)[number],
+    iconSize: number,
+  ) => {
+    const active = exact ? pathname === href : pathname?.startsWith(href) && href !== "/app";
+    return (
+      <Link key={href} href={href} className={active ? "active" : ""} aria-current={active ? "page" : undefined}>
+        <Icon size={iconSize} aria-hidden />
+        <span>{label}</span>
+      </Link>
+    );
+  };
+
   return (
     <div className={`app-shell${isConsultationChat ? " chat-mode" : ""}`}>
       <header className="app-header">
@@ -141,6 +161,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             Pa gen koneksyon
           </span>
         )}
+        {/* Issue #71: the mobile bottom bar is display:none at >=900px, which
+            left desktop widths with NO primary navigation. The same role-aware
+            destinations now render in the header; below 900px this nav stays
+            display:none (CSS) and the bottom bar remains the navigation. The
+            chat-mode shell hides the whole header, preserving the focused
+            consultation-room layout. */}
+        <nav className="header-nav" aria-label="Navigasyon prensipal">
+          {items.map((item) => navLink(item, 17))}
+        </nav>
         <div className="header-actions">
           <Link
             href="/app/notifications"
@@ -157,15 +186,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main className="app-main">{children}</main>
 
       <nav className="bottom-nav" aria-label="Navigasyon prensipal">
-        {items.map(({ href, label, icon: Icon, exact }) => {
-          const active = exact ? pathname === href : pathname?.startsWith(href) && href !== "/app";
-          return (
-            <Link key={href} href={href} className={active ? "active" : ""} aria-current={active ? "page" : undefined}>
-              <Icon size={21} aria-hidden />
-              <span>{label}</span>
-            </Link>
-          );
-        })}
+        {items.map((item) => navLink(item, 21))}
       </nav>
     </div>
   );
