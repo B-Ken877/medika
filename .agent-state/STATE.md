@@ -1,36 +1,38 @@
-Last updated: 2026-10-29T21:40:00Z (cron-202610300533)
+Last updated: 2026-10-29T22:05:00Z (cron-202610300533)
 
 ## Active issue
-- #79 IN PROGRESS (run cron-202610300533), branch fix/issue-79-consultation-after-simulated-payment.
-  [bug] Simulated payment succeeds but consultation is not created. Owner filed AFTER merging
-  PR #78 as main d9dcd09. Repro: eligible beta user books consultation, simulated payment
-  completes, but no consultation created/shown. Requirements: trace full flow, inspect exact
-  failure (do not mask in UI), verify db writes/ownership/association, retries/idempotency
-  safety, regression test for complete beta flow, consultation visible in patient workflow.
-  Preserve payment safeguards, no live MonCash changes. Acceptance: root cause documented,
-  successful sim payment -> persisted consultation, clear error on failed creation,
-  regression tests, all checks pass.
+- NONE. #79 IN REVIEW via PR #80 (run cron-202610300533), branch
+  fix/issue-79-consultation-after-simulated-payment (from main d9dcd09).
+  [bug] simulated payment succeeds but consultation not created. Audit: full
+  client-payload flow PROVEN working (9 new tests); two real defects fixed:
+  (1) server routeNewConsultation threw 500 AFTER insert+attach commit -> false
+  failure; now parks in waiting state or returns honest 201;
+  (2) web ErrorAlert discarded ApiError.detail (specific backend reason) ->
+  users saw unexplained "payment confirmed, could not send"; detail now
+  rendered. Tests: 456 backend + 499 web PASS; typecheck/lint/build clean.
+  Owner next: review PR #80. If symptoms persist: owner pulls Vercel function
+  logs for the failed POST (agent has no prod access). Do NOT mark DONE
+  unverified.
 
 ## Recently completed
-- #77 CLOSED: owner merged PR #78 as main d9dcd09 (PAYMENT_SIMULATION_BETA_USERNAMES
-  reversible allowlist + per-user consult resolver + honest web 503). Stale IN REVIEW
-  label removed from #77 this run.
-- #72 (PR #76 -> a2fcdc1), #70 (PR #73 -> 3c67168), #68 (PR #69 -> 57a1e6a).
+- #77 CLOSED: owner merged PR #78 as main d9dcd09 (beta allowlist). Stale
+  IN REVIEW label removed this run.
+- #79 investigation + PR #80 (this run).
+- #72 (PR #76 -> a2fcdc1), #70 (PR #73), #68 (PR #69).
 
 ## Queue
-- #79 [bug] -- the ONLY open issue, now IN PROGRESS.
-- No other open issues. No open PRs.
+- EMPTY except #79 awaiting owner review of PR #80.
 
 ## Infra notes
-- vercel.json git.deploymentEnabled["agent-state"]=false: agent-state pushes create NO
-  Vercel deployments (expected).
-- Test env needs: npm ci at root + medika-web; vitest via npx; embedded PostgreSQL
-  auto-managed by global-setup.
+- vercel.json git.deploymentEnabled["agent-state"]=false (expected).
+- Test env: npm ci at root + medika-web; embedded PostgreSQL auto-managed.
+- Patching src modules in tests: use createRequire anchored at the src file
+  (native require cache) -- dynamic import() creates a separate SSR instance
+  (see media-assets-blob.test.js + issue-79 suite for the pattern).
 
 ## Next action (next run)
-1. If lock active (cron-202610300533 running): do NOT start new work.
-2. If lock stale/free and #79 still IN PROGRESS without PR: resume the audit —
-   web consult page createTheConsultation payload vs src/routes/consultations.js
-   contract; check auth middleware req.user.username, price flow, one-active
-   invariant, UI error surfacing after payState done. Then reproduce + fix + PR.
-3. If #79 has a PR: verify CI, leave IN REVIEW, await owner.
+1. Check lock. If free: check owner feedback on PR #80; whether #79/PR #80
+   were merged/closed.
+2. If merged + #79 closed: remove stale IN REVIEW, verify deploy of new main,
+   report QUEUE EMPTY unless new issues.
+3. If feedback: address on the same branch. One issue at a time.
