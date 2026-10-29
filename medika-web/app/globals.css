@@ -2316,21 +2316,31 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   position: fixed;
   inset: 0;
   z-index: 70;
-  background: #0b1220;
+  /* Issue #70: Medika brand identity — the same deep clinical green as the
+     auth hero (--brand-deep), never a provider blue/navy. */
+  background: var(--brand-deep, #073c31);
   display: flex;
   flex-direction: column;
   color: #fff;
 }
-.call-videos { flex: 1; position: relative; display: flex; }
-.call-videos video { width: 100%; height: 100%; object-fit: contain; background: #000; }
-.call-remote { flex: 1; }
+/* Issue #70 layout fix: .call-videos is a flex item whose default
+   min-height:auto made its min-content height = page width × stream aspect
+   ratio. A portrait (9:16) remote stream therefore blew the video area up to
+   ~2560px on a 1440px desktop, pushing the call bar (and everything else)
+   below the viewport — while a phone-like width kept the bar visible.
+   min-height:0 lets the item shrink to the real available height and
+   overflow:hidden clips the contained video; object-fit:contain preserves
+   the stream's aspect ratio with no crop or stretch. */
+.call-videos { flex: 1; position: relative; display: flex; min-height: 0; overflow: hidden; }
+.call-videos video { width: 100%; height: 100%; object-fit: contain; background: transparent; }
+.call-remote { flex: 1; min-width: 0; }
 .call-local {
   position: absolute;
   right: 14px; top: 14px;
   width: 118px; height: 168px;
   border-radius: 12px;
   overflow: hidden;
-  background: #1f2937;
+  background: var(--green-900, #0d3a32);
   border: 1px solid rgba(255, 255, 255, 0.22);
   z-index: 2;
 }
@@ -2385,7 +2395,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   width: min(420px, 44vw);
   display: flex;
   flex-direction: column;
-  background: #0f172a;
+  background: var(--green-900, #0d3a32);
   border-left: 1px solid rgba(255, 255, 255, 0.14);
   z-index: 6;
 }
@@ -2465,7 +2475,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   line-height: 1.35;
   word-break: break-word;
 }
-.call-chat-row.own .call-chat-bubble { background: var(--green, #17843b); color: #fff; border-bottom-right-radius: 4px; }
+.call-chat-row.own .call-chat-bubble { background: var(--green-600, #145b50); color: #fff; border-bottom-right-radius: 4px; }
 .call-chat-row.partner .call-chat-bubble { background: rgba(255, 255, 255, 0.14); color: #fff; border-bottom-left-radius: 4px; }
 .call-chat-bubble p { margin: 0; white-space: pre-wrap; }
 .call-chat-bubble.typing { display: inline-flex; gap: 4px; align-items: center; }

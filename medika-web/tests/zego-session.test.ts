@@ -52,6 +52,26 @@ function log(method: string, ...args: unknown[]) {
   rec.calls.push([method, ...args]);
 }
 
+/**
+ * Issue #70: mirrors the REAL SDK 3.x shape — createZegoStream resolves with
+ * a ZegoLocalStream WRAPPER that is NOT a MediaStream and holds the real
+ * capture in `.stream` (verified in the installed package). Tests must not
+ * pretend the wrapper is a MediaStream: that lie is exactly what let the
+ * broken srcObject assignment reach production.
+ */
+class FakeZegoLocalStream {
+  constructor(public readonly inner: FakeMediaStream) {}
+  get stream(): FakeMediaStream {
+    return this.inner;
+  }
+  getVideoTracks() {
+    return this.inner.getVideoTracks();
+  }
+  getAudioTracks() {
+    return this.inner.getAudioTracks();
+  }
+}
+
 class FakeEngine {
   on(event: string, cb: (...a: unknown[]) => void) {
     rec.handlers.set(event, cb);
@@ -73,8 +93,12 @@ class FakeEngine {
     const s = new FakeMediaStream();
     s.addTrack(new FakeMediaTrack("audio"));
     s.addTrack(new FakeMediaTrack("video"));
-    return s;
+    this.createdInner = s;
+    this.createdWrapper = new FakeZegoLocalStream(s);
+    return this.createdWrapper;
   });
+  createdWrapper: FakeZegoLocalStream | null = null;
+  createdInner: FakeMediaStream | null = null;
   startPublishingStream = vi.fn((...args: unknown[]) => {
     log("startPublishingStream", ...args);
     return true;
@@ -197,11 +221,21 @@ describe("ZegoCallSession", () => {
       { userID: "user-1", userName: "Pat Test" },
       { userUpdate: true },
     ]);
+    // Issue #70: video mode requests the SDK's 720p capture preset
+    // (quality 3 = 1280x720@20fps/1500kbps), not the 640x480@15fps default.
     expect(rec.calls.find((c) => c[0] === "createZegoStream")?.[1]).toEqual({
-      camera: { audio: true, video: true },
+      camera: { audio: true, video: { quality: 3 } },
     });
     expect(rec.calls.find((c) => c[0] === "startPublishingStream")?.[1]).toBe("medika_cons-1_user-1");
-    expect(s.localMediaStream).not.toBeNull();
+    // The SDK receives the ZegoLocalStream WRAPPER it created (its contract).
+    const wrapper = lastEngine!.createdWrapper!;
+    expect(rec.calls.find((c) => c[0] === "startPublishingStream")?.[2]).toBe(wrapper);
+    // Issue #70 regression: the page-facing stream is the INNER MediaStream —
+    // never the wrapper. Assigning the wrapper to video.srcObject throws
+    // TypeError in the browser, which is how the self-view vanished while
+    // publishing still worked.
+    expect(s.localMediaStream).toBe(lastEngine!.createdInner);
+    expect(s.localMediaStream).not.toBe(wrapper);
   });
 
   it("requests no camera in voice mode", async () => {
@@ -304,9 +338,10 @@ describe("ZegoCallSession", () => {
     const s = new ZegoCallSession();
     sessions.push(s);
     await s.connect(zegoTokenResponse(), user, "video", cb);
+    const wrapper = lastEngine!.createdWrapper!;
     await s.disconnect();
     expect(rec.calls.find((c2) => c2[0] === "stopPublishingStream")?.[1]).toBe("medika_cons-1_user-1");
-    expect(rec.calls.find((c2) => c2[0] === "destroyStream")).toBeTruthy();
+    expect(rec.calls.find((c2) => c2[0] === "destroyStream")?.[1]).toBe(wrapper);
     expect(rec.calls.find((c2) => c2[0] === "logoutRoom")?.[1]).toBe("medika_cons-1");
     expect(rec.calls.find((c2) => c2[0] === "destroyEngine")).toBeTruthy();
     await s.disconnect(); // second call must be a safe no-op
