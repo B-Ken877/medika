@@ -294,3 +294,12 @@ Next action (next run):
      the §5 two-device verification AFTER production serves 082aa6c+.
   4. If Vercel logs show a REAL build error (not rate limit): fix on a branch.
   5. QUEUE EMPTY otherwise.
+
+## Run cron-202610300206 — STARTED issue #70 (call preview, desktop layout, video quality, Medika branding)
+
+- Interim close-out of run cron-202610300059 (interrupted by 5-min trigger): PR #69 MERGED by owner 2026-10-29T17:23:45Z as 57a1e6a (= main HEAD); #68 closed by owner 17:23:47Z; stale IN REVIEW label removed (bug+NEW preserved); Vercel production deploy of 57a1e6a SUCCEEDED 17:25:13Z (build-rate-limit window over; production now serves the ZEGO-only call path). Owner-side pending: docs §5 two-device verification.
+- NEW owner issue #70 (open, B-Ken877, 18:05:00Z, labels high priority+NEW): fix local camera preview (invisible on phone+desktop), desktop layout overflow/crop hiding controls, actual video quality (target 720p via supported SDK APIs), strict Medika green-and-white branding (no ZEGO blue). No merge/deploy. Screenshots evidence required on PR.
+- Claimed: IN PROGRESS label added; remote LOCK acquired (run cron-202610300206); no duplicate branch/PR for #70.
+- Branch (to create): fix/issue-70-call-preview-desktop-quality from main @ 57a1e6a.
+- Audit plan: (1) medika-web call page + ZegoCallSession local-stream lifecycle (createZegoStream, DOM attach, publish state, cleanup); (2) CSS/layout of call page incl. any fullscreen/positioning cause of desktop overflow; (3) design tokens from app/login UI (approved green-white palette); (4) zego-express-engine-webrtc@3.13.0 capture/encode APIs (videoQuality/profile) vs installed version; (5) existing tests.
+- Next action: clone -> audit -> root causes with file/line evidence -> focused fixes + tests -> vitest/tsc/lint/build -> diff review -> PR -> IN REVIEW.
