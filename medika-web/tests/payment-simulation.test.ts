@@ -93,6 +93,34 @@ describe("createPayment parses the server-provided simulated flag", () => {
   });
 });
 
+describe("server failures surface honest messages (issue #77)", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("a 503 payment-service-unavailable answer is NOT reported as a connection problem", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+      json({ success: false, error: "Serveur de paiement non configure" }, 503),
+    );
+    await expect(createPayment({ orderId: "MC_503", amount: 750 })).rejects.toMatchObject({
+      name: "PaymentError",
+      stage: "network",
+      message: "Sèvis peman an pa disponib kounye a. Tanpri eseye ankò pita oswa kontakte sipò a.",
+    });
+  });
+
+  it("other 5xx failures keep the connection-oriented message", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(json({ success: false }, 502));
+    await expect(createPayment({ orderId: "MC_502", amount: 750 })).rejects.toMatchObject({
+      name: "PaymentError",
+      message: "Nou pa rive konekte ak sèvis peman an. Verifye koneksyon entènèt ou epi eseye ankò.",
+    });
+  });
+});
+
 // ── Part 2: consult page source contracts ───────────────────────────────────
 
 import { readFileSync } from "node:fs";

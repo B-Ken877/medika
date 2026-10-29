@@ -82,6 +82,12 @@ async function paymentFetch(path: string, body: unknown, timeoutMs = 20_000): Pr
   // nginx answers 502/504 when the MonCash server is down; locally the
   // Next.js rewrite answers 500. Both are infrastructure failures, not
   // client errors, so they map to the "network" stage.
+  // A 503 is the payment service explicitly reporting itself unavailable
+  // (e.g. real MonCash not configured for this account) — telling the user
+  // to "check their internet connection" would be dishonest (issue #77).
+  if (res.status === 503) {
+    throw new PaymentError("network", "Sèvis peman an pa disponib kounye a. Tanpri eseye ankò pita oswa kontakte sipò a.");
+  }
   if (res.status >= 500) {
     throw new PaymentError("network", "Nou pa rive konekte ak sèvis peman an. Verifye koneksyon entènèt ou epi eseye ankò.");
   }

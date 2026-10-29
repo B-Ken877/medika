@@ -281,19 +281,38 @@ of opening MonCash.
 Production protection (fail closed, enforced server-side):
 
 - Vercel Production deployments (`VERCEL_ENV=production`) **refuse to boot**
-  with `PAYMENT_SIMULATION` set, and the runtime gate rejects simulated
-  operations even if the boot guard were bypassed.
+  with `PAYMENT_SIMULATION` set unless it is bound to explicit allowlisted
+  accounts, and the runtime gate re-checks authorization on every request.
 - Preview deployments build with `NODE_ENV=production`; `VERCEL_ENV`
   (platform-injected, not overridable from project settings) is the
   authoritative stage signal. Unknown `VERCEL_ENV` values are treated as
   production — simulation stays disabled.
 - Client-supplied flags (query params, body fields) are never trusted as
-  authorization; only the server-side environment decides.
+  authorization; only the server-side environment plus the authenticated
+  database username decide.
 
-Enable for preview testing: Vercel Project "medika" → Settings → Environment
-Variables → add `PAYMENT_SIMULATION=true` scoped to **Preview** only. Disable
-(remove the variable) to restore the ordinary MonCash flow — no code change,
-no migration, nothing else to clean up.
+Authorization is account-based and works on any deployment stage:
+
+- `PAYMENT_SIMULATION_TEST_USERNAME` — the legacy single test account
+  (exact username match).
+- `PAYMENT_SIMULATION_BETA_USERNAMES` (issue #77) — a comma-separated
+  allowlist for beta testers, e.g.
+  `PAYMENT_SIMULATION_BETA_USERNAMES=marie.jean,pierre1`. Membership is
+  resolved server-side from the authenticated user; the client can never
+  assert it. On a production deployment at least one of the two variables
+  must be set, or the boot guard refuses to start.
+
+Enable for beta testing: Vercel Project "medika" → Settings → Environment
+Variables → add `PAYMENT_SIMULATION=true` plus
+`PAYMENT_SIMULATION_BETA_USERNAMES=<comma-separated usernames>` scoped to the
+target environment. **Roll back instantly** by removing a username (revokes
+that tester) or unsetting `PAYMENT_SIMULATION_BETA_USERNAMES` (and
+`PAYMENT_SIMULATION_TEST_USERNAME` on production) — affected users fall back
+to the real MonCash path on their next request. No code change, no migration,
+nothing to clean up: previously recorded simulated rows keep their
+`simulated = true` flag and `SIM-…` transaction ids, so they remain
+permanently distinguishable from real MonCash transactions and are excluded
+from real settlement/reporting.
 
 ## 8. Backups & data protection
 
