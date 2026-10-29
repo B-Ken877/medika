@@ -303,3 +303,29 @@ Next action (next run):
 - Branch (to create): fix/issue-70-call-preview-desktop-quality from main @ 57a1e6a.
 - Audit plan: (1) medika-web call page + ZegoCallSession local-stream lifecycle (createZegoStream, DOM attach, publish state, cleanup); (2) CSS/layout of call page incl. any fullscreen/positioning cause of desktop overflow; (3) design tokens from app/login UI (approved green-white palette); (4) zego-express-engine-webrtc@3.13.0 capture/encode APIs (videoQuality/profile) vs installed version; (5) existing tests.
 - Next action: clone -> audit -> root causes with file/line evidence -> focused fixes + tests -> vitest/tsc/lint/build -> diff review -> PR -> IN REVIEW.
+
+## Run cron-202610300206 — #70 audit COMPLETE: 4 root causes with evidence
+
+1. LOCAL PREVIEW INVISIBLE: SDK 3.13.0 createZegoStream returns ZegoLocalStream
+   wrapper (plain class, NOT MediaStream; d.ts L305, bundle class u, no
+   extends MediaStream). Page does el.srcObject = wrapper -> Chromium TypeError
+   (reproduced in headless). Remote works (startPlayingStream -> MediaStream,
+   d.ts L1228). Publish works (startPublishingStream accepts both, L397).
+   Tests missed it: tests/zego-session.test.ts fake returns FakeMediaStream.
+2. DESKTOP OVERFLOW (reproduced): .call-videos{flex:1} missing min-height:0 ->
+   min-content = width x stream aspect; portrait 9:16 remote stream at 1440px
+   -> videos area 2566px, call-bar y=2566 BELOW viewport (barButtonsVisible
+   false, measured); at 390px width bar fits (752+92=844) -> "controls
+   reappear at phone width" matches issue exactly. globals.css L2324.
+3. QUALITY: camera:{video:true} -> SDK default 640x480@15fps (bundle fallback
+   s=t.width||640,n=t.height||480,r=15). Supported fix: camera.video.quality=3
+   preset = 1280x720@20fps/1500kbps (bundle table + ZegoCaptureCamera d.ts).
+4. BRANDING: call UI uses dark navy #0b1220/#0f172a/#1f2937 (globals.css
+   L2319/2333/2388) instead of Medika greens (--brand-deep #073c31 etc).
+5. Bonus: connecting/waiting overlay (page.tsx L424) inset:0 zIndex:4 without
+   pointer-events:none -> click-blocks ALL call controls during the wait.
+
+Fix plan: unwrap MediaStream in session (wrapper kept for SDK calls);
+.call-videos min-height:0 + overflow:hidden; quality 3 preset; brand re-skin
+to green tokens; overlay pointer-events:none; tests (wrapper fake + quality +
+palette) -> vitest/tsc/lint/build -> screenshots -> PR.
