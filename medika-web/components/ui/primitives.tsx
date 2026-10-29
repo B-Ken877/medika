@@ -87,11 +87,20 @@ export function ErrorAlert({
       : error instanceof Error
         ? "Gen yon pwoblèm. Tanpri, eseye ankò."
         : "Gen yon pwoblèm. Tanpri, eseye ankò.");
+  // Issue #79: the backend's `error` string (ApiError.detail) is user-safe
+  // and says exactly WHAT failed ("Doktè sa a okipe deja…", "Montant paye
+  // insuffisant (requis: 750 HTG)"). Rendering only the generic per-status
+  // message masked the real reason behind payment-adjacent failures — the
+  // beta tester saw "payment confirmed, could not send" with no explanation.
+  const detail = error instanceof ApiError ? error.detail : undefined;
   return (
     <div className="alert alert-error" role="alert">
       <AlertTriangle size={17} aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
       <div style={{ flex: 1 }}>
         {text}
+        {detail && detail !== text && (
+          <div className="muted small" style={{ marginTop: 4 }}>{detail}</div>
+        )}
         {onRetry && (
           <div className="mt-1">
             <button className="btn btn-secondary btn-sm" onClick={onRetry}>

@@ -204,9 +204,31 @@ router.post('/consultations', authenticate, requireRole('patient'), async (req, 
     // Issue #25: route the request — the patient-picked doctor (or the best
     // eligible available doctor) receives a one-hour offer; when nobody is
     // eligible the request parks in a retryable waiting state.
-    const routed = await lifecycle.routeNewConsultation(consultation, {
-      patientChoiceDoctorId: doctorId || null,
-    });
+    //
+    // Issue #79: routing runs AFTER the consultation INSERT and the payment
+    // attach have committed. A routing failure must NEVER turn a persisted
+    // booking into a 500 "failed" response — that false failure is what made
+    // beta bookings look lost ("payment succeeds but no consultation") while
+    // the consultation actually existed. Fall back to the waiting state,
+    // which the existing deadline processor retries on every list read
+    // (REROUTE_RETRY_MINUTES) — the offer goes out moments later, and the
+    // patient always gets the honest 201 with their consultation.
+    let routed;
+    try {
+      routed = await lifecycle.routeNewConsultation(consultation, {
+        patientChoiceDoctorId: doctorId || null,
+      });
+    } catch (routingErr) {
+      console.error('[consultations] post-commit routing failed:', id, routingErr.code || routingErr.constructor?.name);
+      try {
+        routed = await lifecycle.parkInWaiting(id);
+      } catch (parkErr) {
+        // Even parking failed — still return the persisted consultation.
+        // The deadline processor's waiting-state retries will pick it up.
+        console.error('[consultations] waiting-state fallback failed:', id, parkErr.code || parkErr.constructor?.name);
+        routed = { consultation, waiting: true, events: [] };
+      }
+    }
 
     const api = consultationsRepo.consToApi(routed.consultation);
     const hub = req.app.locals.hub;
