@@ -329,3 +329,36 @@ Fix plan: unwrap MediaStream in session (wrapper kept for SDK calls);
 .call-videos min-height:0 + overflow:hidden; quality 3 preset; brand re-skin
 to green tokens; overlay pointer-events:none; tests (wrapper fake + quality +
 palette) -> vitest/tsc/lint/build -> screenshots -> PR.
+
+## Run cron-202610300206 — #70 COMPLETE → IN REVIEW via PR #73
+
+- Fixes (branch fix/issue-70-call-preview-desktop-quality, commits aa57394 + ae83d8c):
+  (1) ZegoLocalStream wrapper unwrapped for DOM (inner MediaStream to
+  localMediaStream; wrapper kept for SDK calls); preview attach failure-isolated;
+  honest engine typing. (2) .call-videos min-height:0 + overflow:hidden (portrait
+  remote stream desktop overflow: 2566px -> 808px video area, bar visible;
+  measured before/after headless). (3) camera.video {quality:3} = 720p@20/1500kbps
+  supported preset (voice stays video:false). (4) Brand re-skin: shell
+  var(--brand-deep), panel/placeholder var(--green-900), own bubbles
+  var(--green-600); navy/slate removed and pinned out. (5) Wait overlay
+  pointerEvents:none (controls were click-blocked during eligibility wait).
+- Evidence committed: docs/evidence/issue-70/ (before broken desktop portrait:
+  bar y=2566 invisible; after: contained + controls visible; mobile + 1920 sets).
+- Tests ACTUALLY run: web 37 files/480 tests PASS (3 new: wrapper shape, 720p,
+  brand/layout contracts); root 37 files/421 tests PASS; tsc 0 errors; next lint
+  clean; next build success.
+- PR #73 open (head ae83d8c, review-only, no merge/deploy). IN REVIEW label
+  swapped in (high priority + NEW preserved). Status comment posted
+  (6505369036). #70 stays OPEN — no DONE until owner review + real-device
+  verification (owner closes; established pattern).
+- Disclosed: no real-device/camera verification (owner-side two-device check);
+  screenshots are headless synthetic-stream renders (layout/branding only).
+- Lock released.
+- Next action (next run):
+  1. Check lock -> state -> owner feedback on PR #73 / issue #70 (reviews,
+     merge, change requests).
+  2. If change requests: address on the same branch.
+  3. If merged: verify merge commit; do NOT mark #70 DONE until owner verifies
+     on two devices (self-preview pre-join, desktop controls with portrait
+     stream, 720p sharpness).
+  4. QUEUE EMPTY otherwise.
