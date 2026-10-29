@@ -1,41 +1,36 @@
-Last updated: 2026-10-29T21:20:00Z (cron-202610300451)
+Last updated: 2026-10-29T21:40:00Z (cron-202610300533)
 
 ## Active issue
-- NONE. #77 IN REVIEW via PR #78 (run cron-202610300451), branch
-  fix/issue-77-beta-payment-simulation (6096847, from main a2fcdc1).
-  Safe beta-wide payment simulation: PAYMENT_SIMULATION_BETA_USERNAMES
-  (explicit reversible allowlist, server-verified usernames only) + per-user
-  simulationAllowed in resolveVerifiedPayment + honest web 503 message +
-  DEPLOYMENT.md/README enable/rollback docs. Root cause: prod sim bound to ONE
-  test username -> 503 for every other tester (routes/payments.js 503 +
-  web generic 5xx message); global simAllowed() blocked PENDING simulated rows
-  at consult creation. Tests: 447 backend + 491 web PASS; typecheck/lint/build
-  clean; API-level E2E with synthetic beta account t.patient2 (create -> verify
-  -> consultation -> doctor visibility). Owner next: review PR #78, then set
-  PAYMENT_SIMULATION_BETA_USERNAMES env (owner-only). Do NOT mark DONE
-  unverified. Android has pre-existing no-auth-header payment gap -> follow-up
-  candidate (owner decision).
+- #79 IN PROGRESS (run cron-202610300533), branch fix/issue-79-consultation-after-simulated-payment.
+  [bug] Simulated payment succeeds but consultation is not created. Owner filed AFTER merging
+  PR #78 as main d9dcd09. Repro: eligible beta user books consultation, simulated payment
+  completes, but no consultation created/shown. Requirements: trace full flow, inspect exact
+  failure (do not mask in UI), verify db writes/ownership/association, retries/idempotency
+  safety, regression test for complete beta flow, consultation visible in patient workflow.
+  Preserve payment safeguards, no live MonCash changes. Acceptance: root cause documented,
+  successful sim payment -> persisted consultation, clear error on failed creation,
+  regression tests, all checks pass.
 
 ## Recently completed
-- #72 CLOSED: owner merged PR #76 as main a2fcdc1; Vercel deploy SUCCESS
-  19:55:45Z (verified this run). Stale IN REVIEW removed from #72 this run.
-- #70 (PR #73 -> 3c67168), #68 (PR #69 -> 57a1e6a) merged + closed, deploys OK.
-- #74 closed by owner 19:42:15Z (no agent PR).
+- #77 CLOSED: owner merged PR #78 as main d9dcd09 (PAYMENT_SIMULATION_BETA_USERNAMES
+  reversible allowlist + per-user consult resolver + honest web 503). Stale IN REVIEW
+  label removed from #77 this run.
+- #72 (PR #76 -> a2fcdc1), #70 (PR #73 -> 3c67168), #68 (PR #69 -> 57a1e6a).
 
 ## Queue
-- EMPTY. No open issues, no open PRs. #77 awaits owner review (IN REVIEW).
+- #79 [bug] -- the ONLY open issue, now IN PROGRESS.
+- No other open issues. No open PRs.
 
 ## Infra notes
-- vercel.json git.deploymentEnabled["agent-state"]=false: agent-state pushes
-  create NO Vercel deployments (expected).
-- Test env needs: npm ci at root + medika-web; vitest via npx; embedded
-  PostgreSQL auto-managed by global-setup.
+- vercel.json git.deploymentEnabled["agent-state"]=false: agent-state pushes create NO
+  Vercel deployments (expected).
+- Test env needs: npm ci at root + medika-web; vitest via npx; embedded PostgreSQL
+  auto-managed by global-setup.
 
 ## Next action (next run)
-1. Check lock. If free: check owner feedback on PR #78 (reviews/comments) and
-   whether #77/PR #78 were merged/closed.
-2. If merged + #77 closed: remove stale IN REVIEW label from #77, verify main
-   deploy status, report QUEUE EMPTY unless new issues appeared.
-3. If feedback exists: address on the same branch (one issue at a time).
-4. Any NEW issue the owner files takes priority by its labels (oldest first
-   within same priority).
+1. If lock active (cron-202610300533 running): do NOT start new work.
+2. If lock stale/free and #79 still IN PROGRESS without PR: resume the audit —
+   web consult page createTheConsultation payload vs src/routes/consultations.js
+   contract; check auth middleware req.user.username, price flow, one-active
+   invariant, UI error surfacing after payState done. Then reproduce + fix + PR.
+3. If #79 has a PR: verify CI, leave IN REVIEW, await owner.
