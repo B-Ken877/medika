@@ -258,3 +258,39 @@ Next action (next run):
 - KEY EVIDENCE ALREADY: Vercel deploy of 082aa6c FAILED at 01:23:29Z with build-rate-limit target URL (same class as bbd0070). Production likely still serving d48258b build (deployed 22:27:24Z 10-28) whose callProvider gate forces LiveKit in production -> explains "app still shows LiveKit" WITHOUT any active-code defect. Must still audit code for real ZEGO integration defects per issue body.
 - Audit plan: (1) installed ZEGO package/version + API match vs official repo zego_uikit_prebuilt_web; (2) token04 minting correctness; (3) loginRoom/create engine usage; (4) web session + call page + chat preservation; (5) provider selection + env var scoping; (6) any stale LiveKit runtime path; (7) PWA/service-worker stale-cache angle; (8) deployment commit evidence.
 - Next action: complete audit -> focused fix -> tests -> vitest/tsc/lint/build -> PR -> IN REVIEW.
+
+## Run cron-202610300059 — #68 COMPLETE → IN REVIEW via PR #69
+
+- Audit outcome (evidence-based): "app still shows LiveKit" = DEPLOYMENT LAG.
+  Production's last successful deploy = d48258b (22:27:24Z 10-28, provider gate
+  runs LiveKit in production by design); bbd0070 + 082aa6c deploys both FAILED
+  on Vercel build-rate-limit (commit-status evidence). Repo-wide scan of main:
+  ZERO active LiveKit code paths (remaining = test guards + historical docs).
+  PWA sw cannot serve stale call bundles (network-first nav, hashed assets).
+- Official-SDK conformance verified: src/zego.js re-diffed upstream-identical
+  to zego_server_assistant token04; every engine method/event string re-checked
+  in installed zego-express-engine-webrtc@3.13.0 bundle; flow matches official
+  prebuilt sample pattern (server-minted room token -> client join) adapted to
+  low-level SDK + branded UI.
+- ONE real gap fixed: ZEGOCLOUD_SERVER_URL format never validated -> POST
+  /api/call/token now 503s with a clear actionable error BEFORE minting when
+  the value is not wss://ws (zegoServerUrlProblem helper); config trims the
+  value; NEW tests/zego-server-url.test.js (7 tests: helper unit + route
+  fail-closed contract, no token, no fallback).
+- Docs: docs/ZEGOCLOUD_MIGRATION.md + official refs section (§2.1) + NEW §8
+  deployment-status evidence with owner-only remediation steps.
+- Tests ACTUALLY run: root 37 files / 421 tests PASS; web 37 files / 477
+  tests PASS; tsc 0 errors; next lint clean; next build success.
+- PR #69 open (head 6364482, mergeable=True), IN REVIEW label swapped
+  (bug+NEW preserved), status comment posted (6503521543).
+- Disclosed: no real-device verification (owner-only, docs §5 two-device
+  script); no Vercel access (production alias inferred from GitHub statuses).
+- Lock released.
+- Next action (next run):
+  1. Check lock -> state -> owner feedback on PR #69 / issue #68 (reviews,
+     merge, Vercel deploy retry outcome).
+  2. If change requests: address on fix/issue-68-zegocloud-official-sdk.
+  3. If merged: verify merge commit + do NOT mark #68 DONE until owner runs
+     the §5 two-device verification AFTER production serves 082aa6c+.
+  4. If Vercel logs show a REAL build error (not rate limit): fix on a branch.
+  5. QUEUE EMPTY otherwise.
