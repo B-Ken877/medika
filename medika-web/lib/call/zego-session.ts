@@ -40,6 +40,36 @@
 
 import type { CallTokenResponse } from "@/lib/api/types";
 
+/**
+ * Issue #70: what createZegoStream ACTUALLY resolves with in SDK 3.x — a
+ * ZegoLocalStream WRAPPER (plain class, verified in the installed package:
+ * createZegoStream(options): Promise<ZegoLocalStream>, and the bundled class
+ * does NOT extend MediaStream). It holds the real capture in `.stream`
+ * (MediaStream | null) and proxies getVideoTracks/getAudioTracks. Assigning
+ * the wrapper itself to HTMLMediaElement.srcObject throws TypeError in every
+ * Chromium/Firefox build (srcObject is IDL-typed MediaStream?) — which is
+ * exactly why the local preview never appeared while publishing worked
+ * (startPublishingStream accepts MediaStream | ZegoLocalStream). We keep the
+ * wrapper for every SDK call and expose only the INNER MediaStream to the UI.
+ */
+interface ZegoLocalStreamLike {
+  get stream(): MediaStream | null;
+  getVideoTracks(): MediaStreamTrack[];
+  getAudioTracks(): MediaStreamTrack[];
+}
+
+/**
+ * Issue #70: camera.video accepts a ZegoCaptureCamera object whose `quality`
+ * maps to the SDK's internal videoQuality presets. Verified against the
+ * installed 3.13.0 bundle: 1 = 320x240@15fps/300kbps, 2 = 640x480@15fps/800kbps,
+ * 3 = 1280x720@20fps/1500kbps, 4 = custom (width/height/frameRate/bitrate
+ * required). With plain `video: true` the engine falls back to 640x480@15fps,
+ * which is why consultations looked soft on desktop. We target preset 3
+ * (720p) — supported, stable, and within the SDK's documented envelope; the
+ * SDK itself adapts bitrate to bandwidth.
+ */
+const CAMERA_VIDEO_QUALITY_720P = 3 as const;
+
 /** Minimal structural surface of the ZEGO engine we use. */
 interface ZegoEngineLike {
   on(event: string, cb: (...args: unknown[]) => void): void;
@@ -51,13 +81,16 @@ interface ZegoEngineLike {
   ): Promise<unknown>;
   logoutRoom(roomID?: string): Promise<unknown>;
   createZegoStream(options: {
-    camera?: { video?: boolean | Record<string, unknown>; audio?: boolean | Record<string, unknown> };
-  }): Promise<MediaStream>;
-  startPublishingStream(streamID: string, localStream: MediaStream): boolean | void;
+    camera?: {
+      video?: boolean | { quality?: 1 | 2 | 3 | 4 };
+      audio?: boolean | Record<string, unknown>;
+    };
+  }): Promise<ZegoLocalStreamLike>;
+  startPublishingStream(streamID: string, localStream: ZegoLocalStreamLike | MediaStream): boolean | void;
   stopPublishingStream(streamID: string): void;
   startPlayingStream(streamID: string): Promise<MediaStream>;
   stopPlayingStream(streamID: string): void;
-  destroyStream(localStream: MediaStream): void;
+  destroyStream(localStream: ZegoLocalStreamLike | MediaStream): void;
   muteMicrophone(mute: boolean): boolean;
   renewToken(token: string, roomID?: string): boolean;
   destroyEngine(): void;
@@ -97,14 +130,22 @@ export class ZegoCallSession {
   private roomName = "";
   private myStreamId = "";
   private remoteStreamId: string | null = null;
-  private localStream: MediaStream | null = null;
+  /** The SDK's ZegoLocalStream wrapper — passed back to SDK APIs as-is. */
+  private localZegoStream: ZegoLocalStreamLike | null = null;
+  /** The REAL MediaStream inside the wrapper — the only thing the DOM may touch. */
+  private localMedia: MediaStream | null = null;
   private ended = false;
   private renewTimer: ReturnType<typeof setTimeout> | null = null;
   private connectedOnce = false;
 
-  /** The local preview stream (page renders it into its local video host). */
+  /**
+   * The local preview stream (page renders it into its local video host).
+   * Issue #70: this is the UNWRAPPED MediaStream — assigning the SDK wrapper
+   * to video.srcObject throws TypeError, which is how the self-view vanished
+   * on every device while the partner still saw us.
+   */
   get localMediaStream(): MediaStream | null {
-    return this.localStream;
+    return this.localMedia ?? this.localZegoStream?.stream ?? null;
   }
 
   async connect(
@@ -208,10 +249,16 @@ export class ZegoCallSession {
 
       // Local capture — mic always, camera only in video mode. Permission
       // denials get their own user-facing state.
-      let local: MediaStream;
+      // Issue #70: video mode requests the SDK's 720p preset (quality 3 =
+      // 1280x720@20fps/1500kbps) instead of the 640x480@15fps engine default;
+      // the SDK adapts to device/network capability on top of this request.
+      let local: ZegoLocalStreamLike;
       try {
         local = await engine.createZegoStream({
-          camera: { audio: true, video: mode === "video" },
+          camera: {
+            audio: true,
+            video: mode === "video" ? { quality: CAMERA_VIDEO_QUALITY_720P } : false,
+          },
         });
       } catch (err) {
         if (isPermissionError(err)) {
@@ -222,7 +269,8 @@ export class ZegoCallSession {
         return;
       }
       if (this.ended) return;
-      this.localStream = local;
+      this.localZegoStream = local;
+      this.localMedia = local.stream ?? null;
 
       engine.startPublishingStream(this.myStreamId, local);
 
@@ -249,13 +297,13 @@ export class ZegoCallSession {
     // muteMicrophone(false) = mic ON. Engine-level mute keeps the published
     // stream alive.
     this.engine?.muteMicrophone(!on);
-    for (const t of this.localStream?.getAudioTracks() ?? []) t.enabled = on;
+    for (const t of this.localMedia?.getAudioTracks() ?? []) t.enabled = on;
   }
 
   async toggleCam(on: boolean): Promise<void> {
     // ZEGO-recommended approach (SDK note): publish the stream with the
     // video track present, then toggle track.enabled — no re-negotiation.
-    for (const t of this.localStream?.getVideoTracks() ?? []) t.enabled = on;
+    for (const t of this.localMedia?.getVideoTracks() ?? []) t.enabled = on;
   }
 
   /** The ONLY teardown path. Idempotent; every step is best-effort. */
@@ -279,11 +327,12 @@ export class ZegoCallSession {
       // ignore
     }
     try {
-      if (this.localStream) engine.destroyStream(this.localStream);
+      if (this.localZegoStream) engine.destroyStream(this.localZegoStream);
     } catch {
       // ignore
     }
-    this.localStream = null;
+    this.localZegoStream = null;
+    this.localMedia = null;
     try {
       if (this.roomName) await engine.logoutRoom(this.roomName);
     } catch {

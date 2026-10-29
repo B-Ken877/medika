@@ -299,10 +299,17 @@ function CallScreen() {
         );
         if (disposed || endedRef.current) return;
         // Local preview (muted to kill feedback) + voice-mode remote host.
-        attachStreamToHost(localVideoRef.current, session.localMediaStream, {
-          muted: true,
-          objectFit: "cover",
-        });
+        // Issue #70: attaching the preview must NEVER take down a live call —
+        // a preview/DOM problem degrades to the branded placeholder box, it
+        // does not flip the phase to "failed" while the session is healthy.
+        try {
+          attachStreamToHost(localVideoRef.current, session.localMediaStream, {
+            muted: true,
+            objectFit: "cover",
+          });
+        } catch {
+          // Preview-only failure: keep the call, show the placeholder.
+        }
         if (mode === "voice" && remoteVideoRef.current) {
           remoteVideoRef.current.style.display = "none";
         }
@@ -421,7 +428,19 @@ function CallScreen() {
       {/* Issue #56: "waiting" (doctor has not accepted yet) uses the same
           calm overlay as "connecting" — neutral copy, never an error. */}
       {(state.phase === "connecting" || state.phase === "waiting") && !chatOpen && (
-        <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", zIndex: 4 }}>
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "grid",
+            placeItems: "center",
+            zIndex: 4,
+            // Issue #70: the wait overlay is purely informational — it must
+            // NOT intercept clicks, or the mic/cam/end controls below it are
+            // frozen for the entire (possibly minutes-long) eligibility wait.
+            pointerEvents: "none",
+          }}
+        >
           <div style={{ textAlign: "center" }}>
             <Phone size={34} style={{ margin: "0 auto 10px" }} aria-hidden />
             <Spinner label={statusText} />

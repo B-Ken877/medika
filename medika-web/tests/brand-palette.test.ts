@@ -105,3 +105,29 @@ describe("medika-admin stays on the same institutional family", () => {
     }
   });
 });
+
+describe("the in-call screen renders the Medika brand (issue #70)", () => {
+  it("call shell uses the deep clinical green, never a provider navy/blue", () => {
+    expect(webGlobals).toMatch(/\.call-shell \{[\s\S]*?background: var\(--brand-deep/);
+    // The old navy shell and slate placeholders must not survive:
+    expect(webGlobals).not.toContain("background: #0b1220");
+    expect(webGlobals).not.toContain("background: #1f2937");
+    expect(webGlobals).not.toContain("background: #0f172a");
+  });
+
+  it("in-call chat panel and local placeholder reuse brand green tokens", () => {
+    expect(webGlobals).toMatch(/\.call-chat-panel \{[\s\S]*?background: var\(--green-900/);
+    expect(webGlobals).toMatch(/\.call-local \{[\s\S]*?background: var\(--green-900/);
+    expect(webGlobals).toMatch(/\.call-chat-row\.own \.call-chat-bubble \{ background: var\(--green-600/);
+  });
+
+  it("keeps the call-video flex item shrinkable (desktop overflow regression)", () => {
+    // Without min-height:0 the flex item's min-content height = page width ×
+    // stream aspect ratio; a portrait remote stream pushed the call bar
+    // ~1700px below the desktop viewport (measured 2566px at 1440×900).
+    expect(webGlobals).toMatch(/\.call-videos \{[^}]*min-height: 0[^}]*\}/);
+    expect(webGlobals).toMatch(/\.call-videos \{[^}]*overflow: hidden[^}]*\}/);
+    // Remote video stays contained — never cover-cropped:
+    expect(webGlobals).toContain(".call-videos video { width: 100%; height: 100%; object-fit: contain; background: transparent; }");
+  });
+});
