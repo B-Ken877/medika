@@ -41,6 +41,7 @@ import {
 import { EmptyState, ErrorAlert, SkeletonRows } from "@/components/ui/primitives";
 import { relativeTime } from "@/lib/format";
 import { enablePush, disablePush, probePushSupport, hasPushSubscription, type PushSupport } from "@/lib/push";
+import { useUnread } from "@/components/notifications/UnreadProvider";
 
 const CATEGORY_ICON = {
   consultations: CalendarCheck,
@@ -75,6 +76,7 @@ const SUPPORT_COPY: Record<PushSupport, string> = {
 export default function NotificationsPage() {
   const { token, user } = useAuth();
   const { socket } = useSocket();
+  const { refresh: refreshBellCount } = useUnread();
   const router = useRouter();
 
   const [items, setItems] = useState<AppNotification[] | null>(null);
@@ -126,10 +128,17 @@ export default function NotificationsPage() {
   }, [token]);
 
   // Live events supplement the persisted history while the page is open.
+  // Issue #72: message:new MUST also refresh — a new chat message creates a
+  // durable notification, and an open notification center that ignored it
+  // was the reported "new notification never shows up" behavior.
   useEffect(() => {
     if (!socket || !user) return;
     return socket.onEvent((event) => {
-      if (event.type === "consultation:new" || event.type === "consultation:updated") {
+      if (
+        event.type === "consultation:new" ||
+        event.type === "consultation:updated" ||
+        event.type === "message:new"
+      ) {
         setLiveCount((n) => n + 1);
         load(); // refresh the persisted view (server is the source of truth)
       }
@@ -155,7 +164,9 @@ export default function NotificationsPage() {
 
   const openNotification = (n: AppNotification) => {
     if (!n.read && token) {
-      markNotificationsRead(token, [n.id]).catch(() => undefined);
+      markNotificationsRead(token, [n.id])
+        .then(() => refreshBellCount()) // keep the header bell in sync (issue #72)
+        .catch(() => undefined);
       setUnread((u) => Math.max(0, u - 1));
       setItems((prev) => prev?.map((x) => (x.id === n.id ? { ...x, read: true } : x)) ?? prev);
     }
@@ -168,6 +179,7 @@ export default function NotificationsPage() {
       await markAllNotificationsRead(token);
       setUnread(0);
       setItems((prev) => prev?.map((x) => ({ ...x, read: true })) ?? prev);
+      refreshBellCount(); // header bell clears with the page (issue #72)
     } catch {
       /* keep the current view; retry stays available */
     }

@@ -537,6 +537,26 @@ h1, h2, h3, h4 { line-height: 1.25; font-weight: 600; letter-spacing: -0.01em; }
   justify-content: center;
 }
 .icon-btn:hover { background: var(--gray-50); color: var(--text-primary); }
+/* Unread count badge on the header bell (issue #72) — server-authoritative
+   count delivered by UnreadProvider; hidden at zero; 99+ caps the digits.
+   Medika green (the red .dot above stays reserved for recording states). */
+.icon-btn .bell-count {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--green-600);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+  border: 2px solid var(--surface);
+  pointer-events: none;
+}
 .icon-btn .dot {
   position: absolute;
   top: 6px; right: 6px;

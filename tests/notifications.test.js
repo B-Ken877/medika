@@ -212,6 +212,64 @@ describe('in-app history and preferences', () => {
 
 // ─── Event wiring + privacy ──────────────────────────────────────────────────
 
+describe('unread count endpoint (issue #72)', () => {
+  const emitMod = async () => {
+    const m = await import('../src/notifications/emit');
+    return m.default ?? m;
+  };
+
+  it('serves the caller’s OWN unread count, isolated per user', async () => {
+    const emit = await emitMod();
+    // Deterministic baseline: clear both callers' unread state first.
+    await r.post('/api/notifications/read-all').set('Authorization', `Bearer ${token.patient}`);
+    await r.post('/api/notifications/read-all').set('Authorization', `Bearer ${token.doctor}`);
+
+    await emit.emit({
+      userId: users.patient.id, eventType: 'message:new',
+      idempotencyKey: 't-unread-p1', title: 'U1', body: 'B', url: '/app',
+    });
+    await emit.emit({
+      userId: users.patient.id, eventType: 'message:new',
+      idempotencyKey: 't-unread-p2', title: 'U2', body: 'B', url: '/app',
+    });
+    await emit.emit({
+      userId: users.doctor.id, eventType: 'message:new',
+      idempotencyKey: 't-unread-d1', title: 'U3', body: 'B', url: '/app',
+    });
+
+    const p = await r.get('/api/notifications/unread').set('Authorization', `Bearer ${token.patient}`);
+    expect(p.status).toBe(200);
+    expect(p.body.unread).toBe(2);
+    const d = await r.get('/api/notifications/unread').set('Authorization', `Bearer ${token.doctor}`);
+    expect(d.body.unread).toBe(1);
+  });
+
+  it('requires authentication (401 anonymous)', async () => {
+    const res = await r.get('/api/notifications/unread');
+    expect(res.status).toBe(401);
+  });
+
+  it('recalculates after mark-read and read-all (server is the source of truth)', async () => {
+    const list = await r.get('/api/notifications').set('Authorization', `Bearer ${token.patient}`);
+    const target = list.body.notifications.find((n) => n.title === 'U1');
+    expect(target).toBeTruthy();
+
+    const before = (await r.get('/api/notifications/unread')
+      .set('Authorization', `Bearer ${token.patient}`)).body.unread;
+    const marked = await r.post('/api/notifications/read')
+      .set('Authorization', `Bearer ${token.patient}`).send({ ids: [target.id] });
+    expect(marked.status).toBe(200);
+    const after = (await r.get('/api/notifications/unread')
+      .set('Authorization', `Bearer ${token.patient}`)).body.unread;
+    expect(after).toBe(before - 1);
+
+    await r.post('/api/notifications/read-all').set('Authorization', `Bearer ${token.patient}`);
+    const zero = (await r.get('/api/notifications/unread')
+      .set('Authorization', `Bearer ${token.patient}`)).body.unread;
+    expect(zero).toBe(0);
+  });
+});
+
 describe('business event wiring (via REST, real flows)', () => {
   let consId;
 

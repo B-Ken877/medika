@@ -123,6 +123,35 @@ export async function enablePush(token: string): Promise<PushState> {
   return { support: "supported", enabled: true };
 }
 
+/**
+ * Re-register an EXISTING browser subscription with the server (issue #72).
+ *
+ * Called by the authenticated shell on load and on reconnect. Heals the
+ * `pushsubscriptionchange` renewal gap (a renewed subscription never reached
+ * the server) and any earlier failed registration. IDEMPOTENT: the server
+ * upserts by endpoint and re-binds it to the authenticated owner. Never
+ * requests permission, never creates a new subscription, never throws.
+ * Returns true when a subscription exists and was (re)registered.
+ */
+export async function syncExistingPushSubscription(token: string): Promise<boolean> {
+  try {
+    if (probePushSupport() !== "supported") return false;
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) return false;
+    const json = sub.toJSON();
+    if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return false;
+    await registerPushSubscription(token, {
+      endpoint: json.endpoint,
+      keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+      userAgent: navigator.userAgent,
+    });
+    return true;
+  } catch {
+    return false; // best-effort heal; the explicit opt-in flow still works
+  }
+}
+
 /** Unsubscribe this device (browser + server). Never throws. */
 export async function disablePush(token: string): Promise<PushState> {
   try {
