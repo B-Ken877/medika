@@ -1,9 +1,9 @@
 {
-  "run_id": "Run cron-20261029-0550 complete: #62 IN REVIEW via PR #63. Lock released.",
-  "started_at_utc": "2026-10-28T22:20:52Z",
-  "heartbeat_utc": "2026-10-28T22:20:52Z",
-  "active": false,
+  "run_id": "Run cron-20261029-0840",
+  "started_at_utc": "2026-10-29T00:44:20Z",
+  "heartbeat_utc": "2026-10-29T00:44:20Z",
+  "active": true,
   "owner": "medika-autonomous-agent",
-  "issue": null,
-  "note": "Run cron-20261029-0550 complete: #62 IN REVIEW via PR #63. Lock released."
+  "issue": 66,
+  "note": "Issue #66 claimed: finish Zego-only migration on owner branch feat/zego-only-provider (8 commits, based on main bbd0070, backend done; web+docs+lockfile+audit remaining). Also: #62 closed by owner 23:58:46Z - stale IN REVIEW removed, priority labels restored after over-deletion correction."
 }
