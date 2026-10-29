@@ -75,7 +75,7 @@ dependencies {
     // extends AppCompatTextView)
     implementation("androidx.appcompat:appcompat:1.7.0")
 
-    // ZEGOCLOUD UIKit Prebuilt Call — replaces LiveKit.
+    // ZEGOCLOUD UIKit Prebuilt Call — voice/video calling.
     // Handles call invitations, ringing, WebRTC, call UI, mute/camera, hang-up.
     // Version pinned. Firebase (firebase-messaging) and zpns-fcm are EXCLUDED
     // because this app has no google-services.json / Firebase setup.

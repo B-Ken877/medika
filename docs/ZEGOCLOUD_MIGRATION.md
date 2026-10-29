@@ -1,42 +1,70 @@
-# ZEGOCLOUD migration — LiveKit → ZEGOCLOUD (web PWA calls), issue #62
+# ZEGOCLOUD video calls (sole provider) — issues #62 / #66
 
-Controlled migration of Medika's **web** doctor–patient video/audio calls from
-LiveKit to ZEGOCLOUD. LiveKit remains the default and rollback provider;
-production opts into ZEGO only through an explicit server-side environment
-setting after the intended ZEGO project credentials are configured. A real
-two-device test is still required before declaring the migration verified.
+Medika's doctor–patient video/audio calls run on **ZEGOCLOUD only**, on web
+and Android alike. There is no LiveKit dependency, no provider switch and no
+fallback path: every token is minted server-side by the authorization
+funnel, and a missing or invalid ZEGO configuration fails closed with a
+clear error. A real two-device test is still required before declaring the
+migration verified in production.
 
-## 1. Audit findings (code traced before any change)
+## 1. Architecture
 
-**Backend (LiveKit today)**
-- `POST /api/call/token` (`src/routes/call.js`): `authenticate` → consultation
-  membership (403 "Not part of this consultation") → service availability
-  (503, no credential fallback ever) → consultation lifecycle eligibility
-  (403 unless `EN_COURS`; a RECHERCHE_MEDECIN row can already carry the
-  current offer holder as `doctor_id`, so identity alone is not acceptance —
-  issue #45) → mint LiveKit AccessToken (identity = user id, grants
-  join/publish/subscribe/data) for room `medika_<consultationId>`.
-- Credentials: `LIVEKIT_URL` (public), `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`
-  (`src/config.js`).
+**Backend (`src/routes/call.js`, `src/zego.js`, `src/config.js`)**
+- `POST /api/call/token`: `authenticate` → consultation membership
+  (403 "Not part of this consultation") → service availability (503, no
+  credential fallback ever) → consultation lifecycle eligibility (403 unless
+  `EN_COURS`; a RECHERCHE_MEDECIN row can already carry the current offer
+  holder as `doctor_id`, so identity alone is not acceptance — issue #45)
+  → mint a token04 grant for room `medika_<consultationId>`.
+- Room and stream identity are SERVER-derived: the token payload pins
+  `room_id`, the privilege map (`"1"` = loginRoom, `"2"` = publishStream)
+  and `stream_id_list` = exactly `medika_<consultationId>_<userId>`. A
+  stolen token cannot join another room or publish another stream.
+- Response: `{ provider: 'zego', token, url, roomName, participantIdentity,
+  streamId, appId, tokenTtlSeconds }`. `tokenTtlSeconds` is 3600; renewal
+  re-runs the full authorization funnel.
+- Secrets: `ZEGOCLOUD_SERVER_SECRET` (32 chars) / `ZEGOCLOUD_APP_SIGN` are
+  server-only — never returned by any endpoint, never logged, never placed
+  in any `NEXT_PUBLIC_*` variable and never committed. Tests use throwaway
+  values. There are no LiveKit credentials anymore.
+- Missing configuration answers 503 with `ZEGOCLOUD non configure …`
+  (ZEGOCLOUD_APP_ID / ZEGOCLOUD_SERVER_URL / ZEGOCLOUD_SERVER_SECRET
+  requis); an invalid secret length also answers 503 without leaking
+  details.
 
-**Web (LiveKit today)**
-- Entry: consultation page links `/app/consultations/[id]/call?mode=video`
-  (primary) and `?mode=voice`; `/room` is a retired redirect (issue #56).
-- Call page (`medika-web/app/app/consultations/[id]/call/page.tsx`):
-  bounded, cancellable eligibility poll (calm waiting; terminal statuses get
-  honest copy with no retry storm) → token fetch → `livekit-client` Room →
-  publish mic/camera → attach local/remote video elements.
-- Issue #45 guarantees: the in-call chat (`InCallChat`) is an overlay on the
-  call page — switching to chat NEVER unmounts the call, so the RTC session
-  and local tracks survive. "End call" is the only user action that
-  disconnects. Lifecycle transitions go through the pure state machine
-  `medika-web/lib/call/phases.ts` (connecting/waiting/active/reconnecting/
-  ended/failed with generic/permission/ineligible kinds).
+**Web (`medika-web`)**
+- `lib/call/zego-session.ts`: `ZegoCallSession` bridges the low-level
+  `zego-express-engine-webrtc` SDK (dynamic import; browser-only) onto the
+  page's machinery — the pure phases state machine, the calm eligibility
+  wait, the WS signaling (call:start once per session; call:ended/
+  call:rejected → end call), the in-call chat overlay and the branded UI.
+  ZEGO `RECONNECTING`/`RECONNECTED` surface as true automatic reconnection
+  states; `DISCONNECTED`/`KICKOUT` (not user-caused) surface as an
+  unexpected disconnect with a REAL retry that re-fetches a fresh token;
+  capture denials (`NotAllowedError`) surface as the permission failure
+  state. Camera mute uses the ZEGO-recommended track `enabled` toggle; mic
+  mute uses `muteMicrophone` plus track enable.
+- `app/app/consultations/[id]/call/page.tsx`: bounded, cancellable
+  eligibility poll (calm waiting; terminal statuses get honest copy with no
+  retry storm) → token fetch → `new ZegoCallSession()` (exactly one
+  creation site) → loginRoom/publish/subscribe. Local/remote video use the
+  same host elements and styling as before (muted local preview,
+  `object-fit` cover/contain, voice mode hides the remote video host while
+  audio keeps playing). The in-call chat overlay never unmounts the page,
+  so the session and local tracks survive chat switches (issue #45).
+- `lib/api/types.ts`: `CallTokenResponse` is the zego contract — `provider`
+  (`"zego"`, required), `appId`, `streamId`, `tokenTtlSeconds`. The session
+  re-validates the shape at its boundary and rejects anything else.
+- Token renewal: on `tokenWillExpire` the page re-POSTs `/api/call/token` —
+  every renewal re-runs the FULL server authorization funnel (membership +
+  EN_COURS) — and hands the fresh token to `renewToken`. A failed renewal
+  never silently extends a grant; room events surface the outcome.
 
-**Android (out of scope, untouched)**
-- The Android app uses Agora RTC for calls and Zego ZIM for chat. This
-  migration changes ONLY the web PWA path; the chat transport (WebSocket +
-  ZIM on Android) is not modified. No Android code or dependency changed.
+**Android**
+- The Android app already calls through the ZEGOCLOUD UIKit Prebuilt Call
+  (`com.example.data.zego.ZegoCallManager` / `ZegoChatManager`, ZIM chat).
+  Issue #66 renamed the legacy `data.livekit` package to `data.zego` so the
+  source tree matches the actual provider; no behavior change.
 
 ## 2. ZEGOCLOUD SDK facts (verified against official sources)
 
@@ -45,8 +73,8 @@ two-device test is still required before declaring the migration verified.
   Medika keeps its own branded call UI.
 - Engine: `new ZegoExpressEngine(appID: number, server: string)` — the
   `server` argument is the WebSocket endpoint from the ZEGO console. This is
-  exactly what `ZEGOCLOUD_SERVER_URL` holds. It is client-visible by design
-  (like `LIVEKIT_URL`), NOT a secret.
+  exactly what `ZEGOCLOUD_SERVER_URL` holds. It is client-visible by
+  design, NOT a secret.
 - Room/stream flow: `loginRoom(roomID, token, {userID, userName},
   {userUpdate: true})` → `createZegoStream({camera: {audio, video}})` →
   `startPublishingStream(streamID, localStream)`; remote media via the
@@ -58,10 +86,7 @@ two-device test is still required before declaring the migration verified.
   `renewToken(token, roomID?)`. Teardown: `stopPublishingStream`,
   `stopPlayingStream`, `destroyStream`, `logoutRoom`, `destroyEngine`.
 - Auth: **token04** generated SERVER-SIDE from `AppID + ServerSecret`
-  (exactly 32 chars). The token payload can pin `room_id`, the
-  `privilege` map (`"1"` = loginRoom, `"2"` = publishStream) and
-  `stream_id_list`. Medika uses all three, so a token only works for ITS
-  room, ITS user and ITS stream.
+  (exactly 32 chars).
 - `ZEGOCLOUD_APP_SIGN` is NOT needed for token04 authentication and is never
   sent to the browser. It stays server-only, unused unless a future SDK
   requirement proves otherwise.
@@ -71,94 +96,35 @@ two-device test is still required before declaring the migration verified.
   upstream debug `console.log` calls removed (token plaintext must never hit
   logs) and repo style applied. Zero new runtime dependencies (Node `crypto`).
 
-## 3. Architecture of the change
-
-**Server-side provider switch (fail-safe)**
-- `CALL_PROVIDER` env: `livekit` (default) | `zego`.
-- `config.callProvider` honors `zego` only when explicitly selected through
-  the server-side `CALL_PROVIDER=zego` environment variable in any deployment
-  scope. The default is `livekit`; unknown values fail closed to `livekit`.
-  The browser cannot select the provider. Production ZEGO credentials must
-  belong to the intended production project, not a temporary test project.
-- `POST /api/call/token` runs the SAME authorization funnel for both
-  providers: authenticate → membership 403 → provider availability 503 (with
-  a provider-specific, no-fallback error) → `EN_COURS`-only 403 → mint.
-- Response adds a `provider` field (`'livekit'` | `'zego'`); the legacy
-  LiveKit response shape is otherwise unchanged. Zego responses additionally
-  carry the public engine data the browser needs: `appId`, `url`
-  (= `ZEGOCLOUD_SERVER_URL`), the server-derived `streamId`
-  (`medika_<consultationId>_<userId>`) and `tokenTtlSeconds` (3600).
-- Secrets: `ZEGOCLOUD_SERVER_SECRET` / `ZEGOCLOUD_APP_SIGN` are server-only.
-  They are never returned by any endpoint, never logged, never placed in any
-  `NEXT_PUBLIC_*` variable and never committed. Tests use throwaway values.
-
-**Web client**
-- `medika-web/lib/api/types.ts`: `CallTokenResponse` gained optional
-  `provider`/`appId`/`streamId`/`tokenTtlSeconds`. The client NEVER assumes
-  a provider — it follows the server's response. Absent `provider` (older
-  backend) keeps the LiveKit path.
-- `medika-web/lib/call/zego-session.ts`: `ZegoCallSession` bridges ZEGO to
-  the SAME machinery the page already has — the pure phases state machine,
-  the calm eligibility wait, the WS signaling (call:start once per session;
-  call:ended/call:rejected → end call), the in-call chat overlay and the
-  UI. ZEGO `RECONNECTING`/`RECONNECTED` surface as true automatic
-  reconnection states; `DISCONNECTED`/`KICKOUT` (not user-caused) surface as
-  an unexpected disconnect with a REAL retry that re-fetches a fresh token;
-  capture denials (`NotAllowedError`) surface as the permission failure
-  state. Camera mute uses the ZEGO-recommended track `enabled` toggle; mic
-  mute uses `muteMicrophone` plus track enable.
-- The call page branches on `res.provider === "zego"` AFTER the token fetch;
-  the LiveKit code path is unchanged byte-for-byte otherwise. Local/remote
-  video use the same host elements and styling (muted local preview,
-  `object-fit` cover/contain, voice mode hides the remote video host while
-  audio keeps playing).
-- Token renewal: on `tokenWillExpire` the page re-POSTs `/api/call/token` —
-  every renewal re-runs the FULL server authorization funnel (membership +
-  EN_COURS) — and hands the fresh token to `renewToken`. A failed renewal
-  never silently extends a grant; room events surface the outcome.
-
-**Dependencies**
-- Added `zego-express-engine-webrtc` (^3.13.0) to `medika-web` only.
-- LiveKit dependencies are intentionally NOT removed yet (see rollout).
-
-## 4. Environment variables (scope-specific)
-
-Configure the variables in Vercel for each environment that should use ZEGO.
-For production, use the intended production ZEGO project credentials; never
-copy temporary test-project credentials into Production. Keep LiveKit
-credentials configured as a rollback path.
+## 3. Environment variables
 
 | Variable | Role | Exposure |
 |---|---|---|
-| `CALL_PROVIDER` | `zego` to explicitly switch this deployment scope to ZEGO; default/rollback is `livekit` | server |
 | `ZEGOCLOUD_APP_ID` | ZEGO project id (number) | server + sent to browser in the token response (public by design) |
 | `ZEGOCLOUD_SERVER_URL` | public engine endpoint (wss://…) from the ZEGO console | server + sent to browser (public by design) |
 | `ZEGOCLOUD_SERVER_SECRET` | token04 minting secret (32 chars) | **server only — never client, never logs** |
 | `ZEGOCLOUD_APP_SIGN` | not used by token04 auth | **server only; kept unused** |
 
-`.env.example` documents empty placeholders only. Missing ZEGO configuration
-on a preview call answers 503 with a clear `ZEGOCLOUD non configure`
-message — it never silently falls back to LiveKit and never breaks existing
-LiveKit production deployments.
+Each Vercel scope (Production / Preview / Development) must carry the
+credentials of the ZEGO project intended for that scope; never copy
+temporary test-project credentials into Production. `.env.example`
+documents empty placeholders only.
 
-## 5. Rollout boundary and rollback
+## 4. Rollback / incident handling
 
-- Production continues on LiveKit by default until `CALL_PROVIDER=zego` is
-  explicitly configured in the Vercel Production scope and a new deployment
-  is created.
-- Rollback = set `CALL_PROVIDER=livekit` (or remove `CALL_PROVIDER`) in the
-  relevant Vercel scope, then redeploy. Keep LiveKit credentials configured.
-- Do not activate Production until the correct production App ID, Server URL,
-  and Server Secret have been configured securely in Vercel.
-- LiveKit code and dependencies remain in place until acceptance; removal is
-  a separate, explicitly documented cleanup decision.
+There is no second provider to fall back to — by design. If ZEGO is
+unavailable or misconfigured:
+- Calls fail closed: the token endpoint answers 503 and the UI shows the
+  explicit failure screen with retry — it never pretends a call is live.
+- Restoring service = fixing the ZEGO credentials/endpoint in the affected
+  Vercel scope, or rolling the deployment back to a previous release in the
+  Vercel dashboard (application-level rollback, still ZEGO-only).
 
-## 6. Manual two-device test steps (owner / preview devices)
+## 5. Manual two-device test steps (owner / production devices)
 
-Environment: a Vercel deployment with `CALL_PROVIDER=zego` and matching
-`ZEGOCLOUD_*` variables configured for that deployment's scope. Use one
-doctor device and one patient device (browser or PWA), on different networks
-if possible.
+Environment: a deployment with the intended `ZEGOCLOUD_*` variables
+configured for its scope. Use one doctor device and one patient device
+(browser or PWA), on different networks if possible.
 
 1. **Connect** — patient opens an `EN_COURS` consultation → call page; doctor
    does the same. Both reach the branded call UI with connecting state first.
@@ -179,33 +145,32 @@ if possible.
    (fresh tokens each time).
 8. **Authorization negative tests** — a user NOT part of the consultation
    cannot obtain a token (403); a non-EN_COURS consultation cannot mint
-   tokens (403); with ZEGO vars removed the preview answers 503 (no LiveKit
-   fallback).
+   tokens (403); with the ZEGO vars removed the deployment answers 503.
 9. **Secrets hygiene** — browser devtools network tab: the token response
    contains appId/serverUrl/streamId/token but never the ServerSecret or
    AppSign; no console log contains credential material.
 
-## 7. Automated verification actually performed
+## 6. Automated verification actually performed (issue #66)
 
-- Root backend suite: **37 files / 418 tests passed** (includes 15 new tests:
-  token04 format + decrypt round-trip + error codes, provider gate defaults /
-  preview / development / production fail-safe / unknown values, zego token
-  route happy path + payload pinning + non-member 403 + RECHERCHE_MEDECIN
-  403 + missing-config 503 no-fallback; existing LiveKit tests unchanged and
-  green).
-- medika-web: **37 files / 477 tests passed** (9 new ZegoCallSession tests:
-  provider guard, server-derived identity, voice mode, room-reason mapping,
-  own-stream filtering + remote ADD/DELETE, token renewal, permission
-  failure, toggles without teardown, idempotent disconnect); `tsc --noEmit`
-  clean; `next lint` clean; `next build` succeeded.
+- Root backend suite: **36 files / 414 tests passed** (`npx vitest run`,
+  embedded-PostgreSQL harness). Call-token tests rewritten for the zego-only
+  contract (token04 shape, provider/streamId fields, fail-closed 503);
+  the LiveKit-specific test file was removed.
+- medika-web: **37 files / 477 tests passed** (ZegoCallSession suite,
+  session-based source contracts on the call page); `tsc --noEmit` 0 errors;
+  `next lint` clean; `next build` succeeded.
+- `livekit-client` removed from `medika-web/package.json`;
+  `medika-web/package-lock.json` and the root `package-lock.json`
+  regenerated without any LiveKit package.
 
-## 8. Known limitations / not yet verified
+## 7. Known limitations / not yet verified
 
 - No real-device or video-quality verification has been performed by the
   agent (owner-only step). Acceptance criteria requiring an actual
   authenticated ZEGO call remain unchecked until the owner runs the
-  two-device script on a preview deployment.
+  two-device script (§5) on a deployment.
 - The temporary ZEGO test project credentials must be rotated/revoked after
   testing (owner note in the issue).
-- Android impact: none (Agora calls + ZIM chat untouched); documented here
-  to make the scope boundary explicit.
+- The Android rename is a mechanical source move (package/imports/symbols);
+  no Android build was executed in the agent environment, so a Gradle build
+  on the owner side is still the verification step for the mobile module.

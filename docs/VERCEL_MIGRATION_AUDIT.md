@@ -3,6 +3,11 @@
 > Audit date: 2026-10-22 · Branch audited: `feat/medika-pwa-web-ux` (includes `main` history + PWA)
 > Auditor: automated code review of the actual repository contents (code takes precedence over README claims).
 > **No credentials or secrets are reproduced in this document.** Findings reference where secrets live, not their values.
+>
+> **Historical note (2026-10-29):** this audit describes the repository
+> BEFORE the ZEGOCLOUD migration. LiveKit references below are historical;
+> since issues #62/#66, ZEGOCLOUD is the sole call provider and all LiveKit
+> code, configuration and dependencies have been removed.
 
 ---
 

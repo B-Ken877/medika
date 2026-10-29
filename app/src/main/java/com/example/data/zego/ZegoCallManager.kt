@@ -1,4 +1,4 @@
-package com.example.data.livekit
+package com.example.data.zego
 
 import android.app.Application
 import android.util.Log
