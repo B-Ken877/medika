@@ -227,3 +227,10 @@ Next action (next run):
 - Claimed: IN PROGRESS label added to #66. Lock: cron-20261029-0840 / issue 66 / active. Local repo: fixed filemode noise (core.filemode=false, 314 phantom-mode diffs, zero content changes).
 - Also: main bbd0070 production deploy STILL failing (Vercel build rate limit, status unchanged since 22:31:59Z; owner has not retried). PR previews may hit the same external failure - to disclose in PR.
 - Next action: fetch/checkout feat/zego-only-provider -> audit 8 commits' diffs -> repo-wide livekit reference scan -> finish web migration + docs -> full vitest/tsc/lint/build both sides -> PR.
+## Run cron-20261029-0840 — #66 checkpoint 1: BACKEND LIVEKIT REMOVAL COMPLETE, root suite green
+
+- Local repo: checkout feat/zego-only-provider (tracking origin), local main ref synced to origin/main (bbd0070). Fixed phantom filemode noise via core.filemode=false (zero content diffs).
+- Backend changes on top of owner's 8 commits (commit f304413): tests/upload-call.test.js (ZEGO dummies, token contract assertions incl. provider/streamId/token04); tests/call-token-eligibility.test.js (ZEGO dummies, token04 happy-path); tests/zego-unset.test.js (no CALL_PROVIDER/LiveKit framing); tests/zego-call-token.test.js (sole-provider framing); tests/livekit-unset.test.js DELETED (superseded by zego-unset); server.js + src/zego.js comment reword.
+- Tests ACTUALLY run: targeted call files 31/31 pass; FULL root suite 36 files / 414 tests passed (npx vitest run, embedded PG harness).
+- Remaining: web (call/page.tsx 626-line zego-only refactor, livekit-client dep + lockfile, types/comments/tests), mobile package rename data/livekit->data/zego (2 files + 2 importers, livekitConnected symbols; NO Android build available - will disclose), docs (ZEGOCLOUD_MIGRATION.md rewrite, DEPLOYMENT.md, ANDROID_COMPATIBILITY.md, VERCEL_MIGRATION_AUDIT.md historical note, web README).
+- Next action: web refactor -> medika-web vitest/tsc/lint/build -> mobile rename -> docs -> final repo-wide livekit audit -> commit/push/PR.
