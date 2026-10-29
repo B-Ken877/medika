@@ -23,7 +23,7 @@ Vercel project "medika" (single project, Vercel Services)
                                                      Express REST + WebSocket, one Function
 Managed PostgreSQL (Neon / Supabase / RDS…)       ← DATABASE_URL
 Vercel Blob                                       ← BLOB_READ_WRITE_TOKEN (uploads)
-LiveKit (Cloud or self-hosted, TLS)               ← LIVEKIT_URL / API key / secret (ROTATED)
+ZEGOCLOUD WebRTC (ZEGO cloud)                     ← ZEGOCLOUD_APP_ID / SERVER_URL / SERVER_SECRET
 MonCash REST (Digicel)                            ← MONCASH_CLIENT_ID / SECRET
 Optional Redis (Upstash)                          ← REDIS_URL (cross-instance WS fan-out)
 ```
@@ -171,7 +171,7 @@ the legacy server; only new consultations are payment-gated.
    |---|---|
    | `DATABASE_URL` | from §2, TLS |
    | `JWT_SECRET` | generate: `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"` |
-   | `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | **rotated** credentials; `wss://` public URL |
+   | `ZEGOCLOUD_APP_ID` / `ZEGOCLOUD_SERVER_URL` / `ZEGOCLOUD_SERVER_SECRET` | ZEGO project credentials for this scope; secret is server-only (32 chars) |
    | `MONCASH_MODE` / `MONCASH_CLIENT_ID` / `MONCASH_CLIENT_SECRET` | from the MonCash business portal |
    | `REQUIRE_PAYMENT` | `true` (default in production) — consultations require verified payment |
    | `BLOB_READ_WRITE_TOKEN` | Vercel → Storage → Blob |
@@ -321,8 +321,9 @@ no migration, nothing else to clean up.
 These are **not** done by this migration and require a human decision:
 
 1. **Rotate every previously committed credential** (audit C3/C4): VPS SSH
-   password, admin password, LiveKit API key/secret (already forced into env
-   vars here — rotate at the provider), Zego/Agora app IDs if concerned.
+   password, admin password, Zego/Agora app IDs if concerned. (The LiveKit
+   key/secret that was once committed is moot since issue #66 removed
+   LiveKit entirely — ZEGOCLOUD is the sole call provider.)
 2. **Upload privacy**: new uploads go to public Blob URLs (unguessable but
    unauthenticated). For per-consultation access control, move to private
    blobs + an authenticated streaming route (note the 4.5 MB function
@@ -334,12 +335,14 @@ These are **not** done by this migration and require a human decision:
    `realtime/server.js` on an always-on host instead and point
    `NEXT_PUBLIC_WS_URL` at it.
 5. **`/token` (Agora)**: still served from wherever it lives today; port it
-   into the API (or migrate Android calls to LiveKit) as a follow-up.
+   into the API (or finish the Android ZEGOCLOUD cutover) as a follow-up.
 6. **Android WS-fallback chat** needs an app update to send the JWT auth
    frame (ZIM primary chat is unaffected) — see
    `docs/ANDROID_COMPATIBILITY.md`.
-7. **Cross-client calls** (Android Agora ↔ web LiveKit) remain
-   non-interoperable — pre-existing gap, needs a product decision.
+7. **Cross-client calls**: Android (ZEGOCLOUD UIKit) and web (ZEGOCLOUD
+   Express Web SDK) now share the same provider; actual cross-client
+   interop (same ZEGO project + room conventions) still needs an
+   owner-side verification.
 8. **Password policy**: minimum length is 4 for Android compatibility;
    raising it requires a coordinated client update.
 9. Confirm MonCash status vocabulary in sandbox (§7).

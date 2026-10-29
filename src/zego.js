@@ -1,5 +1,5 @@
 /**
- * ZEGOCLOUD server-side support (issue #62 — LiveKit → ZEGOCLOUD migration).
+ * ZEGOCLOUD server-side token support (the sole video-call provider).
  *
  * `generateToken04` is vendored from ZEGOCLOUD's official server assistant
  * (github.com/ZEGOCLOUD/zego_server_assistant, token/nodejs/server/zegoServerAssistant.js,

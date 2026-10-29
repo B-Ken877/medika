@@ -59,10 +59,12 @@ inherent to fixing critical security findings.
 
 ## Known, pre-existing gaps (unchanged by this migration — documented, not silently removed)
 
-- **Android ↔ web calls do not interoperate**: Android uses Agora rooms, the
-  web PWA uses LiveKit rooms (both get tokens after server-side
-  authorization). This predates the migration; unifying requires a product
-  decision (migrate Android to LiveKit, or the web to Agora).
+- **Android ↔ web call interop is unverified**: Android calls run on the
+  ZEGOCLOUD UIKit Prebuilt Call (`ZegoCallManager`), the web PWA on the
+  ZEGOCLOUD Express Web SDK (issue #66 — both providers are now ZEGO).
+  Actual cross-client join (same ZEGO project, matching room conventions)
+  still needs an owner-side verification; the legacy Agora token server
+  remains referenced by older Android builds.
 - **ZIM messages are not persisted server-side** (Zego relays them
   peer-to-peer); the WS path persists. Android↔Android chat history therefore
   lives on-device, as today.

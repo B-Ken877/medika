@@ -2370,7 +2370,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 }
 
 /* ── In-call chat panel (issue #45) ────────────────────────────────────────
-   Chat lives INSIDE the call screen: the LiveKit room is never unmounted
+   Chat lives INSIDE the call screen: the call session is never unmounted
    when switching between video and messages. Desktop: a side panel over the
    right edge. Mobile: a full sheet whose header carries "Back to video" and
    a DISTINCT red "End call" button, with the local camera re-laid-out (pure

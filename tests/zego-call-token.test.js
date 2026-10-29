@@ -1,26 +1,20 @@
 /**
- * ZEGOCLOUD call-token route integration (issue #62).
+ * ZEGOCLOUD call-token route integration (sole provider).
  *
- * With CALL_PROVIDER=zego (preview/development), POST /api/call/token must
- * mint a server-side token04 grant ONLY after the full authorization funnel:
- * membership (403) → ZEGO configuration (503) → EN_COURS eligibility (403).
- * The response must expose the public engine data (appId, server URL) and
- * the SERVER-derived room/stream identity — never any secret material.
+ * POST /api/call/token must mint a server-side token04 grant ONLY after the
+ * full authorization funnel: membership (403) → ZEGO configuration (503) →
+ * EN_COURS eligibility (403). The response must expose the public engine
+ * data (appId, server URL) and the SERVER-derived room/stream identity —
+ * never any secret material.
  * NOTE: there is no way to test the REAL ZEGOCLOUD_APP_ID/SECRET here; these
  * are throwaway test values and never production credentials.
  */
 'use strict';
 
 process.env.REQUIRE_PAYMENT = 'false';
-process.env.CALL_PROVIDER = 'zego';
 process.env.ZEGOCLOUD_APP_ID = '123456789';
 process.env.ZEGOCLOUD_SERVER_URL = 'wss://webliveroom-test.example.com/ws';
 process.env.ZEGOCLOUD_SERVER_SECRET = '0123456789abcdef0123456789abcdef';
-// LiveKit dummies also present (as in a real preview env) — the provider
-// switch must route to zego regardless.
-process.env.LIVEKIT_URL = 'wss://livekit.example.com';
-process.env.LIVEKIT_API_KEY = 'testkey';
-process.env.LIVEKIT_API_SECRET = 'testsecret-testsecret-testsecret-testsecret';
 
 import crypto from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -59,7 +53,7 @@ function decodeToken04(t, secret) {
   return JSON.parse(Buffer.concat([decipher.update(cipher), decipher.final()]).toString('utf8'));
 }
 
-describe('POST /api/call/token with CALL_PROVIDER=zego', () => {
+describe('POST /api/call/token (ZEGO sole provider)', () => {
   it('mints a token04 grant for an EN_COURS participant with server-derived identity', async () => {
     const cons = await h.createConsultationFixture({
       patientId: users.patient.id, doctorId: users.doctor.id, status: 'EN_COURS',
@@ -94,7 +88,7 @@ describe('POST /api/call/token with CALL_PROVIDER=zego', () => {
 
   it('denies a non-member (403) before any token minting', async () => {
     // A consultation owned by patient2 only (no doctor) — doctor_t1 is NOT
-    // a member of it and must get the same 403 as on the LiveKit path.
+    // a member of it and must get the same 403 as any other caller.
     const cons = await h.createConsultationFixture({ patientId: users.patient2.id });
     const res = await r.post('/api/call/token')
       .set('Authorization', `Bearer ${token.doctor}`)
@@ -103,7 +97,7 @@ describe('POST /api/call/token with CALL_PROVIDER=zego', () => {
     expect(res.body.error).toContain('Not part of this consultation');
   });
 
-  it('denies a RECHERCHE_MEDECIN consultation (403) — same funnel as LiveKit', async () => {
+  it('denies a RECHERCHE_MEDECIN consultation (403) — lifecycle eligibility fails closed', async () => {
     const cons = await h.createConsultationFixture({ patientId: users.patient.id });
     const res = await callToken('patient', cons.id);
     expect(res.status).toBe(403);

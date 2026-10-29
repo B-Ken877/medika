@@ -152,7 +152,7 @@ export default function PatientDashboard() {
               <div className="row-meta">Demann lan fèt {relativeTime(current.created_at)}</div>
             </div>
             {/* Issue #56: an ACTIVE consultation's primary surface is the
-                real LiveKit video call; waiting/finished ones open the
+                real video call; waiting/finished ones open the
                 detail chat. The retired placeholder room is no longer a
                 destination. */}
             <Link

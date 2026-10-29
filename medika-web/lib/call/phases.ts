@@ -8,8 +8,8 @@
  *    endCall signaling, no ghost reconnect after hang-up).
  *  - A dropped connection after the call was live becomes "failed" WITH a
  *    real retry affordance (canRetry) — the UI must never claim a
- *    reconnection is happening unless LiveKit's automatic reconnection is
- *    actually in progress (phase "reconnecting").
+ *    reconnection is happening unless the ZEGO engine's automatic
+ *    reconnection is actually in progress (phase "reconnecting").
  *  - View switching (chat <-> video) is NOT a call event: toggling the
  *    in-call chat panel never reaches this machine, so it cannot end the
  *    call, disconnect the room or stop local tracks.
@@ -19,8 +19,8 @@
  *    (RECHERCHE_MEDECIN). It is a calm, NEUTRAL state (the doctor simply
  *    has not accepted yet) — never rendered as an error. The call page
  *    polls the authoritative consultation status with bounded backoff and
- *    only creates/connects the LiveKit room once the server authorizes a
- *    token. No room exists during "waiting", so waiting cannot leak media
+ *    only creates/connects the call session once the server authorizes a
+ *    token. No session exists during "waiting", so waiting cannot leak media
  *    or signaling.
  *  - "failed" with failureKind "ineligible" — a genuinely terminal server
  *    state (REFUSE / TERMINE / EXPIRE, or the bounded wait budget ran out).
@@ -42,13 +42,13 @@ export type CallPhase =
 export type CallFailureKind = "generic" | "permission" | "ineligible";
 
 export type CallEvent =
-  /** Remote media subscribed / room fully up — the call is live. */
+  /** Remote media subscribed / session fully up — the call is live. */
   | { type: "connected" }
-  /** LiveKit RoomEvent.Reconnecting — an automatic retry IS in progress. */
+  /** ZEGO engine RECONNECTING — an automatic retry IS in progress. */
   | { type: "reconnecting" }
-  /** LiveKit RoomEvent.Reconnected — the automatic retry succeeded. */
+  /** ZEGO engine RECONNECTED — the automatic retry succeeded. */
   | { type: "reconnected" }
-  /** RoomEvent.Disconnected while the user never hung up. */
+  /** Engine dropped the room while the user never hung up. */
   | { type: "unexpected-disconnect" }
   /** Initial connect attempt threw. `kind` distinguishes permission denials. */
   | { type: "connect-failed"; kind?: CallFailureKind }
@@ -70,7 +70,7 @@ export type CallEvent =
 export interface CallState {
   phase: CallPhase;
   failureKind: CallFailureKind;
-  /** A real retry is possible: re-fetch a token and reconnect the room. */
+  /** A real retry is possible: re-fetch a token and reconnect the session. */
   canRetry: boolean;
   /** True once the call had actually been established (used for copy). */
   everConnected: boolean;
@@ -95,7 +95,7 @@ export function reduceCallState(state: CallState, event: CallEvent): CallState {
   }
 
   if (event.type === "reconnecting") {
-    // LiveKit is genuinely auto-retrying — a REAL state, safe to surface.
+    // The engine is genuinely auto-retrying — a REAL state, safe to surface.
     return state.phase === "connecting" || state.phase === "active"
       ? { ...state, phase: "reconnecting" }
       : state;

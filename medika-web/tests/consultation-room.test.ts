@@ -2,7 +2,7 @@
  * Consultation ROOM route (issue #56) tests.
  *
  * Issue #56 RETIRES the issue #33 video-first PLACEHOLDER as a destination:
- * the real LiveKit call page (../call) is the primary consultation surface
+ * the real call page (../call) is the primary consultation surface
  * and it handles waiting/eligibility/terminal states itself, server-gated.
  *
  * Contracts verified (source-contract pattern — no jsdom in this package):
@@ -10,7 +10,7 @@
  *    compact compatibility redirect to the real call (mode=video);
  *  - the placeholder UI is gone — no fake call affordances, no duplicate
  *    voice/video buttons, no second chat entry;
- *  - the redirect page itself never touches LiveKit/tokens/media;
+ *  - the redirect page itself never touches call tokens/media;
  *  - the chat page's acceptance transition now navigates DIRECTLY to the
  *    real call (patient never detours through the placeholder), while
  *    duplicate realtime events still cannot loop navigation;
@@ -51,11 +51,10 @@ describe("consultation room route — compatibility redirect (issue #56)", () =>
     expect(room).not.toContain("getConsultation");
   });
 
-  it("the redirect page never joins LiveKit, mints tokens or requests media", () => {
-    expect(room).not.toContain("livekit");
+  it("the redirect page never joins a call, mints tokens or requests media", () => {
+    expect(room).not.toContain("ZegoCallSession");
     expect(room).not.toContain("getCallToken");
     expect(room).not.toContain("getUserMedia");
-    expect(room).not.toContain("new Room(");
   });
 
   it("documents WHY the route survives (retired, not deleted)", () => {

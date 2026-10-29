@@ -6,7 +6,7 @@
  *    and the stored bytes are re-served through that route (dev disk mode)
  *  - unservable types (svg…) rejected with 400
  *  - unauthenticated requests rejected
- *  - LiveKit token endpoint: contract shape + authorization + 503 when unset
+ *  - ZEGOCLOUD call-token endpoint: contract shape + authorization
  */
 'use strict';
 
@@ -17,10 +17,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 process.env.REQUIRE_PAYMENT = 'false';
 process.env.LOCAL_UPLOADS_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'medika-uploads-'));
-// Dummy LiveKit credentials — JWT signing works offline.
-process.env.LIVEKIT_URL = 'wss://livekit.example.com';
-process.env.LIVEKIT_API_KEY = 'testkey';
-process.env.LIVEKIT_API_SECRET = 'testsecret-testsecret-testsecret-testsecret';
+// Dummy ZEGOCLOUD credentials — token04 signing works offline.
+process.env.ZEGOCLOUD_APP_ID = '123456789';
+process.env.ZEGOCLOUD_SERVER_URL = 'wss://webliveroom-test.example.com/ws';
+process.env.ZEGOCLOUD_SERVER_SECRET = '0123456789abcdef0123456789abcdef';
 
 const h = await import('./helpers');
 
@@ -150,7 +150,7 @@ describe('classifyStorageError — sanitized storage failure categories', () => 
   });
 });
 
-describe('POST /api/call/token (LiveKit)', () => {
+describe('POST /api/call/token (ZEGOCLOUD)', () => {
   let consId;
 
   beforeAll(async () => {
@@ -158,15 +158,17 @@ describe('POST /api/call/token (LiveKit)', () => {
     consId = cons.id;
   });
 
-  it('returns the legacy shape { token, url, roomName, participantIdentity }', async () => {
+  it('returns the token contract { token, url, roomName, participantIdentity, streamId }', async () => {
     const res = await r.post('/api/call/token')
       .set('Authorization', `Bearer ${token.patient}`)
       .send({ consultationId: consId, isVideo: true });
     expect(res.status).toBe(200);
-    expect(res.body.token.split('.')).toHaveLength(3); // LiveKit JWT
-    expect(res.body.url).toBe('wss://livekit.example.com'); // public URL from env
+    expect(res.body.provider).toBe('zego');
+    expect(res.body.token.startsWith('04')).toBe(true); // token04
+    expect(res.body.url).toBe('wss://webliveroom-test.example.com/ws'); // public URL from env
     expect(res.body.roomName).toBe('medika_' + consId);
     expect(res.body.participantIdentity).toBe(users.patient.id);
+    expect(res.body.streamId).toBe(`medika_${consId}_${users.patient.id}`);
   });
 
   it('rejects non-participants (403)', async () => {

@@ -4,7 +4,7 @@
  *    call (no duplicate endCall signaling, no ghost reconnect after hang-up).
  *  - An unexpected disconnect offers a REAL retry (canRetry) — the machine
  *    never fabricates a "reconnecting" state on its own.
- *  - "reconnecting" exists only while LiveKit's automatic retry is running.
+ *  - "reconnecting" exists only while the engine's automatic retry is running.
  *  - Retry is valid only from the failure screen.
  *  - View switching is NOT a call event — it never reaches this machine, so
  *    it cannot end the call, disconnect the room or stop local tracks.
@@ -66,7 +66,7 @@ describe("reduceCallState — hang-up is terminal (no duplicate endings)", () =>
 describe("reduceCallState — real reconnection semantics", () => {
   const active = reduceCallState(INITIAL_CALL_STATE, { type: "connected" });
 
-  it("Reconnecting is surfaced (LiveKit retry IS running), then recovers", () => {
+  it("Reconnecting is surfaced (the engine retry IS running), then recovers", () => {
     const r = reduceCallState(active, { type: "reconnecting" });
     expect(r.phase).toBe("reconnecting");
     const back = reduceCallState(r, { type: "reconnected" });

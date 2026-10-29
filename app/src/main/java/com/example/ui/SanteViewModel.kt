@@ -8,9 +8,9 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.api.*
 import com.example.data.db.*
 import com.example.data.repository.SanteRepository
-import com.example.data.livekit.ZegoCallManager
-import com.example.data.livekit.ZegoChatManager
-import com.example.data.livekit.ZimIncomingMessage
+import com.example.data.zego.ZegoCallManager
+import com.example.data.zego.ZegoChatManager
+import com.example.data.zego.ZimIncomingMessage
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -207,11 +207,11 @@ class SanteViewModel(
     val isPlayingVoice: StateFlow<Boolean> = _isPlayingVoice.asStateFlow()
     private var recordingTimerJob: kotlinx.coroutines.Job? = null
 
-    // ─── LiveKit ─────────────────────────────────────
-    private val _livekitConnected = MutableStateFlow(false)
-    val livekitConnected: StateFlow<Boolean> = _livekitConnected.asStateFlow()
+    // ─── ZEGOCLOUD call connection state ─────────────
+    private val _zegoConnected = MutableStateFlow(false)
+    val zegoConnected: StateFlow<Boolean> = _zegoConnected.asStateFlow()
 
-    // LiveKit removed — ZEGOCLOUD UIKit manages the call UI.
+    // ZEGOCLOUD UIKit manages the call UI end to end.
     private var currentRoomName: String? = null
     private var currentCallIsVideo: Boolean = false
 
@@ -1810,7 +1810,7 @@ class SanteViewModel(
     }
 
     // ══════════════════════════════════════════════════════
-    // ─── CALLING SYSTEM (LiveKit) - DO NOT MODIFY ───────────────────────
+    // ─── CALLING SYSTEM (ZEGOCLOUD) - DO NOT MODIFY ─────────────────────
     // ══════════════════════════════════════════════════════
 
     fun hasCallPermissions(context: Context, isVideo: Boolean): Boolean {
@@ -2113,10 +2113,10 @@ class SanteViewModel(
         }
     }
 
-    private suspend fun connectToLiveKitRoom(lkToken: String, lkUrl: String, isVideo: Boolean) {
+    private suspend fun connectToZegoRoom(lkToken: String, lkUrl: String, isVideo: Boolean) {
         // No-op: Zego UIKit handles the connection when the user taps
         // ZegoSendCallInvitationButton.
-        println("[ZEGO] connectToLiveKitRoom is a no-op — Zego UIKit handles connection")
+        println("[ZEGO] connectToZegoRoom is a no-op — Zego UIKit handles connection")
     }
 
     // ─── Video Attachment ─────────────────────────────────
@@ -2141,7 +2141,7 @@ class SanteViewModel(
     private fun cleanupCall() {
         callTimerJob?.cancel()
         currentRoomName = null
-        _livekitConnected.value = false
+        _zegoConnected.value = false
 
         val current = _activeCall.value
         _activeCall.value = null  // Clear immediately so next call works

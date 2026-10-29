@@ -161,7 +161,7 @@ class IncomingCallActivity : AppCompatActivity() {
 
         // Send rejection signal back
         try {
-            com.example.data.livekit.ZegoChatManager.sendCallRejectSignal(
+            com.example.data.zego.ZegoChatManager.sendCallRejectSignal(
                 toUserId = callerId,
                 roomId = roomId
             )

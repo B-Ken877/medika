@@ -139,7 +139,7 @@ export default function DoctorDashboard() {
       await acceptConsultation(token, id);
       showToast("Konsiltasyon an aksepte.");
       // Issue #56: the accepted consultation's primary surface is the real
-      // LiveKit video call — the doctor goes straight there, not to the
+      // video call — the doctor goes straight there, not to the
       // chat page or the retired placeholder room. The call page itself
       // handles the patient-not-yet-present wait and the server-side
       // eligibility gate stays authoritative.

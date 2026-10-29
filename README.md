@@ -18,7 +18,7 @@ Medika is migrating from a single-VPS deployment to a Vercel-centric one:
 | Web PWA | `medika-web/` (PR #1) on the VPS | **`web` service** of the same Vercel project — served at `/` (same-origin `/api` via the platform router) |
 | Admin | `medika-admin/` (PM2 :4000) | **`admin` service** of the same Vercel project — served at `/admin` (basePath preserved) |
 | Payments | Separate MonCash server (PM2 :9998, **not in repo**) | `/api/payment/*` + `/payment/api/payment/*` inside the API (server-side MonCash verification) |
-| Video | Self-hosted LiveKit (7880) | LiveKit (Cloud or self-hosted) via env vars |
+| Video | Legacy RTC infrastructure | ZEGOCLOUD Web SDK with server-minted token04 grants |
 | Realtime | In-process WebSocket | Same protocol on Vercel's WS support; optional Redis pub/sub for multi-instance |
 | Uploads | Local disk + static | **Vercel Blob** (4 MB cap — Vercel function body limit) |
 
@@ -38,13 +38,13 @@ Key documents:
 
 - Bearer tokens are **JWTs** now (the legacy server used the raw user id as the token — see audit C1). All clients re-login once after cutover.
 - WebSocket auth frames carry the JWT (`{type:'auth', token}`).
-- LiveKit, MonCash and admin credentials come from env vars only; previously committed secrets must be treated as **compromised and rotated** (audit C3/C4).
+- Video-call and MonCash credentials come from environment variables only; previously committed secrets must be treated as **compromised and rotated** (audit C3/C4).
 - MonCash payments are verified **server-side** before a consultation can be created (audit C5).
 - Simulated payments are dev/sandbox-only and refuse to boot in production.
 
 ### Legacy VPS (being replaced)
 
-The original deployment ran behind nginx on a VPS: `/api`+`/ws`+`/uploads` → Express (:3000), `/payment` → MonCash server (:9998), `/token` → Agora token server, `/admin` → admin panel (:4000), plus self-hosted LiveKit (:7880) and coturn (:3478). Infrastructure credentials (SSH, admin password, LiveKit key/secret) were previously recorded in this README — they were **removed** and must be rotated.
+The original deployment ran behind nginx on a VPS: `/api`+`/ws`+`/uploads` → Express (:3000), `/payment` → MonCash server (:9998), `/token` → Agora token server, `/admin` → admin panel (:4000), plus legacy RTC infrastructure. Infrastructure credentials (SSH, admin password, LiveKit key/secret) were previously recorded in this README — they were **removed** and must be rotated.
 
 ---
 

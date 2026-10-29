@@ -8,7 +8,7 @@ admin panel are untouched.
 
 - **Framework**: Next.js 14 (App Router) + TypeScript, custom CSS design system
   ported from the Android palette (`#16A34A` primary), no heavyweight UI libraries
-  (`lucide-react` icons, `livekit-client` for calls — lazy-loaded on the call page)
+  (`lucide-react` icons, ZEGOCLOUD Web SDK for calls — lazy-loaded on the call page)
 - **Responsive**: verified from 320 px to desktop, bottom navigation on phones,
   WCAG-minded contrast and focus states, Haitian Creole copy matching the Android app
 - **PWA**: manifest + generated icons (regular & maskable), service worker with a
@@ -23,7 +23,7 @@ admin panel are untouched.
 | Doctor home | Availability toggle (En ligne / Hors ligne), queue / active / done tabs, accept / reject with live updates |
 | Consultation flow | Symptom intake → specialty (20, priced from the backend) → doctor pick → MonCash payment → consultation creation |
 | Chat | Realtime WebSocket messaging (same protocol as Android), typing indicators, day separators, image/video sharing |
-| Calls | Voice/video consultation via LiveKit — the access token is minted by the backend (`POST /api/call/token`), browser never sees LiveKit credentials |
+| Calls | Voice/video consultation via ZEGOCLOUD — the token is minted by the backend (`POST /api/call/token`), browser never sees the ServerSecret |
 | Medical dossier | Patient medical history view + edit (allergies, conditions, medications), consultation timeline |
 | Doctor notes | Diagnosis / symptoms / prescriptions editor feeding the patient dossier (production endpoints) |
 | Prescriptions | Doctor writes & closes consultation; patient sees the prescription panel live |
@@ -104,10 +104,9 @@ nginx rules — the web app uses same-origin relative URLs for all of them.
 - **Error messages**: all backend errors are normalized client-side into
   user-safe Haitian Creole messages (`lib/api/client.ts`) — no stack traces, server
   paths or internal details ever reach the UI.
-- **LiveKit**: the browser only receives short-lived room tokens minted by the
-  backend; the API key/secret stay server-side. When the app is served over
-  HTTPS, `ws://` LiveKit URLs are upgraded to `wss://` (same host/port) to
-  avoid mixed-content blocking.
+- **ZEGOCLOUD**: the browser only receives short-lived room tokens minted by the
+  backend; the ServerSecret stays server-side. The engine endpoint (`wss://…`)
+  is public by design — ZEGO serves TLS, so no mixed-content issue arises.
 - **Anti-double-submit**: login, register, consultation creation, prescription
   and notes forms ignore re-submission while a request is in flight.
 
@@ -133,8 +132,8 @@ npm run build       # production build
    `verify`). When the payment server is unreachable the UI offers a clearly
    labelled **test mode** (simulated payment) mirroring the Android
    sandbox behaviour, so consultations remain testable.
-3. **Calls**: fully functional only when the LiveKit server configured in the
-   backend (`POST /api/call/token` response) is reachable. Unreachable →
+3. **Calls**: fully functional only when the ZEGOCLOUD project configured in
+   the backend (`POST /api/call/token` response) is reachable. Unreachable →
    explicit error screen with a return-to-chat button.
 4. **Doctor credential fields** (specialty, license, hospital, biography) are
    read-only on the web, matching the backend's authorization model (admin

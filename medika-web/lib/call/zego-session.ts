@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * ZEGOCLOUD call session (issue #62) — the ZEGO implementation of the same
- * room-session contract the call page already drives with livekit-client.
+ * ZEGOCLOUD call session — the sole call integration. Implements the
+ * room-session contract the call page drives.
  *
  * The existing call page owns EVERYTHING provider-agnostic: the pure phases
  * state machine (lib/call/phases.ts), the calm eligibility wait, the Medika
@@ -12,7 +12,7 @@
  *  - connect(): loginRoom → createZegoStream (mic + optional camera) →
  *    startPublishingStream. Remote media arrives via roomStreamUpdate(ADD) →
  *    startPlayingStream, surfaced as onRemoteStream (the page attaches it —
- *    the "connected" phase fires exactly like LiveKit's TrackSubscribed).
+ *    the "connected" phase fires as soon as remote media is live).
  *  - Room reasons map onto the SAME reducer events: RECONNECTING /
  *    RECONNECTED are TRUE automatic reconnections (honest labels), a
  *    DISCONNECTED or KICKOUT we did not cause is an unexpected-disconnect
@@ -23,7 +23,7 @@
  *  - toggleMic/toggleCam touch ONLY local tracks — switching panels or
  *    toggling controls can never tear the session down.
  *  - disconnect() is the ONLY teardown path (hang-up / partner hang-up /
- *    page unmount), mirroring the LiveKit room.disconnect() usage.
+ *    page unmount).
  *
  * SDK facts verified against the official package (zego-express-engine-webrtc
  * 3.13.0 definitions + bundle): constructor (appID: number, server: string),
@@ -89,7 +89,7 @@ export interface ZegoSessionUser {
   name: string;
 }
 
-/** Mirrors the server's ZEGO token TTL (issue #62) — renew before expiry. */
+/** Mirrors the server's ZEGO token TTL — renew before expiry. */
 const RENEW_MARGIN_MS = 60_000;
 
 export class ZegoCallSession {
@@ -129,8 +129,7 @@ export class ZegoCallSession {
       const [roomID, reason] = args as [string, string];
       if (roomID && roomID !== this.roomName) return;
       if (reason === "RECONNECTING") {
-        // ZEGO IS automatically retrying — the label is TRUE (same contract
-        // as LiveKit RoomEvent.Reconnecting).
+        // ZEGO IS automatically retrying — the label is TRUE.
         cb.onReconnecting();
       } else if (reason === "RECONNECTED") {
         cb.onReconnected();
@@ -208,7 +207,7 @@ export class ZegoCallSession {
       if (this.ended) return;
 
       // Local capture — mic always, camera only in video mode. Permission
-      // denials get their own user-facing state (same as the LiveKit path).
+      // denials get their own user-facing state.
       let local: MediaStream;
       try {
         local = await engine.createZegoStream({
@@ -248,7 +247,7 @@ export class ZegoCallSession {
 
   async toggleMic(on: boolean): Promise<void> {
     // muteMicrophone(false) = mic ON. Engine-level mute keeps the published
-    // stream alive (same semantics as LiveKit setMicrophoneEnabled).
+    // stream alive.
     this.engine?.muteMicrophone(!on);
     for (const t of this.localStream?.getAudioTracks() ?? []) t.enabled = on;
   }

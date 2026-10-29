@@ -4,8 +4,8 @@
  * Consultation ROOM — RETIRED as a destination (issue #56).
  *
  * This route used to host the video-first PLACEHOLDER page (issue #33):
- * a status screen with chat/voice/video links that never joined LiveKit
- * and never pretended a call was live. Since issue #56 the REAL LiveKit
+ * a status screen with chat/voice/video links that never joined a call
+ * and never pretended a call was live. Since issue #56 the REAL
  * call page (../call) is the primary consultation surface and it already
  * handles every state the placeholder used to present:
  *   - not yet accepted (RECHERCHE_MEDECIN) → calm "waiting for the doctor"

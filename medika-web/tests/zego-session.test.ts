@@ -1,8 +1,8 @@
 /**
- * ZegoCallSession (issue #62) — maps the ZEGO Express Web SDK onto the same
- * call-session contract the page already drives with livekit-client:
+ * ZegoCallSession — maps the ZEGO Express Web SDK onto the page's
+ * call-session contract (ZEGOCLOUD is the sole provider):
  *  - connect() requires a SERVER-minted 'zego' token response (the client
- *    never decides the provider) and drives loginRoom → createZegoStream →
+ *    never mints or alters tokens) and drives loginRoom → createZegoStream →
  *    startPublishingStream with server-derived room/stream identity.
  *  - Room reasons map onto honest UI states: RECONNECTING/RECONNECTED are
  *    TRUE automatic reconnections; DISCONNECTED/KICKOUT are unexpected
@@ -19,6 +19,7 @@
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ZegoCallSession, type ZegoSessionCallbacks } from "@/lib/call/zego-session";
+import type { CallTokenResponse } from "@/lib/api/types";
 
 // ── Minimal WebRTC stand-ins (node environment has no MediaStream) ──────────
 class FakeMediaTrack {
@@ -175,8 +176,11 @@ describe("ZegoCallSession", () => {
     const { cb } = callbacks();
     const s = new ZegoCallSession();
     sessions.push(s);
+    // A legacy/foreign token shape (no zego fields) must be rejected at the
+    // runtime boundary even though the type no longer expresses it.
+    const foreign = { token: "t", url: "wss://lk", roomName: "r", participantIdentity: "u" } as unknown as CallTokenResponse;
     await expect(
-      s.connect({ token: "t", url: "wss://lk", roomName: "r", participantIdentity: "u" }, user, "video", cb),
+      s.connect(foreign, user, "video", cb),
     ).rejects.toThrow(/zego provider token/);
     expect(lastEngine).toBeNull();
   });
