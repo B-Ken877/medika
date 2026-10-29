@@ -1,24 +1,32 @@
-Last updated: 2026-10-29T19:33:56Z (cron-202610300304)
+Last updated: 2026-10-29T20:55:00Z (cron-202610300451)
 
 ## Active issue
-- #72 IN REVIEW via PR #76 (run cron-202610300330), branch fix/issue-72-notifications-webpush (e3e91ae). Scope done: (A) GET /api/notifications/unread + UnreadProvider (server truth; WS/reconnect/visibility/poll prompts; debounced) + bell badge (hidden at 0, 99+ cap, aria) + center reloads on message:new + read actions re-sync the bell; (B) syncExistingPushSubscription heals sw pushsubscriptionchange renewal gap (never prompts). Tests: 426 backend + 489 web PASS; typecheck/lint/build clean; live E2E (badge moves WITHOUT reload on real WS message; clears on mark-all) evidence docs/evidence/issue-72/. Real-device push NOT performed: needs OWNER-ONLY VAPID env (docs/WEB_PUSH_SETUP.md) + devices. Owner next: review PR #76, merge, VAPID env, device verify. Do NOT mark DONE unverified.
-  (from main 9549a7c). Two workstreams: (A) in-app — bell unread badge in AppShell,
-  durable server-authoritative count, WS-prompted refresh, sync across refresh/
-  reconnect/devices; (B) end-to-end Web Push — SW push handler, permission UX,
-  PushSubscription mgmt (multi-device), server send via VAPID, 404/410 cleanup.
-  VAPID env config is OWNER-ONLY (per #50) — document env vars, never touch prod.
-  NOTE: #74 (UI/UX responsive, NEW 19:31Z) queued after #72.
+- #77 IN PROGRESS (run cron-202610300451), planned branch fix/issue-77-beta-payment-simulation.
+  [HIGH PRIORITY][NEW] Safe end-to-end payment simulation for beta testers.
+  Reported: beta tester taps Pay -> payment-service-unavailable. Leads from owner:
+  src/routes/payments.js simulationAllowed(req.user) gate + 503 when MonCash unconfigured;
+  src/config.js production simulation scoped to ONE test username; prod env has sim enabled
+  but no MONCASH_CLIENT_ID/SECRET -> other beta users fall through to MonCash -> 503.
+  Requirements: explicit reversible beta-only authorization (NOT removing safeguards),
+  simulated txns distinguishable from real, server-authoritative checks preserved,
+  never trust client flags, safe default + documented rollback, UI clearly labeled
+  simulated/test, consultation continuation works. Do NOT enable live MonCash, no prod
+  changes, no merge/deploy. Tests required: beta auth, unauthorized users, create/verify,
+  ownership, invalid amounts, duplicate orders/retries, pending/failed, consultation
+  continuation, sim-vs-real separation, safe defaults, existing MonCash verification.
 
 ## Recently completed
-- #70 CLOSED: owner merged PR #73 as main 3c67168 (19:05:08Z); Vercel deploy SUCCESS
-  (19:06:05Z). Stale IN REVIEW label removed from #70 (cleanup pattern: closed issues
-  keep type/priority/NEW, drop workflow-status labels).
+- #72 CLOSED: owner merged PR #76 as main a2fcdc1 (notifications bell badge + UnreadProvider
+  + pushsubscriptionchange heal); Vercel deploy SUCCESS 19:55:45Z. Stale IN REVIEW removed.
+- #70 CLOSED: owner merged PR #73 as main 3c67168; deploy SUCCESS.
 - #68 CLOSED: owner merged PR #69 as main 57a1e6a; deploy SUCCESS.
-- #66 (PR #67), #62 (PR #63), #60 (PR #61), #56 (PR #59), #53 (PR #58), #51 (PR #57),
+- #74 closed by owner 19:42:15Z (UI/UX responsive; no agent PR; owner action).
+- Earlier: #66 (PR #67), #62 (PR #63), #60 (PR #61), #56 (PR #59), #53 (PR #58), #51 (PR #57),
   #50 (PR #55), #48 (PR #54), #47 (PR #52), #45 (PR #49), #43/#40/#36 (PRs #44/#46/#41).
+  Prior payment history: #8/#21/#22 (closed) introduced + scoped simulation to one test account.
 
 ## Queue
-- #72 [HIGH PRIORITY] notifications + Web Push (NEW) — the ONLY eligible issue.
+- #77 [HIGH PRIORITY] beta payment simulation (NEW) -- the ONLY open issue, now IN PROGRESS.
 - No other open issues. No open PRs.
 
 ## Infra notes
@@ -28,12 +36,8 @@ Last updated: 2026-10-29T19:33:56Z (cron-202610300304)
   the consolidated summary.
 
 ## Next action (next run)
-1. Check lock -> owner feedback (none expected; #71 already merged as 9549a7c,
-   production deploy SUCCESS — the earlier preview failure was transient).
-2. Claim #72 (notifications + Web Push): audit bell unread count, notification
-   center wiring, Web Push end-to-end. VAPID env config is OWNER-ONLY per #50
-   pattern — never attempt env/dashboard changes; mark BLOCKED if it gates the fix.
-2. If merged + #71 closed: remove stale IN REVIEW label from #71, verify main deploy
-   status, then claim #72 (audit: bell unread count, notification center wiring,
-   Web Push end-to-end; VAPID env is OWNER-ONLY per #50 pattern).
-3. If feedback: address it on the same branch. One issue at a time.
+1. If lock active (cron-202610300451 still running): do NOT start new work; check progress
+   via LOCK.json heartbeat + issue #77 comments.
+2. If lock stale/free and #77 still IN PROGRESS without PR: resume audit per note above,
+   starting from src/routes/payments.js + src/config.js root-cause verification.
+3. If #77 has a PR: verify CI, leave IN REVIEW, await owner. One issue at a time.
