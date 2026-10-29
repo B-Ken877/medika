@@ -25,7 +25,6 @@ import { formatCurrency, formatDateTime, relativeTime } from "@/lib/format";
 import { specialtyLabel, urgencyLabel } from "@/lib/labels";
 import { ApiError } from "@/lib/api/client";
 import { Avatar, EmptyState, ErrorAlert, SkeletonRows, StatusBadge } from "@/components/ui/primitives";
-import OfferCountdown from "@/components/consultation/OfferCountdown";
 
 type Tab = "queue" | "active" | "done";
 
@@ -345,18 +344,10 @@ export default function DoctorDashboard() {
                   {relativeTime(c.created_at)}
                   {c.urgency_level ? ` · Ijans: ${urgencyLabel(c.urgency_level)}` : ""}
                 </div>
-                {/* Issue #25: acceptance-window countdown for the current offer */}
-                {isQueue && c.offer_deadline != null && (
-                  <div className="row-meta">
-                    <OfferCountdown deadline={c.offer_deadline} label="Tan pou aksepte:" compact />
-                  </div>
-                )}
-                {/* Issue #25: five-hour consultation deadline on active rows */}
-                {tab === "active" && c.expires_at != null && (
-                  <div className="row-meta">
-                    <OfferCountdown deadline={c.expires_at} label="Ekspire nan:" compact warnUnderSeconds={30 * 60} />
-                  </div>
-                )}
+                {/* Issue #71: no visible ticking countdown — deadlines stay
+                    server-authoritative; the acceptance window is communicated
+                    once via the offer notification, and expiry is enforced by
+                    the lifecycle engine (reroute/waiting state). */}
                 {tab === "done" && c.status === "TERMINE" && (
                   <div className="row-meta">Li fèmen {formatDateTime(c.updated_at)}</div>
                 )}

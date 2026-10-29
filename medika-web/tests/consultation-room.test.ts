@@ -97,9 +97,10 @@ describe("chat page ↔ real call (issue #56)", () => {
     }
   });
 
-  it("the 5-hour expiry display survives on the chat page (rule untouched)", () => {
-    expect(page).toContain("<OfferCountdown");
-    expect(page).toContain("warnUnderSeconds={30 * 60}");
+  it("the chat page uses calm static copy for the 5-hour window — no ticking countdown (issue #71)", () => {
+    expect(page).toContain("Konsiltasyon sa a disponib jiska 5 èdtan apre doktè a aksepte");
+    expect(page).not.toContain("<OfferCountdown");
+    expect(page).not.toContain("Konsiltasyon an ekspire nan:");
   });
 });
 

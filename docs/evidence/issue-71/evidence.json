@@ -1,0 +1,304 @@
+{
+  "patient": {
+    "desktop-wide": {
+      "headerNav": "visible",
+      "bottomNav": "hidden",
+      "headerNavLinks": [
+        {
+          "label": "Akèy",
+          "href": "/app",
+          "current": "page"
+        },
+        {
+          "label": "Doktè yo",
+          "href": "/app/doctors",
+          "current": null
+        },
+        {
+          "label": "Konsiltasyon",
+          "href": "/app/consultations",
+          "current": null
+        },
+        {
+          "label": "Pwofil",
+          "href": "/app/profile",
+          "current": null
+        }
+      ],
+      "bottomNavLinks": [
+        "/app",
+        "/app/doctors",
+        "/app/consultations",
+        "/app/profile"
+      ],
+      "horizontalOverflow": false
+    },
+    "desktop-1000": {
+      "headerNav": "visible",
+      "bottomNav": "hidden",
+      "headerNavLinks": [
+        {
+          "label": "Akèy",
+          "href": "/app",
+          "current": "page"
+        },
+        {
+          "label": "Doktè yo",
+          "href": "/app/doctors",
+          "current": null
+        },
+        {
+          "label": "Konsiltasyon",
+          "href": "/app/consultations",
+          "current": null
+        },
+        {
+          "label": "Pwofil",
+          "href": "/app/profile",
+          "current": null
+        }
+      ],
+      "bottomNavLinks": [
+        "/app",
+        "/app/doctors",
+        "/app/consultations",
+        "/app/profile"
+      ],
+      "horizontalOverflow": false
+    },
+    "tablet-768": {
+      "headerNav": "hidden",
+      "bottomNav": "visible",
+      "headerNavLinks": [
+        {
+          "label": "Akèy",
+          "href": "/app",
+          "current": "page"
+        },
+        {
+          "label": "Doktè yo",
+          "href": "/app/doctors",
+          "current": null
+        },
+        {
+          "label": "Konsiltasyon",
+          "href": "/app/consultations",
+          "current": null
+        },
+        {
+          "label": "Pwofil",
+          "href": "/app/profile",
+          "current": null
+        }
+      ],
+      "bottomNavLinks": [
+        "/app",
+        "/app/doctors",
+        "/app/consultations",
+        "/app/profile"
+      ],
+      "horizontalOverflow": false
+    },
+    "phone-390": {
+      "headerNav": "hidden",
+      "bottomNav": "visible",
+      "headerNavLinks": [
+        {
+          "label": "Akèy",
+          "href": "/app",
+          "current": "page"
+        },
+        {
+          "label": "Doktè yo",
+          "href": "/app/doctors",
+          "current": null
+        },
+        {
+          "label": "Konsiltasyon",
+          "href": "/app/consultations",
+          "current": null
+        },
+        {
+          "label": "Pwofil",
+          "href": "/app/profile",
+          "current": null
+        }
+      ],
+      "bottomNavLinks": [
+        "/app",
+        "/app/doctors",
+        "/app/consultations",
+        "/app/profile"
+      ],
+      "horizontalOverflow": false
+    },
+    "nav-present/app/consultations": true,
+    "nav-present/app/doctors": true,
+    "nav-present/app/notifications": true,
+    "nav-present/app/profile": true
+  },
+  "doctor": {
+    "desktop-wide": {
+      "headerNav": "visible",
+      "bottomNav": "hidden",
+      "headerNavLinks": [
+        {
+          "label": "Akèy",
+          "href": "/app",
+          "current": "page"
+        },
+        {
+          "label": "Demann",
+          "href": "/app/consultations",
+          "current": null
+        },
+        {
+          "label": "Revni",
+          "href": "/app/wallet",
+          "current": null
+        },
+        {
+          "label": "Alèt",
+          "href": "/app/notifications",
+          "current": null
+        },
+        {
+          "label": "Pwofil",
+          "href": "/app/profile",
+          "current": null
+        }
+      ],
+      "bottomNavLinks": [
+        "/app",
+        "/app/consultations",
+        "/app/wallet",
+        "/app/notifications",
+        "/app/profile"
+      ],
+      "horizontalOverflow": false
+    },
+    "desktop-1000": {
+      "headerNav": "visible",
+      "bottomNav": "hidden",
+      "headerNavLinks": [
+        {
+          "label": "Akèy",
+          "href": "/app",
+          "current": "page"
+        },
+        {
+          "label": "Demann",
+          "href": "/app/consultations",
+          "current": null
+        },
+        {
+          "label": "Revni",
+          "href": "/app/wallet",
+          "current": null
+        },
+        {
+          "label": "Alèt",
+          "href": "/app/notifications",
+          "current": null
+        },
+        {
+          "label": "Pwofil",
+          "href": "/app/profile",
+          "current": null
+        }
+      ],
+      "bottomNavLinks": [
+        "/app",
+        "/app/consultations",
+        "/app/wallet",
+        "/app/notifications",
+        "/app/profile"
+      ],
+      "horizontalOverflow": false
+    },
+    "tablet-768": {
+      "headerNav": "hidden",
+      "bottomNav": "visible",
+      "headerNavLinks": [
+        {
+          "label": "Akèy",
+          "href": "/app",
+          "current": "page"
+        },
+        {
+          "label": "Demann",
+          "href": "/app/consultations",
+          "current": null
+        },
+        {
+          "label": "Revni",
+          "href": "/app/wallet",
+          "current": null
+        },
+        {
+          "label": "Alèt",
+          "href": "/app/notifications",
+          "current": null
+        },
+        {
+          "label": "Pwofil",
+          "href": "/app/profile",
+          "current": null
+        }
+      ],
+      "bottomNavLinks": [
+        "/app",
+        "/app/consultations",
+        "/app/wallet",
+        "/app/notifications",
+        "/app/profile"
+      ],
+      "horizontalOverflow": false
+    },
+    "phone-390": {
+      "headerNav": "hidden",
+      "bottomNav": "visible",
+      "headerNavLinks": [
+        {
+          "label": "Akèy",
+          "href": "/app",
+          "current": "page"
+        },
+        {
+          "label": "Demann",
+          "href": "/app/consultations",
+          "current": null
+        },
+        {
+          "label": "Revni",
+          "href": "/app/wallet",
+          "current": null
+        },
+        {
+          "label": "Alèt",
+          "href": "/app/notifications",
+          "current": null
+        },
+        {
+          "label": "Pwofil",
+          "href": "/app/profile",
+          "current": null
+        }
+      ],
+      "bottomNavLinks": [
+        "/app",
+        "/app/consultations",
+        "/app/wallet",
+        "/app/notifications",
+        "/app/profile"
+      ],
+      "horizontalOverflow": false
+    }
+  },
+  "chat": {
+    "calmCopyPresent": true,
+    "countdownElementPresent": false,
+    "tickingLabelPresent": false,
+    "headerVisible": false
+  }
+}

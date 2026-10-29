@@ -351,6 +351,45 @@ async function expireStalePending(consultationId, outcome) {
 }
 
 /**
+ * Issue #71: ONE gentle pre-expiration reminder per party for EN_COURS
+ * consultations whose server-persisted expires_at falls within
+ * config.expiryReminderMinutes. Idempotency comes from the notification
+ * tables' idempotency_key (ON CONFLICT DO NOTHING) — repeated scans,
+ * concurrent workers and cron reruns can never duplicate it, and no schema
+ * change is needed. Delivery respects the existing per-category preferences
+ * (applied at dispatch time) and the no-spam rules: calm copy, one reminder,
+ * never a live timer. emit() is fire-and-forget and never throws.
+ */
+async function remindExpiringConsultations({ maxPerRun = 100 } = {}) {
+  const { rows } = await query(
+    `SELECT id, patient_id, doctor_id FROM consultations
+      WHERE status = 'EN_COURS'
+        AND expires_at IS NOT NULL
+        AND expires_at > now()
+        AND expires_at <= now() + make_interval(mins => $1)
+      ORDER BY expires_at ASC LIMIT $2`,
+    [config.expiryReminderMinutes, maxPerRun]
+  );
+  let reminders = 0;
+  for (const c of rows) {
+    for (const userId of [c.patient_id, c.doctor_id]) {
+      if (!userId) continue;
+      // Awaiting here (safe: emit swallows its own errors) makes the batch
+      // pass deterministic — processDueDeadlines resolves only after the
+      // idempotent inserts are actually persisted.
+      await notifications.emit({
+        userId,
+        eventType: 'consultation:expiry-reminder',
+        idempotencyKey: `consultation:${c.id}:expiry-reminder:${userId}`,
+        ...notifications.COPY.consultationExpiryReminder,
+      });
+      reminders += 1;
+    }
+  }
+  return reminders;
+}
+
+/**
  * Process every due deadline. Safe to run concurrently and repeatedly:
  * each consultation is handled under a row lock with conditional updates.
  * Notifications are emitted AFTER commit (never inside a transaction).
@@ -362,7 +401,8 @@ async function expireStalePending(consultationId, outcome) {
 async function processDueDeadlines({ hub, maxPerRun = 100, adoptLegacy = true } = {}) {
   const outcome = {
     offersExpired: 0, rerouted: 0, waiting: 0, adopted: 0, retried: 0,
-    expired: 0, pendingExpired: 0, notified: 0, consultation: null, notifyNewDoctor: null,
+    expired: 0, pendingExpired: 0, notified: 0, reminders: 0,
+    consultation: null, notifyNewDoctor: null,
   };
 
   const dueOffers = await query(
@@ -392,6 +432,17 @@ async function processDueDeadlines({ hub, maxPerRun = 100, adoptLegacy = true } 
       console.error('[lifecycle] expiry processing failed:', err.code || err.message);
     });
     emitNotifications(hub, outcome);
+  }
+
+  // Issue #71: gentle pre-expiration reminder for consultations approaching
+  // their five-hour deadline (still EN_COURS). Runs in BOTH scheduler and
+  // opportunistic modes — unlike legacy adoption, a reminder mirrors an
+  // approaching server-authoritative deadline; it is not a routing decision.
+  // Idempotent by notification idempotency_key; failures never break reads.
+  try {
+    outcome.reminders += await remindExpiringConsultations({ maxPerRun });
+  } catch (err) {
+    console.error('[lifecycle] expiry-reminder pass failed:', err.code || err.message);
   }
 
   const dueRetries = await query(
@@ -436,6 +487,7 @@ async function processDueDeadlines({ hub, maxPerRun = 100, adoptLegacy = true } 
     expired: outcome.expired,
     pendingExpired: outcome.pendingExpired,
     notified: outcome.notified,
+    reminders: outcome.reminders,
   };
 }
 
@@ -596,6 +648,7 @@ module.exports = {
   expireConsultation,
   expireStalePending,
   retryWaiting,
+  remindExpiringConsultations,
   parkInWaiting,
   SYSTEM_SENDER,
 };

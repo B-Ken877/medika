@@ -402,6 +402,74 @@ describe('five-hour expiration after acceptance', () => {
   });
 });
 
+describe('pre-expiration reminder (issue #71)', () => {
+  async function acceptOne() {
+    const cons = await apiCreateConsultation(token.patient, { specialtyNeeded: 'Medecine Generale' });
+    const res = await r.put(`/api/consultations/${cons.id}/accept`).set('Authorization', `Bearer ${token.doctor}`);
+    expect(res.status).toBe(200);
+    return cons;
+  }
+
+  const reminderRows = async (consId) =>
+    (await query(
+      `SELECT user_id, event_type, idempotency_key FROM notifications
+        WHERE idempotency_key LIKE $1 ORDER BY idempotency_key`,
+      [`consultation:${consId}:expiry-reminder:%`])
+    ).rows;
+  const outboxReminderCount = (consId) =>
+    query(
+      `SELECT COUNT(*)::int AS n FROM notification_outbox WHERE idempotency_key LIKE $1`,
+      [`consultation:${consId}:expiry-reminder:%`]);
+
+  it('sends ONE gentle reminder to BOTH parties inside the reminder window, duplicated-scan safe', async () => {
+    const cons = await acceptOne();
+    // Inside the 45-minute reminder window, still EN_COURS.
+    await query(`UPDATE consultations SET expires_at = now() + interval '10 minutes' WHERE id = $1`, [cons.id]);
+
+    const first = await lifecycle.processDueDeadlines({ hub: recordingHub() });
+    expect(first.reminders).toBeGreaterThanOrEqual(2);
+
+    const rows = await reminderRows(cons.id);
+    expect(rows).toHaveLength(2);
+    expect(new Set(rows.map((x) => x.user_id))).toEqual(new Set([users.patient.id, users.doctor.id]));
+    expect(rows.every((x) => x.event_type === 'consultation:expiry-reminder')).toBe(true);
+    // The durable push outbox mirrors the in-app history (dispatch applies
+    // the existing per-category preferences later).
+    expect((await outboxReminderCount(cons.id)).rows[0].n).toBe(2);
+
+    // A duplicate scheduler run (and repeated opportunistic reads) can never
+    // duplicate the reminder — idempotency_key ON CONFLICT DO NOTHING.
+    await lifecycle.processDueDeadlines({ hub: recordingHub() });
+    await lifecycle.processDueDeadlines({ hub: recordingHub() });
+    const after = await reminderRows(cons.id);
+    expect(after).toHaveLength(2);
+    expect((await outboxReminderCount(cons.id)).rows[0].n).toBe(2);
+  });
+
+  it('never reminds outside the window, terminal consultations, or already-expired ones', async () => {
+    // ~5 hours out — far outside the reminder window.
+    const far = await acceptOne();
+    await lifecycle.processDueDeadlines({ hub: recordingHub() });
+    expect(await reminderRows(far.id)).toHaveLength(0);
+
+    // Release the patient's AND doctor's one-active slots (issue #60
+    // invariant) before creating the next fixture — same pattern as the
+    // rest of this file's beforeEach teardown.
+    await query(`UPDATE consultations SET status = 'TERMINE', updated_at = now() WHERE id = $1`, [far.id]);
+
+    // Past the deadline → the EXPIRE transition, never a reminder.
+    const cons = await acceptOne();
+    await query(`UPDATE consultations SET expires_at = now() - interval '1 second' WHERE id = $1`, [cons.id]);
+    await lifecycle.processDueDeadlines({ hub: recordingHub() });
+    expect(await reminderRows(cons.id)).toHaveLength(0);
+    const expiredEvent = await query(
+      `SELECT COUNT(*)::int AS n FROM notifications WHERE idempotency_key = $1`,
+      [`consultation:${cons.id}:expired`]);
+    expect(expiredEvent.rows[0].n).toBeGreaterThanOrEqual(1);
+    void far;
+  });
+});
+
 describe('legacy rows + opportunistic enforcement', () => {
   it('the scheduler adopts never-routed legacy requests (patient pick preserved)', async () => {
     // Issue #60: the one-active invariant forbids two blocking consultations

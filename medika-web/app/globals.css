@@ -644,6 +644,46 @@ h1, h2, h3, h4 { line-height: 1.25; font-weight: 600; letter-spacing: -0.01em; }
 .bottom-nav a.active { color: var(--green-500); }
 @media (min-width: 900px) { .bottom-nav { display: none; } }
 
+/* Header navigation (desktop) — issue #71: at >=900px the mobile bottom bar
+   is hidden, so the primary role-aware destinations move into the sticky
+   header. Below 900px the header nav stays display:none and the bottom bar
+   remains the single navigation. Same Medika tokens, same active color as
+   the bottom bar; chat-mode hides the whole header so this needs no extra
+   rule. Keyboard/focus behavior is native link focus (no custom outline). */
+.header-nav { display: none; }
+@media (min-width: 900px) {
+  .header-nav {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-inline: auto; /* center between brand and account actions */
+    min-width: 0;
+  }
+  .header-nav a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 8px 14px;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 13.5px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    min-height: 40px; /* comfortable pointer + keyboard target */
+  }
+  .header-nav a:hover { background: var(--gray-50); color: var(--text-primary); text-decoration: none; }
+  .header-nav a.active { color: var(--green-600); background: var(--green-50); }
+}
+/* Intermediate desktop widths (~900–1100px): compact but fully visible —
+   tighter padding, smaller type, ellipsis safety net; no destination is
+   ever hidden at these widths (issue #71 requirement). */
+@media (min-width: 900px) and (max-width: 1100px) {
+  .header-nav a { padding: 8px 9px; gap: 5px; font-size: 12.5px; }
+  .header-nav a span { max-width: 104px; overflow: hidden; text-overflow: ellipsis; }
+}
+
 /* ── Page heading region ────────────────────────────────────────────────── */
 
 .page-head {
@@ -2123,34 +2163,10 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 .alert-info { background: var(--info-bg); color: #1f4a7a; border-color: #c3d8ee; }
 
 /* ─── Offer / expiry countdown chips (issue #25) ─────────────────────────── */
-.offer-countdown {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.5;
-  background: var(--brand-shell, #eaf2ee);
-  color: var(--brand-deep, #073c31);
-  border: 1px solid rgba(20, 91, 80, 0.18);
-  font-variant-numeric: tabular-nums;
-}
-.offer-countdown.compact { font-size: 11.5px; padding: 1px 7px; }
-.offer-countdown.warn {
-  background: var(--warning-bg, #fdf6e7);
-  color: #7d5010;
-  border-color: #f2ddb3;
-}
-.offer-countdown.expired {
-  background: var(--danger-bg, #fdf0f1);
-  color: #8f2e35;
-  border-color: #eccdd0;
-}
-@media (prefers-reduced-motion: reduce) {
-  .offer-countdown { font-variant-numeric: normal; }
-}
+/* Removed (issue #71): the live ticking countdown chips were perceived as
+   pressure. Deadlines remain server-authoritative; the UI now uses calm
+   static copy on the consultation page and a durable pre-expiration
+   reminder notification instead of a live timer. */
 
 .toast-stack {
   position: fixed;

@@ -33,6 +33,7 @@ const CATEGORY_FOR_EVENT = {
   'consultation:accepted': 'consultations',
   'consultation:rejected': 'consultations',
   'consultation:expired': 'consultations',
+  'consultation:expiry-reminder': 'consultations',
   'consultation:completed': 'consultations',
   'consultation:rerouted': 'consultations',
   'message:new': 'messages',
@@ -128,6 +129,14 @@ const COPY = {
   consultationExpired: {
     title: 'Medika',
     body: 'Ou gen yon mizajou sou konsiltasyon ou a.',
+    url: '/app/consultations',
+  },
+  // Patient + doctor: ONE gentle reminder before the 5-hour expiry
+  // (issue #71). Calm copy — no urgency language, no countdown; the
+  // conversation simply closes on its own at the deadline and history stays.
+  consultationExpiryReminder: {
+    title: 'Medika',
+    body: 'Piti piti: konsiltasyon sa a ap disponib pou kèk lè ankò. Tanpri fin echanj sa ki enpòtan yo — istorik la ap konsève.',
     url: '/app/consultations',
   },
   // Patient + doctor: completed.
