@@ -10,10 +10,10 @@
 'use strict';
 
 process.env.REQUIRE_PAYMENT = 'false';
-// Dummy LiveKit credentials — JWT signing works offline.
-process.env.LIVEKIT_URL = 'wss://livekit.example.com';
-process.env.LIVEKIT_API_KEY = 'testkey';
-process.env.LIVEKIT_API_SECRET = 'testsecret-testsecret-testsecret-testsecret';
+// Dummy ZEGOCLOUD credentials — token04 signing works offline.
+process.env.ZEGOCLOUD_APP_ID = '123456789';
+process.env.ZEGOCLOUD_SERVER_URL = 'wss://webliveroom-test.example.com/ws';
+process.env.ZEGOCLOUD_SERVER_SECRET = '0123456789abcdef0123456789abcdef';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 const h = await import('./helpers');
@@ -46,7 +46,8 @@ describe('POST /api/call/token — consultation lifecycle eligibility', () => {
     });
     const res = await callToken('doctor', cons.id);
     expect(res.status).toBe(200);
-    expect(res.body.token.split('.')).toHaveLength(3); // LiveKit JWT
+    expect(res.body.provider).toBe('zego');
+    expect(res.body.token.startsWith('04')).toBe(true); // token04
     expect(res.body.roomName).toBe('medika_' + cons.id);
     expect(res.body.participantIdentity).toBe(users.doctor.id);
   });

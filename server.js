@@ -31,7 +31,7 @@
  *  - WebSocket auth frames must carry {type:'auth', token} (JWT).
  *  - Uploads: Vercel Blob (BLOB_READ_WRITE_TOKEN); bodies capped at 4 MB
  *    (Vercel function limit).
- *  - LiveKit + MonCash credentials: environment variables only.
+ *  - ZEGOCLOUD + MonCash credentials: environment variables only.
  */
 'use strict';
 
