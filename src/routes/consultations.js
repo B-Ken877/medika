@@ -111,6 +111,10 @@ router.post('/consultations', authenticate, requireRole('patient'), async (req, 
         orderId: orderId || null,
         transactionId: transactionId || null,
         requiredAmount: price,
+        // Issue #77: the authenticated user decides simulation authorization —
+        // the global form is always false on production, which blocked beta
+        // allowlisted testers at consultation continuation (RC4).
+        user: req.user,
       });
       if (payment.error) {
         // Issue #40 — idempotent replay: the SAME verified payment already
@@ -245,16 +249,18 @@ router.post('/consultations', authenticate, requireRole('patient'), async (req, 
  * transactionId as fallback). Verification ALWAYS goes through the provider
  * (or the isolated simulation) — client-supplied metadata is never trusted.
  */
-async function resolveVerifiedPayment({ patientId, orderId, transactionId, requiredAmount }) {
+async function resolveVerifiedPayment({ patientId, orderId, transactionId, requiredAmount, user }) {
   let row = orderId ? await paymentsRepo.findByOrderId(String(orderId)) : null;
 
   if (!row && transactionId) {
     // Payment created outside our records? Query the provider by transactionId
     // and register it from the verified provider response.
-    if (!moncash.moncashConfigured() && !simulationAllowed()) {
+    // Issue #77: per-user simulation authorization (never the global form —
+    // it is false on every production deployment).
+    if (!moncash.moncashConfigured() && !simulationAllowed(user)) {
       return { error: 'Paiement non verifiable (provider non configure)', errorStatus: 503 };
     }
-    const verified = simulationAllowed()
+    const verified = simulationAllowed(user)
       ? simulatedRetrieveByTransaction(transactionId)
       : await moncash.retrieveByTransactionId(String(transactionId));
     if (!verified || verified.status !== 'completed' || !verified.reference) {
@@ -264,13 +270,13 @@ async function resolveVerifiedPayment({ patientId, orderId, transactionId, requi
       order_id: String(verified.reference),
       patient_id: patientId,
       amount: verified.amount || requiredAmount,
-      simulated: simulationAllowed(),
+      simulated: simulationAllowed(user),
     });
     if (row) row = await paymentsRepo.markVerified(row.id, {
       transaction_id: verified.transactionId,
       verified_amount: verified.amount,
       provider_raw: verified.raw,
-      simulated: simulationAllowed(),
+      simulated: simulationAllowed(user),
     });
   }
 
@@ -285,8 +291,9 @@ async function resolveVerifiedPayment({ patientId, orderId, transactionId, requi
   }
 
   if (row.status !== 'PAID') {
-    // Verify against the provider now.
-    if (simulationAllowed() && row.simulated) {
+    // Verify against the provider now (per-user simulation authorization —
+    // issue #77; the row's own `simulated` flag must also agree).
+    if (simulationAllowed(user) && row.simulated) {
       const verified = simulatedRetrieveByOrderId(row.order_id);
       if (!verified || verified.status !== 'completed') return { error: 'Paiement non complete' };
       row = await paymentsRepo.markVerified(row.id, {

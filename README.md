@@ -90,7 +90,7 @@ Scripts: `npm run migrate` · `npm run import-json` (JSON→PG migration) · `np
 
 ## 💳 MonCash
 
-Official Digicel REST API (`/Api/oauth/token`, `/Api/v1/CreatePayment`, `/Api/v1/RetrieveOrderPayment`, `/Api/v1/RetrieveTransactionPayment`), sandbox + production modes. Server-side verification only; consultation creation requires a verified payment. Simulated payments exist strictly for dev/sandbox (`PAYMENT_SIMULATION=true` + non-production + sandbox mode).
+Official Digicel REST API (`/Api/oauth/token`, `/Api/v1/CreatePayment`, `/Api/v1/RetrieveOrderPayment`, `/Api/v1/RetrieveTransactionPayment`), sandbox + production modes. Server-side verification only; consultation creation requires a verified payment. Simulated payments exist strictly for dev/sandbox (`PAYMENT_SIMULATION=true` + non-production + sandbox mode) and, on any stage, for explicitly allowlisted accounts (`PAYMENT_SIMULATION_TEST_USERNAME` and/or the reversible beta allowlist `PAYMENT_SIMULATION_BETA_USERNAMES` — see `docs/DEPLOYMENT.md`).
 
 ---
 

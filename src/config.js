@@ -87,6 +87,17 @@ const config = {
   paymentSimulation: bool('PAYMENT_SIMULATION', false),
   // Exact username resolved from the authenticated DB user; never trust client input.
   paymentSimulationTestUsername: env('PAYMENT_SIMULATION_TEST_USERNAME', '').trim(),
+  // Issue #77 — explicit, reversible BETA allowlist: comma-separated exact
+  // usernames, each resolved server-side from the authenticated DB user (the
+  // client can never assert membership). Empty by default → behavior is
+  // unchanged (safe default). Revoke one tester by removing their username
+  // from the variable (or unset the variable) — they fall back to the real
+  // MonCash path on the next request. No code change, no migration, no
+  // cleanup: simulated rows stay flagged `simulated = true` forever.
+  paymentSimulationBetaUsernames: env('PAYMENT_SIMULATION_BETA_USERNAMES', '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
   requirePayment: bool('REQUIRE_PAYMENT', isProduction()),
 
   // ─── Uploads ───────────────────────────────────────────────────────────────
@@ -147,10 +158,19 @@ function assertProductionSafety() {
   if (!process.env.DATABASE_URL) {
     problems.push('DATABASE_URL is required');
   }
-  if (config.paymentSimulation && isProductionDeployment() && !config.paymentSimulationTestUsername) {
-    // Production simulation is permitted only when bound to one server-verified
-    // username. Routes must call simulationAllowed(req.user), never the global form.
-    problems.push('PAYMENT_SIMULATION on production requires PAYMENT_SIMULATION_TEST_USERNAME');
+  if (
+    config.paymentSimulation &&
+    isProductionDeployment() &&
+    !config.paymentSimulationTestUsername &&
+    config.paymentSimulationBetaUsernames.length === 0
+  ) {
+    // Production simulation is permitted only when bound to explicit
+    // server-verified usernames (the legacy single test username and/or the
+    // issue #77 beta allowlist). Routes must call simulationAllowed(req.user),
+    // never the global form.
+    problems.push(
+      'PAYMENT_SIMULATION on production requires PAYMENT_SIMULATION_TEST_USERNAME or PAYMENT_SIMULATION_BETA_USERNAMES'
+    );
   }
   if (config.seedDemo) {
     problems.push('SEED_DEMO must NOT be enabled when NODE_ENV=production');
@@ -171,16 +191,21 @@ function moncashConfigured() {
 /** Simulation is allowed only on NON-production deployments AND sandbox mode.
  * Deployment stage comes from isProductionDeployment() — VERCEL_ENV-aware so
  * Vercel Preview deployments (NODE_ENV=production, VERCEL_ENV=preview) can
- * run the isolated simulation, while true production fails closed. */
+ * run the isolated simulation for everyone, while true production fails
+ * closed EXCEPT for explicitly allowlisted accounts (issue #77): the legacy
+ * single test username (PAYMENT_SIMULATION_TEST_USERNAME) and/or the
+ * reversible beta allowlist (PAYMENT_SIMULATION_BETA_USERNAMES). The username
+ * always comes from the authenticated DB user — client input can never
+ * assert membership, and removing a username revokes access immediately. */
 function simulationAllowed(user) {
   if (!config.paymentSimulation || config.moncashMode === 'production') return false;
   if (!isProductionDeployment()) return true;
-  return Boolean(
-    config.paymentSimulationTestUsername &&
-    user &&
-    typeof user.username === 'string' &&
-    user.username === config.paymentSimulationTestUsername
-  );
+  const username = user && typeof user.username === 'string' ? user.username : null;
+  if (!username) return false;
+  if (config.paymentSimulationTestUsername && username === config.paymentSimulationTestUsername) {
+    return true;
+  }
+  return config.paymentSimulationBetaUsernames.includes(username);
 }
 
 module.exports = { config, assertProductionSafety, moncashConfigured, simulationAllowed, isProduction, isProductionDeployment };
