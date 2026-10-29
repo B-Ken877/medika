@@ -30,7 +30,10 @@ migration verified in production.
 - Missing configuration answers 503 with `ZEGOCLOUD non configure …`
   (ZEGOCLOUD_APP_ID / ZEGOCLOUD_SERVER_URL / ZEGOCLOUD_SERVER_SECRET
   requis); an invalid secret length also answers 503 without leaking
-  details.
+  details. A non-WebSocket `ZEGOCLOUD_SERVER_URL` (for example an
+  `https://` console page or a typo) answers 503 with a clear actionable
+  error BEFORE any token is minted (`zegoServerUrlProblem`) — the browser
+  engine would otherwise fail opaquely at runtime (issue #68).
 
 **Web (`medika-web`)**
 - `lib/call/zego-session.ts`: `ZegoCallSession` bridges the low-level
@@ -95,6 +98,27 @@ migration verified in production.
   token/nodejs/server/zegoServerAssistant.js, retrieved 2026-10-29), with the
   upstream debug `console.log` calls removed (token plaintext must never hit
   logs) and repo style applied. Zero new runtime dependencies (Node `crypto`).
+  Re-diffed against upstream on 2026-10-30 (issue #68 audit): byte-layout and
+  semantics remain upstream-identical.
+
+### 2.1 Official references (required reading)
+
+- Official integration repository (UIKit Prebuilt, web):
+  https://github.com/ZEGOCLOUD/zego_uikit_prebuilt_web — its sample
+  (`sample/index.ts`) illustrates the supported flow: the application server
+  issues a room-scoped token, the client creates its session from that token
+  and joins the room. Medika follows the SAME pattern adapted to the
+  low-level `zego-express-engine-webrtc` package it actually installs
+  (server-minted token04 → `loginRoom`), keeping the branded call UI instead
+  of the generic prebuilt interface.
+- Official integration guide:
+  https://www.zegocloud.com/docs/uikit/callkit-web/quick-start/using-npm-package-manager
+- Official token04 server implementation (vendored source):
+  https://github.com/ZEGOCLOUD/zego_server_assistant (token/nodejs/server).
+- The API surface is matched to the EXACT installed package and version
+  (`zego-express-engine-webrtc@3.13.0`, per `medika-web/package-lock.json`);
+  every engine method and event string used by `zego-session.ts` was
+  re-verified against that version's bundle on 2026-10-30.
 
 ## 3. Environment variables
 
@@ -174,3 +198,41 @@ configured for its scope. Use one doctor device and one patient device
 - The Android rename is a mechanical source move (package/imports/symbols);
   no Android build was executed in the agent environment, so a Gradle build
   on the owner side is still the verification step for the mobile module.
+
+## 8. Deployment status evidence (2026-10-30 audit, issue #68)
+
+Owner report: "the app has continued showing LiveKit after PR #67 was
+merged." Audit outcome: **the deployed production build is older than the
+code that removes LiveKit — deployment lag, not an active-code defect.**
+
+Evidence (GitHub commit statuses, repo B-Ken877/medika):
+1. `082aa6c` (main HEAD, PR #67 — LiveKit removed completely) Vercel
+   production deploy **FAILED** at 2026-10-29T01:23:29Z; the status target
+   URL is the Vercel build-rate-limit page.
+2. `bbd0070` (PR #65) production deploy **FAILED** the same way at
+   2026-10-28T22:31:59Z.
+3. The last SUCCESSFUL production deploy is `d48258b`
+   (2026-10-28T22:27:24Z) — the issue #62 build whose provider gate ran
+   **LiveKit in production by design** (fail-closed default before the
+   explicit production opt-in landed in PR #65).
+4. Repo-wide scan of `082aa6c`: ZERO active LiveKit code/config/dependency
+   references (remaining matches are no-regression test guards and clearly
+   marked historical docs).
+5. The PWA service worker cannot serve a stale call bundle: navigations are
+   network-first, `/_next/static/*` assets are content-hashed per build,
+   and `/api/*` (the token endpoint) is never cached.
+
+Consequence: until a production deploy of `082aa6c` (or later) succeeds,
+the production site keeps serving the `d48258b` build and therefore keeps
+showing LiveKit — exactly what the owner observed.
+
+Owner-only actions (agent has no Vercel access; not attempted):
+1. From the Vercel dashboard, retry/redeploy the latest main commit once
+   the build-rate-limit window has reset, then confirm the production
+   alias points at that deployment (commit hash visible in the dashboard).
+2. With the intended scope-scoped `ZEGOCLOUD_*` variables configured, run
+   the two-device script in §5 — a merged PR or a green preview build is
+   NOT proof of a working production call.
+3. Rotate the temporary ZEGO test credentials after testing (§7).
+4. If a real build error (not rate limiting) appears in the Vercel logs,
+   report it on issue #68 so the agent can fix it on a branch.

@@ -76,7 +76,7 @@ const config = {
     const n = parseInt(raw, 10);
     return Number.isFinite(n) && n > 0 ? n : 0;
   })(),
-  zegoCloudServerUrl: env('ZEGOCLOUD_SERVER_URL', ''),    // public WS endpoint from the ZEGO console
+  zegoCloudServerUrl: env('ZEGOCLOUD_SERVER_URL', '').trim(), // public WS endpoint from the ZEGO console; trimmed so validation and the engine see the same value
   zegoCloudServerSecret: env('ZEGOCLOUD_SERVER_SECRET', ''), // backend only; exactly 32 chars
   zegoCloudAppSign: env('ZEGOCLOUD_APP_SIGN', ''),        // backend only; unused by token04 auth
 

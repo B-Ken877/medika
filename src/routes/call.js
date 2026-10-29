@@ -18,6 +18,29 @@ const { authenticate } = require('../auth');
 const router = express.Router();
 const ZEGO_TOKEN_TTL_SECONDS = 3600;
 
+/**
+ * Fail-closed validation of the client-visible engine endpoint (issue #68).
+ * The browser constructs `new ZegoExpressEngine(appId, server)` with this
+ * value; anything that is not a WebSocket URL (an https:// console page, a
+ * pasted dashboard URL, a typo, stray whitespace handled upstream) would
+ * otherwise fail opaquely at runtime. Returns null when usable, otherwise
+ * the SAME clear, actionable error the token route returns as 503 — no
+ * LiveKit fallback, no partial configuration.
+ * @param {string} rawUrl trimmed ZEGOCLOUD_SERVER_URL value ('' allowed —
+ *   the missing-configuration check above owns that case).
+ */
+function zegoServerUrlProblem(rawUrl) {
+  const INVALID = 'ZEGOCLOUD_SERVER_URL invalide — doit etre une URL WebSocket (wss://…) telle que fournie par la console ZEGO';
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return INVALID;
+  }
+  if (parsed.protocol !== 'wss:' && parsed.protocol !== 'ws:') return INVALID;
+  return null;
+}
+
 router.post('/call/token', authenticate, async (req, res, next) => {
   try {
     const { consultationId } = req.body || {};
@@ -33,6 +56,14 @@ router.post('/call/token', authenticate, async (req, res, next) => {
       return res.status(503).json({
         error: 'ZEGOCLOUD non configure (ZEGOCLOUD_APP_ID / ZEGOCLOUD_SERVER_URL / ZEGOCLOUD_SERVER_SECRET requis)',
       });
+    }
+
+    // Issue #68: an invalid (non-WebSocket) endpoint must fail CLOSED here
+    // with a clear, actionable error — never mint a token the browser engine
+    // cannot use, and never fall back to any other provider.
+    const serverUrlProblem = zegoServerUrlProblem(config.zegoCloudServerUrl);
+    if (serverUrlProblem) {
+      return res.status(503).json({ error: serverUrlProblem });
     }
 
     if (consultation.status !== 'EN_COURS') {
@@ -97,3 +128,5 @@ router.get('/health', (req, res) => {
 });
 
 module.exports = router;
+// Exported for direct unit tests of the fail-closed configuration gate.
+module.exports.zegoServerUrlProblem = zegoServerUrlProblem;
