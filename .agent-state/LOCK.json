@@ -1,9 +1,9 @@
 {
-  "run_id": "Run cron-20261029-0840 complete: #66 IN REVIEW via PR #67. Lock released.",
-  "started_at_utc": "2026-10-29T01:04:55Z",
-  "heartbeat_utc": "2026-10-29T01:04:55Z",
-  "active": false,
+  "run_id": "cron-202610290906",
+  "started_at_utc": "2026-10-29T01:13:02Z",
+  "heartbeat_utc": "2026-10-29T01:13:02Z",
+  "active": true,
   "owner": "medika-autonomous-agent",
-  "issue": null,
-  "note": "Run cron-20261029-0840 complete: #66 IN REVIEW via PR #67. Lock released."
+  "issue": 66,
+  "note": "surveillance run: PR #67 preview-failure evidence comment + state append; no code changes"
 }
