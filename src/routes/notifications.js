@@ -147,6 +147,22 @@ router.get('/notifications', authenticate, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * Lightweight unread count for the header bell (issue #72). Owner-scoped
+ * single count query — cheap enough to refresh on WS events, reconnect and
+ * visibility changes without pulling the list. The durable `notifications`
+ * table is the ONLY source of truth; WS events merely prompt a refetch.
+ */
+router.get('/notifications/unread', authenticate, async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      `SELECT count(*)::int AS n FROM notifications WHERE user_id = $1 AND read_at IS NULL`,
+      [req.user.id]
+    );
+    res.json({ unread: rows[0].n });
+  } catch (err) { next(err); }
+});
+
 router.post('/notifications/read', authenticate, async (req, res, next) => {
   try {
     const ids = Array.isArray(req.body && req.body.ids)

@@ -15,6 +15,7 @@ import { Bell, CalendarDays, ChevronDown, Home, LogOut, Stethoscope, User, Walle
 import { useAuth } from "@/lib/auth/context";
 import { useSocket } from "@/lib/ws/socket-context";
 import { Avatar, Spinner } from "@/components/ui/primitives";
+import { UnreadProvider, useUnread } from "@/components/notifications/UnreadProvider";
 
 function navItems(role: "patient" | "doctor") {
   if (role === "doctor") {
@@ -102,8 +103,21 @@ function AccountMenu() {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
+  return (
+    <UnreadProvider>
+      <AppShellInner>{children}</AppShellInner>
+    </UnreadProvider>
+  );
+}
+
+/**
+ * Inner shell — must render BELOW UnreadProvider so useUnread() sees the
+ * provider's context (a component cannot consume its own provider).
+ */
+function AppShellInner({ children }: { children: ReactNode }) {
   const { user, status } = useAuth();
   const { status: wsStatus } = useSocket();
+  const { unread } = useUnread();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -171,13 +185,21 @@ export function AppShell({ children }: { children: ReactNode }) {
           {items.map((item) => navLink(item, 17))}
         </nav>
         <div className="header-actions">
+          {/* Issue #72: the bell now carries the SERVER-authoritative unread
+              count (UnreadProvider). The badge is hidden at zero; the
+              accessible label announces the pending count. */}
           <Link
             href="/app/notifications"
             className="icon-btn"
-            aria-label="Notifikasyon"
+            aria-label={unread > 0 ? `Notifikasyon — ${unread} pa li` : "Notifikasyon"}
             title="Notifikasyon"
           >
             <Bell size={20} />
+            {unread > 0 && (
+              <span className="bell-count" aria-hidden>
+                {unread > 99 ? "99+" : unread}
+              </span>
+            )}
           </Link>
           <AccountMenu />
         </div>

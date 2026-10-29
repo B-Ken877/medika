@@ -1,0 +1,14 @@
+{
+  "serverUnreadAtLoad": 0,
+  "badgeAtLoad": null,
+  "badgeMatchesServer": false,
+  "ariaLabel": "Notifikasyon",
+  "messageSendStatus": 201,
+  "badgeAfterMessage": "1",
+  "serverUnreadAfterMessage": 1,
+  "badgeUpdatedLive": true,
+  "centerBodyText": "Medika\nAkèy\nDoktè yo\nKonsiltasyon\nPwofil\n1\nPV\nPat Visual\nNotifikasyon\n\n1 notifikasyon pa li.\n\nRefrèchi\nMake tout li\nNotifikasyon push\nAlert sou aparèy ou a\nOu bloke notifikasyon yo nan paramèt navigatè a. Louvri paramèt yo pou pèmèt yo.\nPreferans\nKonsiltasyon\nKonnen lè evènman sa yo rive.\nMesaj\nKonnen lè evènman sa yo rive.\nApèl\nKonnen lè evènman sa yo rive.\nRevni\nPou doktè yo.\n\nPreferans yo sèlman kontròle VWA push la — istwa notifikasyon nan aplikasyon an konsève toujou.\n\nIstorik\nMedika\nNouvo\nOu gen yon nouvo mesaj sou Medika.\nMesaj · Kounye a\nMedika\nOu gen yon nouvo mesaj sou Medika.\nMesaj · 1 min\nMedika\nYon doktè aksepte demann ou a. Konsiltasyon an kòmanse.\nKonsiltasyon · 1 min\nMedika\nDemann konsiltasyon ou a anrejistre. N ap fè w konnen le yon doktè aksepte l.\nKonsiltasyon · 1 min\n\nNotifikasyon yo sèvi avèk kopi jenerik — pa gen done medikal ki kenbe sou aparèy ou a. Gade pwofil ou pou enfòmasyon prive.",
+  "centerShowsNewMessageNotification": true,
+  "badgeAfterMarkAll": null,
+  "serverUnreadAfterMarkAll": 0
+}

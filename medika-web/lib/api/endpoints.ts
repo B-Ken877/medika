@@ -492,6 +492,11 @@ export function getNotifications(
   );
 }
 
+/** Lightweight unread count for the header bell (issue #72) — server truth. */
+export function getUnreadNotificationCount(token: string, signal?: AbortSignal) {
+  return apiFetch<{ unread: number }>("/api/notifications/unread", { token, signal });
+}
+
 export function markNotificationsRead(token: string, ids: number[], signal?: AbortSignal) {
   return apiFetch<{ success: boolean; updated: number }>("/api/notifications/read", {
     method: "POST",

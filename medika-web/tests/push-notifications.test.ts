@@ -79,7 +79,13 @@ describe("lib/push.ts — honest server health states (issue #50)", () => {
   it("each failure class has its own guarded scope (no shared catch-all)", () => {
     // The permission prompt, key fetch, subscribe, and registration are
     // wrapped in FOUR separate try blocks so failures classify honestly.
-    const fn = src.slice(src.indexOf("export async function enablePush"), src.indexOf("/** Unsubscribe this device"));
+    // (Issue #72 appended syncExistingPushSubscription AFTER enablePush —
+    // the slice now ends at that function's doc block to keep asserting
+    // enablePush's own guarded scopes only.)
+    const fn = src.slice(
+      src.indexOf("export async function enablePush"),
+      src.indexOf("/**\n * Re-register an EXISTING browser subscription"),
+    );
     expect(fn.match(/try \{/g)?.length).toBe(4);
     // "unsupported-browser" is reserved for genuine browser-level failures:
     // it appears in probe paths and the browser-scoped catch blocks only.
