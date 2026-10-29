@@ -3,7 +3,7 @@
 /**
  * In-call chat panel (issue #45) — the consultation chat INSIDE the call
  * screen, so patients and doctors switch between video and messages without
- * navigating away (which would unmount the LiveKit-owning call page and tear
+ * navigating away (which would unmount the call page and tear
  * down the call).
  *
  * NOT a second chat or message store: the panel reuses the exact server

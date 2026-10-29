@@ -71,7 +71,7 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return; // mutations always go to network
 
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return; // cross-origin (LiveKit, MonCash): untouched
+  if (url.origin !== self.location.origin) return; // cross-origin (MonCash, media): untouched
 
   // Security rule #1: data endpoints are network-only, pass-through.
   if (isNeverCached(url)) return;

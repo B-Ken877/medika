@@ -129,7 +129,7 @@ export default function ConsultationChatPage() {
   const [justAccepted, setJustAccepted] = useState(false);
   // Issue #56: the consultation experience starts in VIDEO. When the server
   // confirms the RECHERCHE_MEDECIN → EN_COURS edge on THIS page, navigate
-  // straight to the real LiveKit call (mode=video) instead of only showing
+  // straight to the real video call (mode=video) instead of only showing
   // a banner. Duplicate/delayed events stay safe — the edge fires once per
   // page load; the call page owns the room and re-checks eligibility
   // server-side (no client-side bypass of the token gate).
@@ -746,7 +746,7 @@ export default function ConsultationChatPage() {
     return <Spinner label="N ap chaje konsiltasyon an..." />;
   }
 
-  // ── Video-first call affordance (issue #56): the REAL LiveKit call is
+  // ── Video-first call affordance (issue #56): the REAL video call is
   // the primary consultation surface; the placeholder room is retired as
   // a destination (the /room route now only redirects here). ───────────
   const callHref = `/app/consultations/${encodeURIComponent(consultationId)}/call?mode=video`;
@@ -942,7 +942,7 @@ export default function ConsultationChatPage() {
       </header>
 
       {/* Video-first call entry (issue #56): the consultation's primary
-          surface is the LiveKit video call; chat is the supporting tool.
+          surface is the video call; chat is the supporting tool.
           The acceptance transition above already auto-navigates; this bar
           is the fallback (e.g. if navigation was interrupted). */}
       {canChat && justAccepted && (

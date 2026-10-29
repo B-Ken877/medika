@@ -3,8 +3,8 @@
 /**
  * Voice/video consultation call — web counterpart of CallActivity.kt.
  *
- * The LiveKit access token is minted by the backend (POST /api/call/token)
- * which holds the LiveKit API key/secret server-side; the browser only ever
+ * The ZEGOCLOUD token is minted by the backend (POST /api/call/token)
+ * which holds the ZEGO ServerSecret server-side; the browser only ever
  * receives a short-lived room token, never the credentials.
  *
  * Signaling (ring / accepted / rejected / ended) rides the existing Medika
@@ -12,12 +12,13 @@
  *
  * Issue #45: the call page now hosts the consultation chat as an in-call
  * panel (InCallChat) so switching to chat NEVER unmounts this component —
- * the LiveKit room stays connected and local tracks keep running. Lifecycle
+ * the call session stays connected and local tracks keep running. Lifecycle
  * transitions go through the pure state machine in lib/call/phases.ts:
  *  - "Chat" / "Back to video" are pure view state, never call events;
- *  - "End call" remains the ONLY user action that disconnects the room and
- *    sends call:end signaling (kept visually distinct from Chat);
- *  - a real automatic reconnection (LiveKit) is surfaced as such; an
+ *  - "End call" remains the ONLY user action that disconnects the session
+ *    and sends call:end signaling (kept visually distinct from Chat);
+ *  - a real automatic reconnection (surfaced by the ZEGO engine) is
+ *    reported honestly; an
  *    unexpected disconnect lands on a failure screen with a REAL retry that
  *    re-fetches a fresh token — never a fake "reconnecting" message.
  *
@@ -25,7 +26,7 @@
  * the primary experience. If the server has not authorized the call yet
  * (doctor has not accepted → RECHERCHE_MEDECIN), this page waits CALMLY:
  * a bounded, cancellable poll re-reads the authoritative consultation
- * status (neutral copy, never a red error) and the LiveKit room is
+ * status (neutral copy, never a red error) and the call session is
  * created ONLY once the server mints a token. Terminal statuses (REFUSE /
  * TERMINE / EXPIRE) get a clear, honest screen with NO retry loop. The
  * token endpoint's server-side EN_COURS check stays the gate — nothing
@@ -43,13 +44,6 @@ import {
   Video as VideoIcon,
   VideoOff,
 } from "lucide-react";
-import {
-  Room,
-  RoomEvent,
-  Track,
-  type RemoteTrack,
-  type LocalTrackPublication,
-} from "livekit-client";
 import { useAuth } from "@/lib/auth/context";
 import { useSocket } from "@/lib/ws/socket-context";
 import { getCallToken, getConsultation } from "@/lib/api/endpoints";
@@ -67,12 +61,6 @@ import {
 } from "@/lib/call/phases";
 
 type CallPhase = "connecting" | "active" | "ended" | "failed";
-
-/** livekit-client classifies permission denials by constructor name — key on
- *  the NAME (stable across versions), never on the message text. */
-function isPermissionError(err: unknown): boolean {
-  return err instanceof Error && err.name === "MediaDevicePermissionDeniedError";
-}
 
 /** Issue #56 — calm, honest copy for genuinely terminal consultation
  *  states. Rendered on the failed screen WITHOUT a retry button. */
@@ -106,10 +94,9 @@ function CallScreen() {
   const [chatOpen, setChatOpen] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
-  const roomRef = useRef<Room | null>(null);
-  /** Issue #62: ZEGOCLOUD session — non-null exactly when the server minted
-   *  a zego token for this call. The provider is the SERVER's decision; the
-   *  client only follows the token response. */
+  /** ZEGOCLOUD session — non-null exactly when the server minted a token
+   *  for this call. ZEGO is the sole provider; every token comes from the
+   *  server's authorization funnel. */
   const zegoRef = useRef<ZegoCallSession | null>(null);
   const localVideoRef = useRef<HTMLDivElement>(null);
   const remoteVideoRef = useRef<HTMLDivElement>(null);
@@ -117,24 +104,17 @@ function CallScreen() {
   /** call:start is signaled ONCE per page session — retries never re-ring. */
   const startCallSentRef = useRef(false);
 
-  // ── Teardown (the ONLY room-disconnecting path) ──────────────────────────
+  // ── Teardown (the ONLY session-teardown path) ──────────────────────────
   const endCall = useCallback(
     (reason?: string) => {
       if (endedRef.current) return;
       endedRef.current = true;
       dispatch({ type: "hang-up" });
       // Issue #56: call:end signaling only makes sense once a call existed.
-      // Leaving during the pre-room wait must NOT send spurious end-call
+      // Leaving during the pre-session wait must NOT send spurious end-call
       // signaling — there is no call to end yet.
-      if (roomRef.current) {
+      if (zegoRef.current) {
         socket?.endCall(consultationId);
-      }
-      const room = roomRef.current;
-      roomRef.current = null;
-      try {
-        room?.disconnect();
-      } catch {
-        // ignore
       }
       const zg = zegoRef.current;
       zegoRef.current = null;
@@ -147,28 +127,15 @@ function CallScreen() {
     [socket, consultationId, router],
   );
 
-  // ── Bootstrap (issue #56): wait for eligibility FIRST, room ONLY when
+  // ── Bootstrap (issue #56): wait for eligibility FIRST, session ONLY when
   // the server authorizes a token. Re-runs on explicit retry via `attempt`.
   useEffect(() => {
     if (!token || !consultationId) return;
     let disposed = false;
     endedRef.current = false;
 
-    const attachRemote = (track: RemoteTrack) => {
-      if (track.kind === Track.Kind.Video && remoteVideoRef.current) {
-        const el = track.attach() as HTMLVideoElement;
-        el.style.width = "100%";
-        el.style.height = "100%";
-        el.style.objectFit = "contain";
-        const host = remoteVideoRef.current;
-        host.innerHTML = "";
-        host.appendChild(el);
-      }
-    };
-
-    /** Issue #62 (zego): attach a raw MediaStream into a host div. Mirrors
-     *  the LiveKit attach* helpers so both providers share the same hosts
-     *  and visual treatment. */
+    /** Attach a raw MediaStream into a host div (local preview + remote
+     *  video share the same hosts and visual treatment). */
     const attachStreamToHost = (
       host: HTMLElement | null,
       stream: MediaStream | null,
@@ -191,7 +158,7 @@ function CallScreen() {
     const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
     (async () => {
-      // ── Phase 1 (issue #56): eligibility wait — NO Room exists yet.
+      // ── Phase 1 (issue #56): eligibility wait — NO session exists yet.
       // The server stays authoritative end to end: this loop only READS
       // the consultation; POST /api/call/token re-checks EN_COURS before
       // minting, so nothing here can bypass authorization.
@@ -224,7 +191,7 @@ function CallScreen() {
           setError(hardFailure);
           return;
         }
-        if (status === "EN_COURS") break; // eligible → token + room
+        if (status === "EN_COURS") break; // eligible → token + session
         if (status && (TERMINAL_CONSULTATION_STATUSES as readonly string[]).includes(status)) {
           // Genuinely terminal: clear, honest copy and NO further polling —
           // the bounded wait budget must never hammer a closed door.
@@ -254,185 +221,88 @@ function CallScreen() {
       }
       if (disposed || endedRef.current) return;
 
-      // ── Phase 2: eligible → token → room. The Room is created ONLY here,
-      // so waiting can never churn rooms or re-ring the partner.
-      const room = new Room({ adaptiveStream: true, dynacast: true });
-      roomRef.current = room;
-
-      room
-        .on(RoomEvent.TrackSubscribed, (track) => {
-          attachRemote(track);
-          dispatch({ type: "connected" });
-          setStatusText("Apèl la ap pase");
-        })
-        .on(RoomEvent.ParticipantConnected, () => {
-          setStatusText("Lòt moun nan konekte");
-        })
-        .on(RoomEvent.ParticipantDisconnected, () => {
-          setStatusText("Lòt moun nan kite apèl la");
-        })
-        .on(RoomEvent.Reconnecting, () => {
-          // LiveKit IS automatically retrying — this label is TRUE.
-          dispatch({ type: "reconnecting" });
-          setStatusText("Rezo a entèwopti. N ap rekonekte otomatikman...");
-        })
-        .on(RoomEvent.Reconnected, () => {
-          dispatch({ type: "reconnected" });
-          setStatusText("Koneksyon an retabli.");
-        })
-        .on(RoomEvent.Disconnected, () => {
-          if (endedRef.current || disposed) return;
-          // Unexpected drop — surface a REAL retry; never claim reconnection.
-          dispatch({ type: "unexpected-disconnect" });
-          setStatusText("Koneksyon an koupe.");
-        })
-        .on(RoomEvent.TrackUnsubscribed, (track) => {
-          try {
-            track.detach().forEach((el) => el.remove());
-          } catch {
-            // ignore
-          }
-          if (remoteVideoRef.current) remoteVideoRef.current.innerHTML = "";
-        });
+      // ── Phase 2: eligible → token → session. The session is created ONLY
+      // here, so waiting can never churn rooms or re-ring the partner.
 
       try {
         const res = await getCallToken(token, consultationId, mode === "video");
         if (disposed) return;
 
-        // Issue #62: the SERVER chooses the provider. A 'zego' response
-        // drives a ZegoCallSession; every other response (legacy shape or
-        // explicit 'livekit') keeps the LiveKit flow below UNCHANGED.
-        if (res.provider === "zego") {
-          if (!startCallSentRef.current) {
-            startCallSentRef.current = true;
-            socket?.startCall(consultationId, user?.name ?? "Apèl", mode, res.roomName);
-          }
-          const session = new ZegoCallSession();
-          zegoRef.current = session;
-          setStatusText("N ap tann lòt moun nan konekte...");
-          await session.connect(
-            res,
-            { id: user?.id ?? res.participantIdentity, name: user?.name ?? "" },
-            mode,
-            {
-              onRemoteStream: (stream) => {
-                if (disposed || endedRef.current) return;
-                attachStreamToHost(remoteVideoRef.current, stream, { muted: false, objectFit: "contain" });
-                if (stream) {
-                  session.noteConnected();
-                  dispatch({ type: "connected" });
-                  setStatusText("Apèl la ap pase");
-                }
-              },
-              onReconnecting: () => {
-                if (disposed || endedRef.current) return;
-                // ZEGO IS automatically retrying — the label is TRUE.
-                dispatch({ type: "reconnecting" });
-                setStatusText("Rezo a entèwopti. N ap rekonekte otomatikman...");
-              },
-              onReconnected: () => {
-                if (disposed || endedRef.current) return;
-                dispatch({ type: "reconnected" });
-                setStatusText("Koneksyon an retabli.");
-              },
-              onUnexpectedDisconnect: () => {
-                if (disposed || endedRef.current) return;
-                dispatch({ type: "unexpected-disconnect" });
-                setStatusText("Koneksyon an koupe.");
-              },
-              onConnectFailed: (kind) => {
-                if (disposed || endedRef.current) return;
-                dispatch({ type: "connect-failed", kind });
-                setStatusText(
-                  kind === "permission"
-                    ? "Nou pa gen pèmisyon mikwo/kamera. Oktroye pèmisyon yo nan navigatè a, apre sa eseye ankò."
-                    : "Nou pa rive jwenn sèvis apèl la. Tanpri, eseye ankò pita.",
-                );
-              },
-              onPartnerJoined: () => {
-                if (disposed || endedRef.current) return;
-                setStatusText("Lòt moun nan konekte");
-              },
-              onPartnerLeft: () => {
-                if (disposed || endedRef.current) return;
-                setStatusText("Lòt moun nan kite apèl la");
-              },
-              onTokenWillExpire: async () => {
-                // Renewal re-runs the FULL server authorization funnel
-                // (membership + EN_COURS) — never a silent client-side
-                // extension of the grant.
-                try {
-                  const fresh = await getCallToken(token, consultationId, mode === "video");
-                  return fresh.provider === "zego" ? fresh.token : undefined;
-                } catch {
-                  return undefined;
-                }
-              },
-            },
-          );
-          if (disposed || endedRef.current) return;
-          // Local preview (muted to kill feedback) + voice-mode remote host.
-          attachStreamToHost(localVideoRef.current, session.localMediaStream, {
-            muted: true,
-            objectFit: "cover",
-          });
-          if (mode === "voice" && remoteVideoRef.current) {
-            remoteVideoRef.current.style.display = "none";
-          }
-          return; // zego session owns this call — skip LiveKit room setup
-        }
-
-        // Notify the partner ONCE per session (retries never re-ring).
+        // ZEGO is the sole provider — every token response drives a
+        // ZegoCallSession (the session re-validates the shape defensively).
         if (!startCallSentRef.current) {
           startCallSentRef.current = true;
           socket?.startCall(consultationId, user?.name ?? "Apèl", mode, res.roomName);
         }
-
-        // Mixed-content guard: when this app is served over HTTPS, an
-        // insecure ws:// LiveKit URL would be blocked by the browser.
-        // LiveKit serves TLS on the same port, so upgrade the scheme.
-        let url = res.url;
-        if (typeof window !== "undefined" && window.location.protocol === "https:" && url.startsWith("ws://")) {
-          url = url.replace(/^ws:/, "wss:");
-        }
-
-        await room.connect(url, res.token);
-        if (disposed) return;
+        const session = new ZegoCallSession();
+        zegoRef.current = session;
         setStatusText("N ap tann lòt moun nan konekte...");
-
-        // Publish local mic (and camera for video mode). Permission denials
-        // get their own user-facing state instead of a generic failure.
-        try {
-          await room.localParticipant.setMicrophoneEnabled(true);
-          if (mode === "video") {
-            await room.localParticipant.setCameraEnabled(true);
-          }
-        } catch (mediaErr) {
-          if (disposed) return;
-          if (isPermissionError(mediaErr)) {
-            dispatch({ type: "connect-failed", kind: "permission" });
-            setStatusText(
-              "Nou pa gen pèmisyon mikwo/kamera. Oktroye pèmisyon yo nan navigatè a, apre sa eseye ankò.",
-            );
-            return;
-          }
-          throw mediaErr;
-        }
-
-        if (localVideoRef.current) {
-          const localPub = room.localParticipant.getTrackPublication(Track.Source.Camera) as
-            | LocalTrackPublication
-            | undefined;
-          const el = localPub?.track?.attach() as HTMLVideoElement | undefined;
-          if (el) {
-            el.style.width = "100%";
-            el.style.height = "100%";
-            el.style.objectFit = "cover";
-            const host = localVideoRef.current;
-            host.innerHTML = "";
-            host.appendChild(el);
-          }
-        }
+        await session.connect(
+          res,
+          { id: user?.id ?? res.participantIdentity, name: user?.name ?? "" },
+          mode,
+          {
+            onRemoteStream: (stream) => {
+              if (disposed || endedRef.current) return;
+              attachStreamToHost(remoteVideoRef.current, stream, { muted: false, objectFit: "contain" });
+              if (stream) {
+                session.noteConnected();
+                dispatch({ type: "connected" });
+                setStatusText("Apèl la ap pase");
+              }
+            },
+            onReconnecting: () => {
+              if (disposed || endedRef.current) return;
+              // ZEGO IS automatically retrying — the label is TRUE.
+              dispatch({ type: "reconnecting" });
+              setStatusText("Rezo a entèwopti. N ap rekonekte otomatikman...");
+            },
+            onReconnected: () => {
+              if (disposed || endedRef.current) return;
+              dispatch({ type: "reconnected" });
+              setStatusText("Koneksyon an retabli.");
+            },
+            onUnexpectedDisconnect: () => {
+              if (disposed || endedRef.current) return;
+              dispatch({ type: "unexpected-disconnect" });
+              setStatusText("Koneksyon an koupe.");
+            },
+            onConnectFailed: (kind) => {
+              if (disposed || endedRef.current) return;
+              dispatch({ type: "connect-failed", kind });
+              setStatusText(
+                kind === "permission"
+                  ? "Nou pa gen pèmisyon mikwo/kamera. Oktroye pèmisyon yo nan navigatè a, apre sa eseye ankò."
+                  : "Nou pa rive jwenn sèvis apèl la. Tanpri, eseye ankò pita.",
+              );
+            },
+            onPartnerJoined: () => {
+              if (disposed || endedRef.current) return;
+              setStatusText("Lòt moun nan konekte");
+            },
+            onPartnerLeft: () => {
+              if (disposed || endedRef.current) return;
+              setStatusText("Lòt moun nan kite apèl la");
+            },
+            onTokenWillExpire: async () => {
+              // Renewal re-runs the FULL server authorization funnel
+              // (membership + EN_COURS) — never a silent client-side
+              // extension of the grant.
+              try {
+                const fresh = await getCallToken(token, consultationId, mode === "video");
+                return fresh.provider === "zego" ? fresh.token : undefined;
+              } catch {
+                return undefined;
+              }
+            },
+          },
+        );
+        if (disposed || endedRef.current) return;
+        // Local preview (muted to kill feedback) + voice-mode remote host.
+        attachStreamToHost(localVideoRef.current, session.localMediaStream, {
+          muted: true,
+          objectFit: "cover",
+        });
         if (mode === "voice" && remoteVideoRef.current) {
           remoteVideoRef.current.style.display = "none";
         }
@@ -452,18 +322,13 @@ function CallScreen() {
       const zg = zegoRef.current;
       zegoRef.current = null;
       if (zg) {
+        if (!endedRef.current) {
+          // Session torn down without an explicit hang-up (unmount):
+          // mark it so late signaling cannot fire call:end spuriously.
+          endedRef.current = true;
+        }
         void zg.disconnect();
       }
-      const room = roomRef.current;
-      if (!endedRef.current) {
-        endedRef.current = true;
-        try {
-          room?.disconnect();
-        } catch {
-          // ignore
-        }
-      }
-      roomRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, consultationId, mode, attempt]);
@@ -484,31 +349,21 @@ function CallScreen() {
 
   // ── Controls ──────────────────────────────────────────────────────────────
   const toggleMic = async () => {
-    if (zegoRef.current) {
-      // Issue #62 (zego): engine-level mute + track enable — stream stays up.
-      await zegoRef.current.toggleMic(!micOn);
-      setMicOn(!micOn);
-      return;
-    }
-    const room = roomRef.current;
-    if (!room) return;
-    await room.localParticipant.setMicrophoneEnabled(!micOn);
+    const zg = zegoRef.current;
+    if (!zg) return;
+    // Engine-level mute + track enable — the published stream stays up.
+    await zg.toggleMic(!micOn);
     setMicOn(!micOn);
   };
 
   const toggleCam = async () => {
-    if (zegoRef.current) {
-      await zegoRef.current.toggleCam(!camOn);
-      setCamOn(!camOn);
-      return;
-    }
-    const room = roomRef.current;
-    if (!room) return;
-    await room.localParticipant.setCameraEnabled(!camOn);
+    const zg = zegoRef.current;
+    if (!zg) return;
+    await zg.toggleCam(!camOn);
     setCamOn(!camOn);
   };
 
-  /** REAL retry: reset the failure screen and rebuild the room with a fresh
+  /** REAL retry: reset the failure screen and rebuild the session with a fresh
    *  token (the old token may be expired — never reuse it blindly). */
   const retry = useCallback(() => {
     if (!state.canRetry || state.phase !== "failed") return;
@@ -518,7 +373,7 @@ function CallScreen() {
     setAttempt((a) => a + 1);
   }, [state.canRetry, state.phase]);
 
-  // View-only toggle — touches NO room state; the panel opens over the call.
+  // View-only toggle — touches NO session state; the panel opens over the call.
   const openChat = useCallback(() => setChatOpen(true), []);
   const closeChat = useCallback(() => setChatOpen(false), []);
   const endFromChat = useCallback(() => {
@@ -583,7 +438,7 @@ function CallScreen() {
             {camOn ? <VideoIcon size={22} /> : <VideoOff size={22} />}
           </button>
         )}
-        {/* Chat switch — pure view state; never disconnects the room. */}
+        {/* Chat switch — pure view state; never disconnects the session. */}
         {showChatControl && (
           <button
             className="call-btn chat"
@@ -600,7 +455,7 @@ function CallScreen() {
       </div>
 
       {/* In-call chat overlay — mounted ONLY while open; closing it unmounts
-          the panel but never the call page, so the room stays connected. */}
+          the panel but never the call page, so the session stays connected. */}
       {chatOpen && (
         <InCallChat
           consultationId={consultationId}

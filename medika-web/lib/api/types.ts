@@ -190,18 +190,14 @@ export interface CallTokenResponse {
   url: string;
   roomName: string;
   participantIdentity: string;
-  /**
-   * Which RTC provider minted this token (issue #62). The backend decides —
-   * the client NEVER assumes. Older backends omit the field; absent means
-   * the legacy LiveKit shape.
-   */
-  provider?: "livekit" | "zego";
-  /** ZEGO only: public engine endpoint from the ZEGO console. */
-  appId?: number;
-  /** ZEGO only: the single stream this token is allowed to publish. */
-  streamId?: string;
-  /** ZEGO only: token validity in seconds (drives the renew schedule). */
-  tokenTtlSeconds?: number;
+  /** ZEGOCLOUD is the sole call provider; the backend mints every token. */
+  provider: "zego";
+  /** Public engine endpoint from the ZEGO console. */
+  appId: number;
+  /** The single stream this token is allowed to publish. */
+  streamId: string;
+  /** Token validity in seconds (drives the renew schedule). */
+  tokenTtlSeconds: number;
 }
 
 export interface UploadResponse {

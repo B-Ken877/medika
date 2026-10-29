@@ -2,8 +2,8 @@
  * Direct-to-video consultation entry (issue #56) — source contracts.
  *
  * Verified here (source-contract pattern — no jsdom in this package):
- *  - the call page waits for server-side eligibility BEFORE any Room
- *    exists (no room churn while waiting, no request storms);
+ *  - the call page waits for server-side eligibility BEFORE any call session
+ *    exists (no session churn while waiting, no request storms);
  *  - "doctor not here yet" is a calm, neutral state — never an error;
  *  - terminal statuses stop the loop with clear copy and no auto-retry;
  *  - the wait is bounded and cancellable;
@@ -22,14 +22,14 @@ const read = (p: string) => readFileSync(resolve(__dirname, p), "utf8");
 describe("call page bootstrap (issue #56)", () => {
   const call = read("../app/app/consultations/[id]/call/page.tsx");
 
-  it("reads eligibility FIRST and creates the Room only after it", () => {
+  it("reads eligibility FIRST and creates the session only after it", () => {
     const firstPoll = call.indexOf("await getConsultation(token, consultationId)");
-    const roomCreation = call.indexOf("new Room(");
+    const sessionCreation = call.indexOf("new ZegoCallSession()");
     expect(firstPoll).toBeGreaterThan(-1);
-    expect(roomCreation).toBeGreaterThan(-1);
-    expect(firstPoll).toBeLessThan(roomCreation);
-    // Exactly ONE room creation site — waiting can never churn rooms.
-    expect(call.match(/new Room\(/g)?.length).toBe(1);
+    expect(sessionCreation).toBeGreaterThan(-1);
+    expect(firstPoll).toBeLessThan(sessionCreation);
+    // Exactly ONE session creation site — waiting can never churn sessions.
+    expect(call.match(/new ZegoCallSession\(\)/g)?.length).toBe(1);
   });
 
   it("waiting for the doctor is calm and neutral — never an error", () => {
@@ -75,15 +75,17 @@ describe("call page bootstrap (issue #56)", () => {
 
   it("call:start stays once-per-session; End call keeps its signaling guard", () => {
     expect(call).toContain("startCallSentRef");
-    // Issue #56: leaving during the pre-room wait sends NO call:end.
-    expect(call).toMatch(/if \(roomRef\.current\) \{\s*socket\?\.endCall/);
+    // Issue #56: leaving during the pre-session wait sends NO call:end.
+    expect(call).toMatch(/if \(zegoRef\.current\) \{\s*socket\?\.endCall/);
   });
 
-  it("chat/video switching remains pure view state (no room teardown)", () => {
+  it("chat/video switching remains pure view state (no session teardown)", () => {
     expect(call).toContain("const openChat = useCallback(() => setChatOpen(true), []);");
     expect(call).toContain("const closeChat = useCallback(() => setChatOpen(false), []);");
-    // The room-disconnecting path stays exactly the explicit endCall.
-    expect(call.match(/room\?\.disconnect\(\)|room\.disconnect\(\)/g)?.length).toBe(2);
+    // The session-teardown path stays exactly the explicit endCall/unmount.
+    expect(call.match(/void zg\.disconnect\(\);/g)?.length).toBe(2);
+    // The page has no other provider integration left.
+    expect(call.toLowerCase()).not.toContain("livekit");
   });
 });
 

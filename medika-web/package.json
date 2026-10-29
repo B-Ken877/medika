@@ -2,7 +2,7 @@
   "name": "medika-web",
   "version": "1.0.0",
   "private": true,
-  "description": "Medika Haiti — responsive web app (patient & doctor) as an installable PWA",
+  "description": "Medika Haiti \u2014 responsive web app (patient & doctor) as an installable PWA",
   "scripts": {
     "dev": "next dev -p 4100",
     "build": "next build",
@@ -13,7 +13,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "livekit-client": "^2.5.0",
     "lucide-react": "^0.400.0",
     "next": "^14.2.35",
     "react": "^18.3.1",

@@ -225,7 +225,7 @@ export function getDoctorWallet(token: string, signal?: AbortSignal) {
   return apiFetch<DoctorWallet>("/api/doctor/wallet", { token, signal });
 }
 
-// ─── Calls (LiveKit token generation) ─────────────────────────────────────────
+// ─── Calls (ZEGOCLOUD token generation) ────────────────────────────────────
 
 export function getCallToken(token: string, consultationId: string, isVideo: boolean, signal?: AbortSignal) {
   return apiFetch<CallTokenResponse>("/api/call/token", {
