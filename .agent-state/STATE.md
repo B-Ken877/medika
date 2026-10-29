@@ -1,7 +1,7 @@
 Last updated: 2026-10-29T19:33:56Z (cron-202610300304)
 
 ## Active issue
-- #72 IN PROGRESS (run cron-202610300330), branch fix/issue-72-notifications-webpush
+- #72 IN REVIEW via PR #76 (run cron-202610300330), branch fix/issue-72-notifications-webpush (e3e91ae). Scope done: (A) GET /api/notifications/unread + UnreadProvider (server truth; WS/reconnect/visibility/poll prompts; debounced) + bell badge (hidden at 0, 99+ cap, aria) + center reloads on message:new + read actions re-sync the bell; (B) syncExistingPushSubscription heals sw pushsubscriptionchange renewal gap (never prompts). Tests: 426 backend + 489 web PASS; typecheck/lint/build clean; live E2E (badge moves WITHOUT reload on real WS message; clears on mark-all) evidence docs/evidence/issue-72/. Real-device push NOT performed: needs OWNER-ONLY VAPID env (docs/WEB_PUSH_SETUP.md) + devices. Owner next: review PR #76, merge, VAPID env, device verify. Do NOT mark DONE unverified.
   (from main 9549a7c). Two workstreams: (A) in-app — bell unread badge in AppShell,
   durable server-authoritative count, WS-prompted refresh, sync across refresh/
   reconnect/devices; (B) end-to-end Web Push — SW push handler, permission UX,
