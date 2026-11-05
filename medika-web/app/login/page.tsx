@@ -32,7 +32,7 @@ function BrandMark({ size = 36 }: { size?: number }) {
 }
 
 function LoginForm() {
-  const { login, status } = useAuth();
+  const { login, status, user } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") || "/app";
@@ -44,8 +44,8 @@ function LoginForm() {
   const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
-    if (status === "authenticated") router.replace(next);
-  }, [status, router, next]);
+    if (status === "authenticated") router.replace(!params.get("next") && user?.role === "delivery" ? "/livreur" : next);
+  }, [status, router, next, params, user?.role]);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
