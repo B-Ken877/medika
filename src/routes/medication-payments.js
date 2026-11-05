@@ -5,6 +5,7 @@ const paymentsRepo = require('../repos/medication-payments');
 const moncash = require('../moncash');
 const { simulationAllowed } = require('../config');
 const { authenticate, requireRole } = require('../auth');
+const notifications = require('../notifications/emit');
 const router = express.Router();
 
 function simulatedTransactionId(reference) {
@@ -78,7 +79,17 @@ router.post('/medication-orders/:id/payment/verify', authenticate, requireRole('
     const result = await paymentsRepo.verifyIntent({ orderId: req.params.id, patient: req.user, verified });
     const error = mapOutcome(res, result);
     if (error) return error;
-    if (result.outcome === 'PAID') return res.json({ success: true, status: 'PAID', payment: result.payment });
+    if (result.outcome === 'PAID') {
+      notifications.emit({
+        userId: req.user.id,
+        eventType: 'medication:paid',
+        idempotencyKey: 'medication-order:' + req.params.id + ':payment:' + result.payment.id + ':paid',
+        title: 'Medika',
+        body: 'Votre paiement a été confirmé. Votre demande est transmise à notre équipe pour la préparation.',
+        url: '/app/consultations',
+      });
+      return res.json({ success: true, status: 'PAID', payment: result.payment });
+    }
     if (result.outcome === 'PENDING') return res.status(202).json({ success: false, status: 'PENDING', error: 'Le paiement n’est pas encore confirmé par MonCash. Réessayez dans quelques instants.' });
     return res.status(409).json({ success: false, error: 'Le paiement n’a pas pu être confirmé. Contactez Medika si le montant a été débité.' });
   } catch (err) {
