@@ -44,10 +44,19 @@ Last updated: 2026-11-05T05:42:00Z (cron-202611051316)
 - QueryResult rows: destructure { rows } or use .rows — array-style indexing
   on a pg QueryResult silently yields undefined (bit once this run).
 - Temp PAT lives ONLY in agent-state/.gh_token (chmod 600, gitignored).
+- KNOWN (run 1339): Vercel PREVIEW deploys of feature branches FAIL
+  (dpl_FHwCwzadJBpyiz for PR #87 head b4776ec at 05:37Z; same for #86 head
+  55fc4c5 at 05:02Z) while MAIN deploys of the same content SUCCEED
+  (ed02c26 at 05:17Z). Environmental (likely preview-scoped env vars in the
+  multi-service vercel.json), NOT a code regression — do not re-investigate
+  every run; owner has the evidence note on PR #87. Do not touch deploy
+  config/secrets.
 
 ## Next action (next run)
 1. Check lock. If free: check PR #87 review state and whether #83 was
    merged/closed; if review feedback exists, address it on the same branch.
 2. If #83 merged: verify labels, report; #84 becomes eligible (rebase from
    latest main; MonCash payments for ACCEPTED medication orders).
-3. One issue at a time. Never merge. Never duplicate branches/PRs.
+3. If nothing eligible: report QUEUE EMPTY (the 5-min cadence is for
+   checking, not starting new work).
+4. One issue at a time. Never merge. Never duplicate branches/PRs.
