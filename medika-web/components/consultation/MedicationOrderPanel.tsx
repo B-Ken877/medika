@@ -25,9 +25,11 @@ import {
   acceptMedicationQuote,
   cancelMedicationOrder,
   createMedicationOrder,
+  createMedicationPayment,
   declineMedicationQuote,
   getMedicationOrderByConsultation,
   getPrescriptionDocument,
+  verifyMedicationPayment,
 } from "@/lib/api/endpoints";
 import { ApiError } from "@/lib/api/client";
 import { ErrorAlert, Spinner } from "@/components/ui/primitives";
@@ -185,6 +187,8 @@ export function MedicationOrderView({
   onDecline,
   onCancel,
   onNewRequest,
+  onPay,
+  onVerifyPayment,
 }: {
   order: MedicationOrder;
   busy: boolean;
@@ -192,6 +196,8 @@ export function MedicationOrderView({
   onDecline: () => void;
   onCancel: () => void;
   onNewRequest: () => void;
+  onPay: () => void;
+  onVerifyPayment: () => void;
 }) {
   const slaDeadline = formatDateTime(order.sla_deadline_at);
   return (
@@ -224,8 +230,12 @@ export function MedicationOrderView({
         )}
         {order.status === "ACCEPTED" && (
           <div className="alert alert-success" style={{ marginTop: 8 }} role="status">
-            Devis accepté. Étape suivante : le paiement du devis sera disponible dans Medika. Notre équipe
-            vous guide pour la suite.
+            Devis accepté. Réglez le montant confirmé de {formatHtg(order.quote?.total_htg ?? order.payment?.amount_htg ?? 0)} avec MonCash. La livraison reste offerte dans les zones desservies.
+          </div>
+        )}
+        {order.status === "PAID" && (
+          <div className="alert alert-success" style={{ marginTop: 8 }} role="status">
+            Paiement confirmé par MonCash. Votre demande est transmise à l’équipe Medika pour la préparation des médicaments.
           </div>
         )}
         {order.status === "DECLINED" && (
@@ -248,6 +258,29 @@ export function MedicationOrderView({
 
       {order.status === "QUOTED" && (
         <MedicationQuoteView order={order} busy={busy} onAccept={onAccept} onDecline={onDecline} />
+      )}
+      {order.status === "ACCEPTED" && (
+        <section className="card" style={{ margin: 12 }} aria-label="Paiement MonCash">
+          <h4 style={{ margin: "0 0 8px", color: "var(--green-800)" }}>Paiement sécurisé avec MonCash</h4>
+          <p className="small">Montant à payer : <strong>{formatHtg(order.quote?.total_htg ?? order.payment?.amount_htg ?? 0)}</strong>. Aucun frais de livraison ne vous sera facturé.</p>
+          {order.payment?.status === "PENDING" && (
+            <p className="tiny" role="status">Paiement en attente de confirmation. Après votre paiement MonCash, revenez ici et vérifiez son statut.</p>
+          )}
+          {order.payment?.status === "FAILED" && (
+            <p className="tiny" role="alert">Le paiement précédent a échoué. Vous pouvez réessayer.</p>
+          )}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" className="btn btn-primary" onClick={onPay} disabled={busy}>
+              {order.payment?.status === "PENDING" ? "Reprendre le paiement MonCash" : "Payer avec MonCash"}
+            </button>
+            {order.payment?.status === "PENDING" && (
+              <button type="button" className="btn btn-secondary" onClick={onVerifyPayment} disabled={busy}>
+                Vérifier le paiement
+              </button>
+            )}
+          </div>
+          {order.payment?.reference && <p className="tiny">Référence de paiement : {order.payment.reference}</p>}
+        </section>
       )}
 
       {(order.status === "REQUESTED" || order.status === "ESCALATED") && (
@@ -474,6 +507,19 @@ export function MedicationOrderPanel({
       if (order) await cancelMedicationOrder(token ?? "", order.id);
     });
 
+  const onPay = () =>
+    run(async () => {
+      if (!order) return;
+      const result = await createMedicationPayment(token ?? "", order.id);
+      if (result.redirectUrl) window.location.assign(result.redirectUrl);
+    });
+
+  const onVerifyPayment = () =>
+    run(async () => {
+      if (!order) return;
+      await verifyMedicationPayment(token ?? "", order.id);
+    });
+
   const onNewRequest = () => {
     // Show the CTA again for a fresh request (the terminal order stays in
     // history; the create action refreshes whatever the server returns).
@@ -501,6 +547,8 @@ export function MedicationOrderPanel({
           onDecline={onDecline}
           onCancel={onCancel}
           onNewRequest={onNewRequest}
+          onPay={onPay}
+          onVerifyPayment={onVerifyPayment}
         />
       </div>
     );
