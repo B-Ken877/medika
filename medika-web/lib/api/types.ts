@@ -384,6 +384,7 @@ export interface CreateMedicationOrderRequest {
   delivery_address: string;
   delivery_phone: string;
   delivery_zone: string;
+  delivery_city: string;
 }
 
 export interface MedicationPayment {
