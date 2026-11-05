@@ -134,7 +134,7 @@ async function listAll({ status } = {}) {
   return rows.map(deliveryApi);
 }
 
-async function transition({ deliveryId, employeeId, eventType, reason, idempotencyKey }) {
+async function transition({ deliveryId, employeeId, employeeName, eventType, reason, idempotencyKey }) {
   if (!Object.prototype.hasOwnProperty.call(EMPLOYEE_EVENTS, eventType) &&
       !Object.values(EMPLOYEE_EVENTS).some((events) => events.includes(eventType))) {
     return { outcome: 'INVALID_EVENT' };
@@ -166,7 +166,7 @@ async function transition({ deliveryId, employeeId, eventType, reason, idempoten
     );
     await addEvent(client, {
       deliveryId, type: eventType,
-      actor: { id: employeeId, name: '', role: 'delivery' },
+      actor: { id: employeeId, name: employeeName || '', role: 'delivery' },
       reason,
       idempotencyKey,
     });
