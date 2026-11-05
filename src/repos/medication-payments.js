@@ -53,12 +53,12 @@ async function createIntent({ orderId, patient, simulated }) {
       if (existing.status === 'EXPIRED') return { outcome: 'QUOTE_EXPIRED' };
       if (existing.status === 'FAILED') {
         const { rows } = await client.query(
-          "UPDATE medication_payments SET status = 'PENDING', simulated = $2, provider_raw = NULL, updated_at = now() WHERE id = $1 RETURNING *",
+          "UPDATE medication_payments SET status = 'PENDING', simulated = $2, redirect_url = NULL, create_started_at = NULL, provider_raw = NULL, updated_at = now() WHERE id = $1 RETURNING *",
           [existing.id, Boolean(simulated)]
         );
-        return { outcome: 'READY', payment: api(rows[0]) };
+        return { outcome: 'READY', payment: api(rows[0]), redirectUrl: null };
       }
-      return { outcome: 'READY', payment: api(existing) };
+      return { outcome: 'READY', payment: api(existing), redirectUrl: existing.redirect_url || null };
     }
     const reference = 'MED-' + crypto.randomBytes(18).toString('hex').toUpperCase();
     const { rows } = await client.query(
@@ -71,6 +71,29 @@ async function createIntent({ orderId, patient, simulated }) {
     );
     return { outcome: 'READY', payment: api(rows[0]) };
   });
+}
+
+async function claimProviderCreation(orderId, patientId) {
+  const { rows } = await query(
+    "UPDATE medication_payments p SET create_started_at = now(), updated_at = now() FROM medication_orders o WHERE p.order_id = $1 AND o.id = p.order_id AND o.patient_id = $2 AND p.status = 'PENDING' AND p.redirect_url IS NULL AND (p.create_started_at IS NULL OR p.create_started_at < now() - interval '2 minutes') RETURNING p.*",
+    [orderId, patientId]
+  );
+  return rows[0] || null;
+}
+
+async function saveRedirectUrl(orderId, patientId, redirectUrl) {
+  const { rows } = await query(
+    "UPDATE medication_payments p SET redirect_url = $3, create_started_at = NULL, updated_at = now() FROM medication_orders o WHERE p.order_id = $1 AND o.id = p.order_id AND o.patient_id = $2 AND p.status = 'PENDING' RETURNING p.id",
+    [orderId, patientId, redirectUrl]
+  );
+  return rows.length > 0;
+}
+
+async function releaseProviderCreation(orderId, patientId) {
+  await query(
+    "UPDATE medication_payments p SET create_started_at = NULL, updated_at = now() FROM medication_orders o WHERE p.order_id = $1 AND o.id = p.order_id AND o.patient_id = $2 AND p.status = 'PENDING' AND p.redirect_url IS NULL",
+    [orderId, patientId]
+  );
 }
 
 async function getIntentForPatient(orderId, patientId) {
@@ -136,4 +159,4 @@ async function verifyIntent({ orderId, patient, verified }) {
     return { outcome: 'PAID', payment: api(updatedRows[0]) };
   });
 }
-module.exports = { api, createIntent, getIntentForPatient, verifyIntent };
+module.exports = { api, createIntent, getIntentForPatient, claimProviderCreation, saveRedirectUrl, releaseProviderCreation, verifyIntent };
