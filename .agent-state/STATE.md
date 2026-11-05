@@ -1,4 +1,4 @@
-Last updated: 2026-11-05T18:05:00Z (cron-202611060132)
+Last updated: 2026-11-05T18:20:00Z (cron-202611060132)
 
 ## MAJOR CONTEXT RESET (this run)
 Issue #82 was REPURPOSED by the owner (issue body rewritten ~17:31Z, directive
@@ -97,15 +97,22 @@ issue body (18 acceptance criteria + 12 sections of spec).
 - Verified real: backend 506/506 (41 files), web 540/540 (42 files),
   tsc --noEmit clean.
 
+- P2 DONE (commit f861559, PUSHED): ordonnance document rebuilt (header/
+  identity sections/numbered wrap-safe rows/footer, no prices), 404-only
+  legacy fallback + retryable French error state, fonts.ready + 2x DPR PNG
+  capture, independence phrase. Web 543/543, tsc clean.
+
 ## Next action (next run)
 1. Check lock + LOCK heartbeat; verify no new owner review comment on #82.
-2. P2: patient ordonnance rebuild — PrescriptionPanel: dedicated document
-   view (white doc surface, header/footer, Medika green accents), 404-only
-   legacy fallback (currently ALL errors swallowed — spec violation),
-   retryable error state, html2canvas PNG + A4 print kept; web tests.
-3. P3: delivery repo/routes (from PR #95, audited): assignment (PAID-only,
-   Friday, reasoned urgent), employee isolation, custody transitions,
-   patient confirm, expenses/reports; admin livraisons + livreur portal.
+2. P3: delivery integration from PR #95 reference (audit, don't copy
+   blindly): src/repos/deliveries.js + routes (patient tracking, employee
+   portal /delivery/my + events with idempotency keys, admin assign/expense/
+   report/zones). Enforce server-side: PAID-orders-only assignment, Friday
+   scheduling (America/Port-au-Prince), reasoned urgent exceptions, employee
+   isolation in EVERY query, custody transition matrix + patient
+   confirmation, notification emission after commit. Migration 013 exists.
+3. Admin UI: (admin)/livraisons page + zone/employee management; web
+   app/livreur employee portal; patient delivery tracking panel.
 4. P4: admin zones/employees CRUD + swap admin queue to zone records.
 5. P5: full verification (backend/web/admin suites, typecheck, lint,
    builds) -> open ONE PR -> IN REVIEW.
