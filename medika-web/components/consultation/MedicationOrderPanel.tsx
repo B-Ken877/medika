@@ -449,9 +449,9 @@ export function MedicationOrderPanel({
   const onCreate = () =>
     run(async () => {
       const created = await createMedicationOrder(token ?? "", consultation.id, {
-        delivery_address: deliveryAddress.trim() || undefined,
-        delivery_phone: deliveryPhone.trim() || undefined,
-        delivery_zone: deliveryZone.trim() || undefined,
+        delivery_address: deliveryAddress.trim(),
+        delivery_phone: deliveryPhone.trim(),
+        delivery_zone: deliveryZone.trim(),
       });
       setOrder(created);
       setDeliveryAddress("");
