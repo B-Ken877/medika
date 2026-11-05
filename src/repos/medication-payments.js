@@ -132,7 +132,7 @@ async function markVerified({ paymentId, patientId, transactionId, verifiedAmoun
     await client.query(
       `INSERT INTO medication_order_events
         (order_id, event_type, actor_id, actor_name, actor_role, details)
-       VALUES ($1, 'PAYMENT_VERIFIED', $2, 'Patient', 'system', $3::jsonb)`,
+       VALUES ($1, 'PAYMENT_VERIFIED', $2, 'Patient', 'patient', $3::jsonb)`,
       [payment.medication_order_id, patientId, JSON.stringify({
         payment_reference: payment.payment_reference,
         transaction_id: transactionId,
