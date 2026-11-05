@@ -12,11 +12,17 @@ const EMPLOYEE_EVENTS = {
   FAILED_ATTEMPT: ['OUT_FOR_DELIVERY', 'RETURNED_ESCALATED'],
 };
 
+function haitiDate(value = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Port-au-Prince', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(value);
+  const part = (type) => parts.find((item) => item.type === type)?.value || '';
+  return part('year') + '-' + part('month') + '-' + part('day');
+}
+
 function dateOnly(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return null;
   const d = new Date(String(value) + 'T12:00:00Z');
   if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== value) return null;
-  if (String(value) < new Date().toISOString().slice(0, 10)) return null;
+  if (String(value) < haitiDate()) return null;
   return d;
 }
 
@@ -280,7 +286,7 @@ async function report({ from, to }) {
   );
   const budget = budgetRows[0] || null;
   const { rows: monthSpendRows } = await query(
-    "SELECT COALESCE(SUM(amount_htg),0)::int AS amount_htg FROM medication_delivery_expenses WHERE created_at >= date_trunc('month', now()) AND created_at < date_trunc('month', now()) + interval '1 month'"
+    "SELECT COALESCE(SUM(amount_htg),0)::int AS amount_htg FROM medication_delivery_expenses WHERE created_at >= (date_trunc('month', now() AT TIME ZONE 'America/Port-au-Prince') AT TIME ZONE 'America/Port-au-Prince') AND created_at < ((date_trunc('month', now() AT TIME ZONE 'America/Port-au-Prince') + interval '1 month') AT TIME ZONE 'America/Port-au-Prince')"
   );
   const currentMonthSpend = Number(monthSpendRows[0]?.amount_htg || 0);
   const successful = row.delivered || 0;
