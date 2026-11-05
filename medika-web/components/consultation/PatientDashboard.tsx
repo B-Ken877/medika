@@ -90,24 +90,31 @@ export default function PatientDashboard() {
 
   return (
     <div className="stack">
-      {/* Issue #99: Akèy hero — greeting + primary action + reserved
-          doctor-artwork slot. The slot is a neutral CSS placeholder sized to
-          accept a transparent PNG later without layout change; no image is
-          generated, uploaded or referenced. */}
+      {/* Issue #99 → #103: Akèy hero rebuilt to the approved Premium Mint
+          reference (audit in issue #103): an OPEN, unboxed hero area — large
+          two-line greeting left, artwork stage anchored to the screen's
+          right edge — with the primary action as a full-width single-line
+          pill placed BELOW the hero. The stage is a CSS-only abstract
+          placeholder (soft translucent forms — NO silhouette/avatar glyph,
+          no image generated or referenced) sized to accept a transparent
+          PNG later without layout change. */}
       <section className="home-hero" aria-label="Resime sante ou">
         <div className="hero-copy">
           <h1 className="page-title">Bonjou, {user?.name?.split(" ")[0] ?? ""}</h1>
           <p className="page-desc">Men yon ti rezime sou swen sante ou.</p>
-          <div className="page-head-actions">
-            <Link href="/app/consult" className="btn btn-primary">
-              <Plus size={18} aria-hidden /> Kòmanse yon konsiltasyon
-            </Link>
-          </div>
         </div>
         <div className="hero-art" role="img" aria-label="Espas rezève pou ilistrasyon doktè Medika a">
           <span className="hero-art-shape" aria-hidden />
         </div>
       </section>
+
+      {/* Primary action — full-width, single-line, directly below the hero
+          (approved reference composition). Same destination/behavior. */}
+      <div className="page-head-actions home-cta-row">
+        <Link href="/app/consult" className="btn btn-primary">
+          <Plus size={18} aria-hidden /> Kòmanse yon konsiltasyon
+        </Link>
+      </div>
 
       {/* Summary metrics (real counts) */}
       <div className="stat-grid" role="group" aria-label="Rezime konsiltasyon yo">
@@ -205,7 +212,7 @@ export default function PatientDashboard() {
         )}
 
         {recent.length > 0 && (
-          <div className="panel">
+          <div>
             {recent.map((c) => (
               <Link
                 key={c.id}
@@ -214,7 +221,7 @@ export default function PatientDashboard() {
                     ? `/app/consultations/${encodeURIComponent(c.id)}/call?mode=video`
                     : `/app/consultations/${encodeURIComponent(c.id)}`
                 }
-                className="panel-row"
+                className="panel-row history-card"
               >
                 <span className="brand-mark" aria-hidden>
                   <Stethoscope size={16} />
@@ -222,7 +229,6 @@ export default function PatientDashboard() {
                 <div className="row-body">
                   <div className="row-title">
                     <span>{specialtyLabel(c.specialty_needed)}</span>
-                    <StatusBadge status={c.status} />
                   </div>
                   <div className="row-sub">{c.description || "Pa gen deskripsyon"}</div>
                   <div className="row-meta">{relativeTime(c.created_at)}</div>
