@@ -696,6 +696,11 @@ describe('issue #83 — delivery coverage, contact validation, and free delivery
     const malformedPhone = await createOrder(patient, consId, { delivery_phone: '+509123' });
     expect(malformedPhone.status).toBe(400);
     expect(malformedPhone.body.code).toBe('INVALID_DELIVERY_DETAILS');
+
+    const overlongAddress = await createOrder(patient, consId, { delivery_address: 'A'.repeat(501) });
+    expect(overlongAddress.status).toBe(400);
+    const overlongZone = await createOrder(patient, consId, { delivery_zone: 'Z'.repeat(81) });
+    expect(overlongZone.status).toBe(400);
   });
 
   it('fails closed for an unconfigured zone list and rejects zones not explicitly allowlisted', async () => {
