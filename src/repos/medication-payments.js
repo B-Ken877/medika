@@ -117,10 +117,23 @@ async function findByOrderId(orderId) {
 /** Commit payment and order state together, only after server-side MonCash verification. */
 async function markVerified({ paymentId, patientId, transactionId, verifiedAmount, providerRaw, simulated = false }) {
   return withTransaction(async (client) => {
-    const { rows } = await client.query(
+    // Lock in the same order as createIntent (order first, payment second)
+    // to avoid a create/verify deadlock under concurrent requests.
+    const { rows: snapshotRows } = await client.query(
+      'SELECT * FROM medication_payments WHERE id = $1', [paymentId]
+    );
+    const snapshot = snapshotRows[0];
+    if (!snapshot || snapshot.patient_id !== patientId) return { outcome: 'NOT_FOUND' };
+    const { rows: orderRows } = await client.query(
+      'SELECT * FROM medication_orders WHERE id = $1 AND patient_id = $2 FOR UPDATE',
+      [snapshot.medication_order_id, patientId]
+    );
+    const order = orderRows[0];
+    if (!order || order.status !== 'ACCEPTED') return { outcome: 'INVALID_STATE' };
+    const { rows: paymentRows } = await client.query(
       'SELECT * FROM medication_payments WHERE id = $1 FOR UPDATE', [paymentId]
     );
-    const payment = rows[0];
+    const payment = paymentRows[0];
     if (!payment || payment.patient_id !== patientId) return { outcome: 'NOT_FOUND' };
     if (payment.status === 'PAID') {
       return payment.transaction_id === transactionId
@@ -138,12 +151,6 @@ async function markVerified({ paymentId, patientId, transactionId, verifiedAmoun
       );
       return { outcome: 'VERIFICATION_MISMATCH' };
     }
-    const { rows: orderRows } = await client.query(
-      'SELECT * FROM medication_orders WHERE id = $1 AND patient_id = $2 FOR UPDATE',
-      [payment.medication_order_id, patientId]
-    );
-    const order = orderRows[0];
-    if (!order || order.status !== 'ACCEPTED') return { outcome: 'INVALID_STATE' };
     const { rows: quoteRows } = await client.query(
       `SELECT * FROM pharmacy_quotes WHERE order_id = $1 AND superseded_at IS NULL
        ORDER BY confirmed_at DESC LIMIT 1 FOR UPDATE`,
