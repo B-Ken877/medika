@@ -246,7 +246,7 @@ export function getPrescriptionDocument(token: string, id: string, signal?: Abor
 export function createMedicationOrder(
   token: string,
   consultationId: string,
-  payload: CreateMedicationOrderRequest,
+  payload: CreateMedicationOrderRequest = {},
   signal?: AbortSignal,
 ) {
   return apiFetch<MedicationOrder>(
