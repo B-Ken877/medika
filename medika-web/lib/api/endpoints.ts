@@ -289,6 +289,22 @@ export function cancelMedicationOrder(token: string, orderId: string, reason?: s
   );
 }
 
+/** Create or resume the server-priced MonCash payment for an accepted quote. */
+export function createMedicationPayment(token: string, orderId: string, signal?: AbortSignal) {
+  return apiFetch<{ success: boolean; paid?: boolean; simulated?: boolean; payment?: import('./types').MedicationPayment; redirectUrl?: string }>(
+    `/api/medication-orders/${encodeURIComponent(orderId)}/payment/create`,
+    { method: 'POST', body: {}, token, signal },
+  );
+}
+
+/** Verify a medication payment with MonCash; never trusts client status or amount. */
+export function verifyMedicationPayment(token: string, orderId: string, signal?: AbortSignal) {
+  return apiFetch<{ success: boolean; payment?: import('./types').MedicationPayment }>(
+    `/api/medication-orders/${encodeURIComponent(orderId)}/payment/verify`,
+    { method: 'POST', body: {}, token, signal },
+  );
+}
+
 // ─── Doctor availability ──────────────────────────────────────────────────────
 
 export function updateAvailability(token: string, isAvailable: boolean, signal?: AbortSignal) {
