@@ -42,7 +42,7 @@ const ORDER_STATUSES = [
   'REQUESTED', 'ESCALATED', 'QUOTED', 'ACCEPTED', 'PAID', 'DECLINED', 'CANCELLED', 'EXPIRED',
 ];
 /** Statuses that block a new request for the same prescription. */
-const ACTIVE_STATUSES = ['REQUESTED', 'ESCALATED', 'QUOTED', 'ACCEPTED', 'EXPIRED'];
+const ACTIVE_STATUSES = ['REQUESTED', 'ESCALATED', 'QUOTED', 'ACCEPTED', 'PAID', 'EXPIRED'];
 /** Statuses the patient can still decide on (cancel pre-quote). */
 const CANCELLABLE_STATUSES = ['REQUESTED', 'ESCALATED'];
 
