@@ -90,9 +90,12 @@ describe("MedicationOrderCta — « Demander le prix et la livraison avec Medika
       deliveryAddress: "",
       deliveryPhone: "",
       deliveryZone: "Port-au-Prince",
+      deliveryCity: "Port-au-Prince",
+      serviceZones: [{ id: "ZONE_PAP", city: "Port-au-Prince", zone_name: "Port-au-Prince" }],
       onDeliveryAddressChange: noop,
       onDeliveryPhoneChange: noop,
       onDeliveryZoneChange: noop,
+      onDeliveryCityChange: noop,
       onCreate: noop,
     }),
   ));
