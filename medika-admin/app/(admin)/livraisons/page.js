@@ -166,6 +166,8 @@ export default function LivraisonsPage() {
           <div><strong>{report.weekly?.length || 0}</strong><div className="small">Semaines dans la période</div></div>
           <div><strong>{report.monthly?.length || 0}</strong><div className="small">Mois dans la période</div></div>
         </div>}
+        {report?.weekly?.length > 0 && <div style={{ marginTop: 14 }}><strong>Coûts par semaine</strong>{report.weekly.map((w) => <div key={String(w.period)} className="small" style={{ padding: 5 }}>{String(w.period).slice(0, 10)} · {w.delivered} livrées · {formatCurrency(w.expense_htg)}</div>)}</div>}
+        {report?.monthly?.length > 0 && <div style={{ marginTop: 14 }}><strong>Coûts par mois</strong>{report.monthly.map((m) => <div key={String(m.period)} className="small" style={{ padding: 5 }}>{String(m.period).slice(0, 7)} · {m.delivered} livrées · {formatCurrency(m.expense_htg)}</div>)}</div>}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }}>
           <input className="form-input" type="number" min="0" placeholder="Budget mensuel HTG" value={budget.monthly_budget_htg} onChange={(e) => setBudget({ ...budget, monthly_budget_htg: e.target.value })} />
           <input className="form-input" type="number" min="1" max="100" placeholder="Seuil %" value={budget.alert_threshold_percent} onChange={(e) => setBudget({ ...budget, alert_threshold_percent: e.target.value })} />
