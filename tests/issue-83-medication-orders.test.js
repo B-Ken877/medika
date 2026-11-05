@@ -741,3 +741,75 @@ describe('issue #83 — delivery coverage, contact validation, and free delivery
     expect(schema.rows).toHaveLength(0);
   });
 });
+
+
+describe('issue #84 — medication MonCash payments', () => {
+  it('prices from the accepted quote, verifies MonCash server-side, and marks the order PAID', async () => {
+    const { consId, patient } = await consultationWithPrescription();
+    const created = await createOrder(patient, consId);
+    expect(created.status).toBe(201);
+    const pharmacy = await createPharmacy();
+    const quote = await r.post('/api/admin/medication-orders/' + created.body.id + '/quotes')
+      .set('Authorization', 'Bearer ' + token.admin)
+      .send(quotePayload(pharmacy.id));
+    expect(quote.status).toBe(201);
+    const accepted = await r.post('/api/medication-orders/' + created.body.id + '/accept')
+      .set('Authorization', 'Bearer ' + patient.token);
+    expect(accepted.status).toBe(200);
+
+    const moncash = await import('../src/moncash.js').then((m) => m.default ?? m);
+    const createSpy = vi.spyOn(moncash, 'createPayment').mockResolvedValue({
+      redirectUrl: 'https://moncash.example/checkout',
+    });
+    const start = await r.post('/api/medication-orders/' + created.body.id + '/payment/create')
+      .set('Authorization', 'Bearer ' + patient.token)
+      .send({});
+    expect(start.status).toBe(200);
+    expect(start.body.redirectUrl).toBe('https://moncash.example/checkout');
+    expect(start.body.payment.amount_htg).toBe(675);
+    expect(createSpy).toHaveBeenCalledWith({
+      amount: 675,
+      orderId: start.body.payment.payment_reference,
+    });
+
+    const verifySpy = vi.spyOn(moncash, 'retrieveByOrderId').mockResolvedValue({
+      reference: start.body.payment.payment_reference,
+      transactionId: 'TX_MEDICATION_84_001',
+      amount: 675,
+      status: 'completed',
+      raw: { status: 'successful', cost: 675 },
+    });
+    const verified = await r.post('/api/medication-orders/' + created.body.id + '/payment/verify')
+      .set('Authorization', 'Bearer ' + patient.token)
+      .send({ success: true, amount: 1, transactionId: 'untrusted-client-value' });
+    expect(verified.status).toBe(200);
+    expect(verified.body.success).toBe(true);
+    expect(verified.body.payment.status).toBe('PAID');
+    expect(verifySpy).toHaveBeenCalledWith(start.body.payment.payment_reference);
+
+    const current = await r.get('/api/consultations/' + consId + '/medication-order')
+      .set('Authorization', 'Bearer ' + patient.token);
+    expect(current.status).toBe(200);
+    expect(current.body.status).toBe('PAID');
+    createSpy.mockRestore();
+    verifySpy.mockRestore();
+  });
+
+  it('does not expose or verify another patient medication payment', async () => {
+    const { consId, patient } = await consultationWithPrescription();
+    const created = await createOrder(patient, consId);
+    const pharmacy = await createPharmacy();
+    await r.post('/api/admin/medication-orders/' + created.body.id + '/quotes')
+      .set('Authorization', 'Bearer ' + token.admin)
+      .send(quotePayload(pharmacy.id));
+    await r.post('/api/medication-orders/' + created.body.id + '/accept')
+      .set('Authorization', 'Bearer ' + patient.token);
+    const moncash = await import('../src/moncash.js').then((m) => m.default ?? m);
+    vi.spyOn(moncash, 'createPayment').mockResolvedValue({ redirectUrl: 'https://moncash.example/checkout' });
+    const other = await freshPatient();
+    const response = await r.post('/api/medication-orders/' + created.body.id + '/payment/create')
+      .set('Authorization', 'Bearer ' + other.token).send({});
+    expect(response.status).toBe(404);
+    vi.restoreAllMocks();
+  });
+});
