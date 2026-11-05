@@ -37,6 +37,7 @@ const walletRoutes = require('./routes/wallet');
 const cronRoutes = require('./routes/crons');
 const notificationRoutes = require('./routes/notifications');
 const medicationOrderRoutes = require('./routes/medication-orders');
+const medicationPaymentRoutes = require('./routes/medication-payments');
 const adminMedicationOrderRoutes = require('./routes/admin-medication-orders');
 
 /**
@@ -112,6 +113,7 @@ function createApp() {
   app.use('/api', walletRoutes); // /api/doctor/wallet (doctor's own, read-only)
   app.use('/api', notificationRoutes); // /api/notifications/* (issue #36)
   app.use('/api', medicationOrderRoutes); // /api/consultations/:id/medication-order + /api/medication-orders/* (issue #83, patient side)
+  app.use('/api', medicationPaymentRoutes); // verified MonCash medication payments (issue #84)
   app.use('/api', cronRoutes); // /api/crons/* (deadline processor — auth guarded)
   app.use('/api/admin', adminRoutes); // router-level admin guard applies to /api/admin/* only
   app.use('/api/admin', adminMedicationOrderRoutes); // /api/admin/pharmacies + /api/admin/medication-orders/* (issue #83, ops side)
