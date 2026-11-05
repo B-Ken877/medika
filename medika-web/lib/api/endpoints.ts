@@ -289,6 +289,18 @@ export function cancelMedicationOrder(token: string, orderId: string, reason?: s
   );
 }
 
+export function createMedicationPayment(token: string, orderId: string, signal?: AbortSignal) {
+  return apiFetch<{ success: boolean; status: string; simulated?: boolean; payment?: MedicationPayment; redirectUrl?: string }>(
+    `/api/medication-orders/${encodeURIComponent(orderId)}/payment/create`, { method: "POST", token, signal },
+  );
+}
+
+export function verifyMedicationPayment(token: string, orderId: string, signal?: AbortSignal) {
+  return apiFetch<{ success: boolean; status: string; payment?: MedicationPayment }>(
+    `/api/medication-orders/${encodeURIComponent(orderId)}/payment/verify`, { method: "POST", token, signal },
+  );
+}
+
 // ─── Doctor availability ──────────────────────────────────────────────────────
 
 export function updateAvailability(token: string, isAvailable: boolean, signal?: AbortSignal) {
