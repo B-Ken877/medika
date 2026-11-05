@@ -83,18 +83,18 @@ const quoteItems = [
   },
 ];
 
-describe("MedicationOrderCta — « Demander le prix et la livraison avec Medika » (issue #83, zones issue #82)", () => {
+describe("MedicationOrderCta — « Demander le prix et la livraison avec Medika » (issue #83, zones as records)", () => {
+  const zone = { id: "ZONE_PAP", city: "Port-au-Prince", zone_name: "Port-au-Prince" };
   const html = ssr(renderToString(
     createElement(MedicationOrderCta, {
       busy: false,
       deliveryAddress: "",
       deliveryPhone: "",
-      deliveryCity: "Port-au-Prince",
-      deliveryZone: "Centre-ville",
-      zones: [{ id: "ZONE_1", city: "Port-au-Prince", zone_name: "Centre-ville" }],
+      deliveryZoneId: "ZONE_PAP",
+      zones: [zone],
+      zonesLoading: false,
       onDeliveryAddressChange: noop,
       onDeliveryPhoneChange: noop,
-      onDeliveryCityChange: noop,
       onDeliveryZoneChange: noop,
       onCreate: noop,
     }),
@@ -106,40 +106,36 @@ describe("MedicationOrderCta — « Demander le prix et la livraison avec Medika
     expect(html).toContain("Vous restez libre d’acheter vos médicaments vous-même");
   });
 
-  it("requires delivery address, Haitian phone, city, and delivery zone", () => {
+  it("requires delivery address, Haitian phone, and an exact zone RECORD", () => {
     expect(html).toContain("Adresse de livraison (obligatoire)");
     expect(html).toContain("Téléphone pour la livraison (obligatoire)");
-    expect(html).toContain("Ville de livraison (obligatoire)");
-    expect(html).toContain("Quartier ou zone de livraison (obligatoire)");
+    expect(html).toContain("Zone de livraison Medika (obligatoire)");
+    // The zone is a SELECT over active records, never free text.
+    expect(html).toContain("Port-au-Prince — Port-au-Prince");
   });
 
-  it("offers ONLY the admin-activated zones as select options (no free text)", () => {
-    expect(html).toContain("Centre-ville");
-    expect(html).not.toContain("Ex. : nom de votre quartier");
+  it("shows the selected zone in the verification note", () => {
+    expect(html).toContain("Zone sélectionnée : Port-au-Prince (Port-au-Prince)");
   });
-});
 
-describe("MedicationOrderCta — no active zone configured fails closed (issue #82 §7)", () => {
-  const html = ssr(renderToString(
-    createElement(MedicationOrderCta, {
-      busy: false,
-      deliveryAddress: "",
-      deliveryPhone: "",
-      deliveryCity: "",
-      deliveryZone: "",
-      zones: [],
-      onDeliveryAddressChange: noop,
-      onDeliveryPhoneChange: noop,
-      onDeliveryCityChange: noop,
-      onDeliveryZoneChange: noop,
-      onCreate: noop,
-    }),
-  ));
-
-  it("hides the form and shows the French independent-purchase alternative", () => {
-    expect(html).toContain("La livraison Medika n’est pas encore disponible dans votre région");
-    expect(html).toContain("acheter vos médicaments en pharmacie");
-    expect(html).not.toContain("Demander le prix et la livraison avec Medika");
+  it("fails closed with the independent-purchase alternative when no zone is active", () => {
+    const closed = ssr(renderToString(
+      createElement(MedicationOrderCta, {
+        busy: false,
+        deliveryAddress: "",
+        deliveryPhone: "",
+        deliveryZoneId: "",
+        zones: [],
+        zonesLoading: false,
+        onDeliveryAddressChange: noop,
+        onDeliveryPhoneChange: noop,
+        onDeliveryZoneChange: noop,
+        onCreate: noop,
+      }),
+    ));
+    expect(closed).toContain("La livraison Medika n’est pas encore disponible dans votre zone");
+    expect(closed).toContain("acheter vos médicaments en pharmacie");
+    expect(closed).not.toContain("Adresse de livraison (obligatoire)");
   });
 });
 

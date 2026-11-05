@@ -82,7 +82,7 @@ async function createOrder(patient, consId, extra = {}) {
       delivery_address: '12, rue Ka o, Port-au-Prince',
       delivery_phone: '+50937142536',
       delivery_city: 'Port-au-Prince',
-      delivery_zone: 'Centre-ville',
+      delivery_zone_id: 'ZONE_TEST_CENTRE',
       ...extra,
     });
 }
@@ -233,8 +233,8 @@ beforeAll(async () => {
   token.admin = await h.loginToken(r, 't.admin');
   db = await import('../src/db.js').then((m) => m.default ?? m);
   // Distinctly-named active zone (does NOT collide with the migration-013
-  // seed row 'Port-au-Prince' — ON CONFLICT would keep the original id and
-  // this file's fixture id would not exist).
+  // seed row ZONE_PAP — ON CONFLICT would keep the original id and this
+  // file's fixture id would not exist).
   await db.query(`DELETE FROM delivery_zones WHERE city = 'Port-au-Prince' AND zone_name = 'Centre-ville'`);
   await db.query(
     `INSERT INTO delivery_zones (id, city, zone_name, active)
@@ -243,6 +243,14 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Leave the shared delivery_zones table in the state the issue-83 suite
+  // expects (only ZONE_PAP active). Rows referenced by test orders cannot be
+  // deleted (FK) — deactivating them is enough: the patient zone picker only
+  // exposes ACTIVE records.
+  if (db) {
+    await db.query(`UPDATE delivery_zones SET active = FALSE WHERE id LIKE 'ZONE_TEST%' OR zone_name = 'Delmas'`);
+    await db.query(`UPDATE delivery_zones SET active = TRUE WHERE id = 'ZONE_PAP'`);
+  }
   await h.closeAll();
 });
 
@@ -255,10 +263,12 @@ describe('issue #82 — coverage zones (DB-driven, fail-closed)', () => {
     );
     const res = await r.get('/api/delivery-zones').set('Authorization', 'Bearer ' + token.patient);
     expect(res.status).toBe(200);
-    const names = res.body.map((z) => z.zone_name);
+    expect(Array.isArray(res.body.zones)).toBe(true);
+    const names = res.body.zones.map((z) => z.zone_name);
     expect(names).toContain('Centre-ville');
     expect(names).not.toContain('Pétion-Ville');
-    expect(res.body.every((z) => z.city && z.zone_name)).toBe(true);
+    expect(res.body.zones.every((z) => z.city && z.zone_name && z.id)).toBe(true);
+    expect(res.body.zones.every((z) => !('active' in z))).toBe(true); // public projection
 
     const anon = await r.get('/api/delivery-zones');
     expect([401, 403]).toContain(anon.status);
@@ -295,7 +305,7 @@ describe('issue #82 — coverage zones (DB-driven, fail-closed)', () => {
 
     // A deactivated zone is immediately unusable for new orders (fail closed).
     const { consId, patient } = await consultationWithPrescription();
-    const blocked = await createOrder(patient, consId, { delivery_zone: 'Delmas' });
+    const blocked = await createOrder(patient, consId, { delivery_zone_id: 'ZONE_DELMAS' });
     expect(blocked.status).toBe(422);
     expect(blocked.body.code).toBe('DELIVERY_ZONE_NOT_SUPPORTED');
   });

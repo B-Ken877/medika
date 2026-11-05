@@ -27,6 +27,20 @@ const { query } = require('../db');
 const router = express.Router();
 
 /**
+ * GET /api/delivery-zones — the exact, currently ACTIVE coverage zone records
+ * (issue #82 §7). The order form offers ONLY these; anything else fails
+ * closed server-side at creation time. Reads from the delivery_zones table
+ * (migration 013) — an empty result simply means Medika delivery is not
+ * configured yet and the patient keeps the independent-purchase path.
+ */
+router.get('/delivery-zones', authenticate, requireRole('patient'), async (req, res, next) => {
+  try {
+    const zones = await ordersRepo.listActiveZonesPublic();
+    res.json({ zones });
+  } catch (err) { next(err); }
+});
+
+/**
  * POST /api/consultations/:id/medication-order — the patient asks Medika to
  * source the medications of this consultation's issued prescription.
  *
@@ -44,9 +58,10 @@ router.post('/consultations/:id/medication-order', authenticate, requireRole('pa
       consultationId: req.params.id,
       patient: req.user,
       deliveryAddress: typeof body.delivery_address === 'string' ? body.delivery_address.trim() : '',
-      deliveryPhone: typeof body.delivery_phone === 'string' ? body.delivery_phone.trim() : '',
-      deliveryZone: typeof body.delivery_zone === 'string' ? body.delivery_zone.trim() : '',
       deliveryCity: typeof body.delivery_city === 'string' ? body.delivery_city.trim() : '',
+      deliveryPhone: typeof body.delivery_phone === 'string' ? body.delivery_phone.trim() : '',
+      // Explicit zone RECORD selected from /api/delivery-zones — never free text.
+      deliveryZoneId: typeof body.delivery_zone_id === 'string' ? body.delivery_zone_id.trim() : '',
     });
 
     if (result.outcome === 'NOT_FOUND') return res.status(404).json({ error: 'Not found' });

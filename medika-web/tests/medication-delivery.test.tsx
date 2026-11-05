@@ -116,14 +116,17 @@ describe("createMedicationOrder contract (issue #82 §1.4)", () => {
       types.indexOf("export interface CreateMedicationOrderRequest"),
       types.indexOf("}", types.indexOf("export interface CreateMedicationOrderRequest")),
     );
-    for (const field of ["delivery_address", "delivery_phone", "delivery_city", "delivery_zone"]) {
+    for (const field of ["delivery_address", "delivery_phone", "delivery_city", "delivery_zone_id"]) {
       expect(block).toContain(`${field}: string;`);
     }
   });
 
-  it("the order CTA sends delivery_city alongside the other fields", () => {
+  it("the order CTA sends the selected zone RECORD id and the record's authoritative city", () => {
     const panel = read("../components/consultation/MedicationOrderPanel.tsx");
-    expect(panel).toContain("delivery_city: deliveryCity");
+    expect(panel).toContain("delivery_zone_id: zone.id");
+    expect(panel).toContain("delivery_city: zone.city");
+    // Fail closed client-side too when no zone record is selected.
+    expect(panel).toContain("Veuillez sélectionner une zone de livraison Medika dans la liste.");
   });
 });
 

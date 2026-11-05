@@ -98,40 +98,79 @@ function normalizeZone(value) {
 }
 
 /**
- * Coverage is EXPLICIT and database-driven (issue #82 §7): the caller passes
- * the ACTIVE delivery_zones rows for the patient-selected city; anything else
- * fails closed. No env-var allowlist and no free-text matching can enable
- * delivery.
+ * Active coverage zones from the delivery_zones TABLE (migration 013) —
+ * admin-managed records, fail-closed. The historical env-var allowlist is
+ * gone: coverage can only exist where an administrator activated an exact
+ * zone record (issue #82 §7 "Coverage and launch configuration").
  */
-function validateDeliveryRequest({ deliveryAddress, deliveryPhone, deliveryZone, deliveryCity }, allowedZones = []) {
+async function listActiveDeliveryZones(client) {
+  const { rows } = await client.query(
+    `SELECT id, city, zone_name FROM delivery_zones
+      WHERE active = TRUE ORDER BY city, zone_name`
+  );
+  return rows;
+}
+
+/**
+ * Active zones visible to patients for the order-form picker (public data:
+ * city + zone name only).
+ */
+async function listActiveZonesPublic() {
+  const { rows } = await query(
+    `SELECT id, city, zone_name FROM delivery_zones
+      WHERE active = TRUE ORDER BY city, zone_name`
+  );
+  return rows.map((z) => ({ id: z.id, city: z.city, zone_name: z.zone_name }));
+}
+
+/**
+ * Validate the required delivery contact details (address, city, Haitian
+ * phone, selected zone RECORD id) — format level only; the zone's existence
+ * and activation are verified inside the creation transaction against the
+ * delivery_zones table (never trusted from the client, no free-text match).
+ */
+function validateDeliveryRequest({ deliveryAddress, deliveryCity, deliveryPhone, deliveryZoneId }) {
   const address = typeof deliveryAddress === 'string' ? deliveryAddress.trim() : '';
-  const phoneInput = typeof deliveryPhone === 'string' ? deliveryPhone.trim() : '';
-  const zone = typeof deliveryZone === 'string' ? deliveryZone.trim() : '';
   const city = typeof deliveryCity === 'string' ? deliveryCity.trim() : '';
+  const phoneInput = typeof deliveryPhone === 'string' ? deliveryPhone.trim() : '';
+  const zoneId = typeof deliveryZoneId === 'string' ? deliveryZoneId.trim() : '';
   if (!address || address.length < 8 || address.length > LIMITS.deliveryAddress) {
     return { outcome: 'INVALID_DELIVERY_DETAILS', error: 'Veuillez saisir une adresse de livraison complète (8 à 500 caractères).' };
   }
-  if (!city || city.length > 100) {
-    return { outcome: 'INVALID_DELIVERY_DETAILS', error: 'Veuillez sélectionner votre ville de livraison.' };
+  if (!city || city.length > 80) {
+    return { outcome: 'INVALID_DELIVERY_DETAILS', error: 'Veuillez indiquer votre ville de livraison (80 caractères maximum).' };
   }
-  if (!zone || zone.length > 80) {
-    return { outcome: 'INVALID_DELIVERY_DETAILS', error: 'Veuillez sélectionner votre quartier ou zone de livraison (80 caractères maximum).' };
+  if (!zoneId || zoneId.length > 80) {
+    return { outcome: 'INVALID_DELIVERY_DETAILS', error: 'Veuillez sélectionner une zone de livraison Medika dans la liste.' };
   }
   const phone = phoneInput.replace(/[\s().-]/g, '');
   if (!/^(?:\+?509)?\d{8}$/.test(phone)) {
     return { outcome: 'INVALID_DELIVERY_DETAILS', error: 'Veuillez saisir un numéro haïtien valide à 8 chiffres, avec ou sans indicatif +509.' };
   }
-  const zones = (Array.isArray(allowedZones) ? allowedZones : [])
-    .map((z) => String(z ?? '').trim()).filter(Boolean);
-  if (zones.length === 0) {
-    return { outcome: 'SERVICE_UNAVAILABLE', error: 'La livraison Medika n’est pas encore disponible dans cette ville. Vous pouvez télécharger votre ordonnance et acheter vos médicaments en pharmacie.' };
-  }
-  const matched = zones.find((z) => normalizeZone(z) === normalizeZone(zone));
-  if (!matched) {
-    return { outcome: 'OUT_OF_COVERAGE', error: 'La livraison Medika n’est pas encore disponible dans cette zone. Vous pouvez télécharger votre ordonnance et acheter vos médicaments en pharmacie.' };
-  }
   const digits = phone.replace(/\D/g, '');
-  return { ok: true, address: clampText(address, LIMITS.deliveryAddress), phone: '+509' + digits.slice(-8), zone: clampText(matched, 80), city: clampText(city, 100) };
+  return { ok: true, address: clampText(address, LIMITS.deliveryAddress), phone: '+509' + digits.slice(-8), city: clampText(city, 80), zoneId };
+}
+
+/**
+ * Resolve the selected zone INSIDE the creation transaction: must exist AND
+ * be active at submission time (a zone deactivated after the form loaded
+ * fails closed here, with the independent-purchase alternative in French).
+ * The authoritative city comes from the zone record — the client-supplied
+ * city is only cross-checked to catch a misselected pair.
+ */
+async function resolveActiveZone(client, { zoneId, city }) {
+  const { rows } = await client.query(
+    `SELECT id, city, zone_name, active FROM delivery_zones WHERE id = $1`,
+    [zoneId]
+  );
+  const zone = rows[0];
+  if (!zone || !zone.active) {
+    return { outcome: 'OUT_OF_COVERAGE', error: 'La zone de livraison sélectionnée n’est pas (ou plus) disponible. Vous pouvez télécharger votre ordonnance et acheter vos médicaments en pharmacie.' };
+  }
+  if (normalizeZone(city) !== normalizeZone(zone.city)) {
+    return { outcome: 'INVALID_DELIVERY_DETAILS', error: 'La ville indiquée ne correspond pas à la zone de livraison sélectionnée. Veuillez vérifier votre sélection.' };
+  }
+  return { ok: true, zone };
 }
 
 /**
@@ -308,6 +347,7 @@ function orderRowToApi(row, { withSla = true } = {}) {
     delivery_phone: row.delivery_phone ?? '',
     delivery_zone: row.delivery_zone ?? '',
     delivery_city: row.delivery_city ?? '',
+    delivery_zone_id: row.delivery_zone_id ?? null,
     requested_at: toEpoch(row.requested_at),
   };
   if (withSla) {
@@ -351,7 +391,7 @@ async function insertEvent(client, { orderId, type, actor, details = {} }) {
  *   ALREADY_EXISTS         — an active order already exists for it (409)
  *   CREATED                — success; { order }
  */
-async function createOrder({ consultationId, patient, deliveryAddress, deliveryPhone, deliveryZone, deliveryCity }) {
+async function createOrder({ consultationId, patient, deliveryAddress, deliveryCity, deliveryPhone, deliveryZoneId }) {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
       `SELECT * FROM consultations WHERE id = $1 FOR UPDATE`,
@@ -369,20 +409,19 @@ async function createOrder({ consultationId, patient, deliveryAddress, deliveryP
     const document = docs[0];
     if (!document) return { outcome: 'NO_PRESCRIPTION' };
 
-    // Validate contact details and the EXACT admin-activated zone record for
-    // the selected city, only after confirming consultation ownership and an
-    // issued prescription (no coverage oracle). Fail closed when the city has
-    // no active zone.
-    const city = typeof deliveryCity === 'string' ? deliveryCity.trim() : '';
-    const { rows: configuredZones } = await client.query(
-      'SELECT zone_name FROM delivery_zones WHERE active = TRUE AND city = $1',
-      [city]
-    );
-    const delivery = validateDeliveryRequest(
-      { deliveryAddress, deliveryPhone, deliveryZone, deliveryCity: city },
-      configuredZones.map((z) => z.zone_name)
-    );
+    // Validate contact details and the selected zone RECORD only after
+    // confirming consultation ownership and an issued prescription (no
+    // coverage oracle for probing clients).
+    const delivery = validateDeliveryRequest({ deliveryAddress, deliveryCity, deliveryPhone, deliveryZoneId });
     if (!delivery.ok) return delivery;
+    // Fail closed when Medika delivery is not configured at all (no active
+    // zone record) — a distinct, honest 503 instead of a per-zone 422.
+    const activeZones = await listActiveDeliveryZones(client);
+    if (activeZones.length === 0) {
+      return { outcome: 'SERVICE_UNAVAILABLE', error: 'La zone de livraison Medika n’est pas encore configurée. Vous pouvez télécharger votre ordonnance et acheter vos médicaments en pharmacie.' };
+    }
+    const zone = await resolveActiveZone(client, { zoneId: delivery.zoneId, city: delivery.city });
+    if (!zone.ok) return zone;
 
     // The partial unique index backstops this check against concurrent races.
     const { rows: existing } = await client.query(
@@ -400,8 +439,9 @@ async function createOrder({ consultationId, patient, deliveryAddress, deliveryP
          (id, reference, prescription_document_id, consultation_id,
           patient_id, patient_name, prescription_reference,
           status, requested_at, sla_deadline_at,
-          delivery_address, delivery_phone, delivery_zone, delivery_city)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'REQUESTED',now(),now() + interval '${SLA_MINUTES} minutes',$8,$9,$10,$11)
+          delivery_address, delivery_phone, delivery_zone,
+          delivery_city, delivery_zone_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'REQUESTED',now(),now() + interval '${SLA_MINUTES} minutes',$8,$9,$10,$11,$12)
        RETURNING *`,
       [
         orderId,
@@ -413,8 +453,11 @@ async function createOrder({ consultationId, patient, deliveryAddress, deliveryP
         document.reference,
         delivery.address,
         delivery.phone,
-        delivery.zone,
-        delivery.city,
+        // Legacy free-text column keeps the validated zone NAME snapshot;
+        // the authoritative binding is the delivery_zone_id FK below.
+        zone.zone.zone_name,
+        zone.zone.city,
+        zone.zone.id,
       ]
     );
     const order = inserted[0];
@@ -1008,6 +1051,7 @@ module.exports = {
   buildReference,
   normalizeWhatsapp,
   normalizeZone,
+  listActiveZonesPublic,
   validateDeliveryRequest,
   sanitizeQuoteLines,
   createOrder,

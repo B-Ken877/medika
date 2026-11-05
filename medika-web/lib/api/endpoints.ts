@@ -13,11 +13,11 @@ import type {
   ConsultationNote,
   CreateMedicationOrderRequest,
   DeliveryZone,
+  MedicationDeliveryTracking,
   DoctorWallet,
   IssuePrescriptionRequest,
   MedicalHistory,
   MedicalHistorySnapshot,
-  MedicationDeliveryTracking,
   MedicationOrder,
   PrescriptionDocument,
   ReadReceiptResult,
@@ -241,16 +241,44 @@ export function getPrescriptionDocument(token: string, id: string, signal?: Abor
 
 // ─── Medication orders + pharmacy quotes (issue #83) ─────────────────────────
 
+/** The exact, currently ACTIVE delivery zone records (issue #82 §7).
+ *  An empty list means Medika delivery is not configured yet — the order
+ *  form must then stay closed (fail closed) and the patient keeps the
+ *  independent-purchase path (download/print the ordonnance). */
+export function getDeliveryZones(token: string, signal?: AbortSignal) {
+  return apiFetch<{ zones: DeliveryZone[] }>(
+    "/api/delivery-zones",
+    { token, signal },
+  );
+}
+
+/** The patient's delivery tracking for this order. 404 when nothing is
+ *  assigned yet (not an error for the UI). */
+export function getMedicationDeliveryTracking(token: string, orderId: string, signal?: AbortSignal) {
+  return apiFetch<MedicationDeliveryTracking>(
+    `/api/medication-orders/${encodeURIComponent(orderId)}/delivery`,
+    { token, signal },
+  );
+}
+
+/** Patient receipt confirmation — the ONLY path to DELIVERED (available at
+ *  AWAITING_CONFIRMATION; the server rejects it at any earlier stage). */
+export function confirmMedicationDelivery(token: string, orderId: string, signal?: AbortSignal) {
+  return apiFetch<{ success: boolean; status: string }>(
+    `/api/medication-orders/${encodeURIComponent(orderId)}/delivery/confirm`,
+    { method: "POST", body: {}, token, signal },
+  );
+}
+
 /** Ask Medika to source the medications of this consultation's issued
- *  prescription (« Demander le prix et la livraison avec Medika »). 409
- *  PRESCRIPTION_NOT_ISSUED for legacy free-text prescriptions; 409
- *  MEDICATION_ORDER_ALREADY_EXISTS when one is already active.
- *
- *  Contract note (issue #82 §1.4): the server REQUIRES the four delivery
- *  fields, so the payload parameter is REQUIRED and every field is required
- *  in CreateMedicationOrderRequest — calling without them is a compile-time
- *  error instead of a guaranteed 400 at runtime. (The interim `= {}` default
- *  restored by revert 85fb332 type-checked but could never succeed.) */
+ *  prescription (« Demander le prix et la livraison avec Medika »). The
+ *  payload is REQUIRED and fully typed: address, city, Haitian phone and
+ *  the selected coverage-zone record id — there is no empty default (this
+ *  replaces the reverted coordinator change 7ac67aa with a real contract:
+ *  a call site missing a field is a compile error, and the server
+ *  re-validates everything anyway). 409 PRESCRIPTION_NOT_ISSUED for legacy
+ *  free-text prescriptions; 409 MEDICATION_ORDER_ALREADY_EXISTS when one is
+ *  already active; 422 DELIVERY_ZONE_NOT_SUPPORTED outside active zones. */
 export function createMedicationOrder(
   token: string,
   consultationId: string,
@@ -310,33 +338,6 @@ export function verifyMedicationPayment(token: string, orderId: string, signal?:
   return apiFetch<{ success: boolean; payment?: import('./types').MedicationPayment }>(
     `/api/medication-orders/${encodeURIComponent(orderId)}/payment/verify`,
     { method: 'POST', body: {}, token, signal },
-  );
-}
-
-// ─── Delivery (issue #82 — Medika-owned delivery scope) ──────────────────────
-
-/** ACTIVE service zones only (admin-configured). An empty list means the
- *  patient's area is not served: the UI fails closed and shows the French
- *  independent-purchase alternative. */
-export function getDeliveryZones(token: string, signal?: AbortSignal) {
-  return apiFetch<DeliveryZone[]>("/api/delivery-zones", { token, signal });
-}
-
-/** The patient's delivery tracking for this order. 404 when nothing is
- *  assigned yet (not an error for the UI). */
-export function getMedicationDeliveryTracking(token: string, orderId: string, signal?: AbortSignal) {
-  return apiFetch<MedicationDeliveryTracking>(
-    `/api/medication-orders/${encodeURIComponent(orderId)}/delivery`,
-    { token, signal },
-  );
-}
-
-/** Patient receipt confirmation — the ONLY path to DELIVERED (available at
- *  AWAITING_CONFIRMATION; the server rejects it at any earlier stage). */
-export function confirmMedicationDelivery(token: string, orderId: string, signal?: AbortSignal) {
-  return apiFetch<{ success: boolean; status: string }>(
-    `/api/medication-orders/${encodeURIComponent(orderId)}/delivery/confirm`,
-    { method: "POST", body: {}, token, signal },
   );
 }
 

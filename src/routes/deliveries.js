@@ -3,10 +3,6 @@
 /**
  * Delivery routes (issue #82 — delivery scope).
  *
- *  - GET  /api/delivery-zones                     (patient): ACTIVE zones only,
- *    so the order form can offer exactly the admin-configured coverage and
- *    fail closed (empty list => order form disabled with the French
- *    independent-purchase alternative).
  *  - GET  /api/delivery/my                        (delivery employee): only the
  *    deliveries assigned to this account — isolation enforced in SQL.
  *  - POST /api/delivery/:id/events                (delivery employee): custody
@@ -14,6 +10,9 @@
  *  - GET  /api/medication-orders/:id/delivery     (patient): own tracking.
  *  - POST /api/medication-orders/:id/delivery/confirm (patient): receipt
  *    confirmation — the only path to DELIVERED.
+ *
+ * GET /api/delivery-zones lives in src/routes/medication-orders.js (active
+ * zone records for the patient order form).
  *
  * Notification privacy: bodies are generic French copy; never diagnosis,
  * medication contents, names or addresses.
@@ -34,15 +33,6 @@ const PATIENT_DELIVERY_NOTIFICATIONS = {
   FAILED_ATTEMPT: 'La tentative de livraison n’a pas abouti. Notre équipe vous contactera.',
   RETURNED_ESCALATED: 'Votre commande est retournée à notre équipe pour traitement.',
 };
-
-router.get('/delivery-zones', authenticate, requireRole('patient'), async (req, res, next) => {
-  try {
-    const { rows } = await query(
-      'SELECT id, city, zone_name FROM delivery_zones WHERE active = TRUE ORDER BY city, zone_name'
-    );
-    res.json(rows);
-  } catch (err) { next(err); }
-});
 
 router.get('/delivery/my', authenticate, requireRole('delivery'), async (req, res, next) => {
   try {

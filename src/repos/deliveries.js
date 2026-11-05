@@ -121,8 +121,15 @@ async function assignDelivery({ orderId, employeeId, zoneId, scheduledFor, urgen
       'SELECT * FROM delivery_zones WHERE id = $1 AND active = TRUE', [zoneId]
     );
     const zone = zones[0];
-    if (!zone || zone.city !== order.delivery_city ||
-        normalizeZone(zone.zone_name) !== normalizeZone(order.delivery_zone)) {
+    if (!zone) return { outcome: 'INVALID_ZONE' };
+    // Orders created by the consolidated flow are bound to the EXACT zone
+    // record (delivery_zone_id). Legacy rows (pre-013) only carry the
+    // free-text zone name + city — match those by normalized name/city.
+    const zoneMatches = order.delivery_zone_id
+      ? order.delivery_zone_id === zone.id
+      : zone.city === (order.delivery_city || zone.city) &&
+        normalizeZone(zone.zone_name) === normalizeZone(order.delivery_zone);
+    if (!zoneMatches || zone.city !== (order.delivery_city || zone.city)) {
       return { outcome: 'INVALID_ZONE' };
     }
 
