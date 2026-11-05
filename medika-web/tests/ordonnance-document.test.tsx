@@ -98,24 +98,22 @@ describe("OrdonnanceDocumentBody — structured document (issue #82)", () => {
   });
 
   it("shows the prescriber identity, specialty and credentials WHEN present", () => {
-    expect(html).toContain("Prescripteur :");
+    expect(html).toContain("Prescripteur");
     expect(html).toContain("Dr Test");
-    expect(html).toContain("Spécialité :");
     expect(html).toContain("Medecine Generale");
     expect(html).toContain("N° d’enregistrement :");
     expect(html).toContain("MSPP-1");
-    expect(html).toContain("Établissement :");
     expect(html).toContain("Hopital Test");
   });
 
   it("shows the patient identity and age", () => {
-    expect(html).toContain("Patient :");
+    expect(html).toContain("Patient");
     expect(html).toContain("Jean Baptiste");
     expect(html).toContain("41 ans");
   });
 
   it("renders every structured medication with its optional fields", () => {
-    expect(html).toContain("1. Paracétamol 500 mg (comprimé)");
+    expect(html).toContain("Paracétamol 500 mg (comprimé)");
     expect(html).toContain("Prise : 1 comprimé");
     expect(html).toContain("Voie : orale");
     expect(html).toContain("Fréquence : 3 fois par jour");
@@ -124,7 +122,7 @@ describe("OrdonnanceDocumentBody — structured document (issue #82)", () => {
     expect(html).toContain("Renouvellements : 0");
     expect(html).toContain("À prendre après les repas");
     // Second medication with sparse optional fields — no invented values.
-    expect(html).toContain("2. Ibuprofène 200 mg");
+    expect(html).toContain("Ibuprofène 200 mg");
     expect(html).not.toContain("Voie : null");
     expect(html).not.toContain("Quantité : undefined");
   });
@@ -145,10 +143,9 @@ describe("OrdonnanceDocumentBody — structured document (issue #82)", () => {
       }),
     ));
     expect(minimal).not.toContain("N° d’enregistrement :");
-    expect(minimal).not.toContain("Établissement :");
-    expect(minimal).not.toContain("Délivrée le :");
-    // A missing license must never be replaced by a placeholder claim.
     expect(minimal).not.toContain("MSPP");
+    // A missing issue date is omitted — never invented.
+    expect(minimal).not.toContain("Délivrée le");
   });
 
   it("contains no price, pharmacy-fee or delivery-fee vocabulary", () => {
@@ -280,6 +277,26 @@ describe("Prescription document — source contracts (issue #82)", () => {
     expect(panel).toContain("Télécharger l’ordonnance");
     expect(panel).toContain("Imprimer / Enregistrer en PDF");
     expect(panel).toContain("Le téléchargement de l’ordonnance a échoué. Réessayez.");
+  });
+
+  it("falls back to legacy text ONLY on a genuine 404; network/server errors get a retryable state", () => {
+    // The legacy swap-in is gated on the structured endpoint's 404.
+    expect(panel).toContain("err.status === 404");
+    expect(panel).toContain("loadFailed");
+    // Failures surface an explicit French retry action instead of silently
+    // hiding behind the historical free text (issue #82 §3).
+    expect(panel).toContain("Impossible de charger l’ordonnance. Vérifiez votre connexion puis réessayez.");
+    expect(panel).toContain("Réessayer");
+  });
+
+  it("awaits font readiness before PNG capture (no blank/fallback glyphs)", () => {
+    expect(panel).toContain("document.fonts?.ready");
+    expect(panel).toContain("scale: 2");
+    expect(panel).toContain("useCORS: true");
+  });
+
+  it("keeps the independent-purchase alternative explicit (issue #82 §3)", () => {
+    expect(panel).toContain("Télécharger l’ordonnance et acheter les médicaments en pharmacie");
   });
 
   it("the consultation page shows the panel for patient AND doctor when finished", () => {

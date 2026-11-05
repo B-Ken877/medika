@@ -46,6 +46,11 @@ const CATEGORY_FOR_EVENT = {
   'medication:quoted': 'consultations',
   'medication:paid': 'consultations',
   'medication:payment-review': 'consultations',
+  // Issue #82 delivery scope: assignment/scheduling and live custody updates
+  // for the patient. Same 'consultations' grouping as the other medication
+  // events; bodies are generic French copy without any medical data.
+  'medication:delivery-assigned': 'consultations',
+  'medication:delivery-update': 'consultations',
 };
 
 const CATEGORIES = ['consultations', 'messages', 'calls', 'wallet'];

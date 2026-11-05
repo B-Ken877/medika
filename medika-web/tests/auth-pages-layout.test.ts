@@ -80,7 +80,11 @@ describe("register page structure mirrors login (issue #43)", () => {
     for (const id of ["username", "password"]) {
       expect(loginPage).toContain(`id="${id}"`);
     }
-    expect(loginPage).toContain('router.replace(next)');
+    // Same auth hook + redirect target; delivery employees additionally land
+    // in their own portal when no explicit destination was requested
+    // (consolidated issue #82 §7).
+    expect(loginPage).toContain("useAuth()");
+    expect(loginPage).toContain('user?.role === "delivery" ? "/livreur" : next');
   });
 });
 

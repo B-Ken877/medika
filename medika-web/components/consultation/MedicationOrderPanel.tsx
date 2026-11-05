@@ -20,12 +20,15 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, Clock, Pill, RefreshCw, XCircle } from "lucide-react";
-import type { Consultation, MedicationOrder, MedicationQuoteItem } from "@/lib/api/types";
+import type { Consultation, DeliveryTracking, DeliveryZone, MedicationOrder, MedicationQuoteItem } from "@/lib/api/types";
 import {
   acceptMedicationQuote,
   cancelMedicationOrder,
   createMedicationOrder,
   declineMedicationQuote,
+  confirmDeliveryReceipt,
+  getDeliveryTracking,
+  getDeliveryZones,
   getMedicationOrderByConsultation,
   getPrescriptionDocument,
   createMedicationPayment,
@@ -271,12 +274,19 @@ export function MedicationOrderView({
 }
 
 /** The call-to-action shown when no order exists yet (structured prescription
- *  only — legacy free-text prescriptions cannot be sourced). */
+ *  only — legacy free-text prescriptions cannot be sourced).
+ *
+ *  Coverage is record-based (issue #82 §7): the patient picks an exact zone
+ *  from GET /api/delivery-zones; with no active zone the form stays closed
+ *  and only the independent-purchase alternative is offered. Delivery is
+ *  FREE for the patient — no delivery fee line ever appears anywhere. */
 export function MedicationOrderCta({
   busy,
   deliveryAddress,
   deliveryPhone,
-  deliveryZone,
+  deliveryZoneId,
+  zones,
+  zonesLoading,
   onDeliveryAddressChange,
   onDeliveryPhoneChange,
   onDeliveryZoneChange,
@@ -285,12 +295,16 @@ export function MedicationOrderCta({
   busy: boolean;
   deliveryAddress: string;
   deliveryPhone: string;
-  deliveryZone: string;
+  deliveryZoneId: string;
+  zones: DeliveryZone[];
+  zonesLoading: boolean;
   onDeliveryAddressChange: (value: string) => void;
   onDeliveryPhoneChange: (value: string) => void;
-  onDeliveryZoneChange: (value: string) => void;
+  onDeliveryZoneChange: (zoneId: string) => void;
   onCreate: () => void;
 }) {
+  const selectedZone = zones.find((z) => z.id === deliveryZoneId) ?? null;
+  const coverageClosed = !zonesLoading && zones.length === 0;
   return (
     <section className="card" style={{ margin: 12 }} aria-label="Demander un devis de médicaments">
       <h3 style={{ margin: 0, marginBottom: 6, fontSize: "1.05rem", color: "var(--green-800)", display: "flex", alignItems: "center", gap: 8 }}>
@@ -303,58 +317,76 @@ export function MedicationOrderCta({
         dans les zones desservies. Vous restez libre d’acheter vos médicaments vous-même : téléchargez ou
         imprimez simplement l’ordonnance ci-dessus.
       </p>
-      <div style={{ display: "grid", gap: 8 }}>
-        <label className="small" htmlFor="med-order-address" style={{ color: "var(--gray-700, #3f4f4b)" }}>
-          Adresse de livraison (obligatoire)
-          <input
-            id="med-order-address"
-            className="input"
-            type="text"
-            maxLength={500}
-            required
-            value={deliveryAddress}
-            onChange={(e) => onDeliveryAddressChange(e.target.value)}
-            placeholder="Ex. : 12, rue Ka o, Port-au-Prince"
-            disabled={busy}
-            style={{ marginTop: 4 }}
-          />
-        </label>
-        <label className="small" htmlFor="med-order-phone" style={{ color: "var(--gray-700, #3f4f4b)" }}>
-          Téléphone pour la livraison (obligatoire)
-          <input
-            id="med-order-phone"
-            className="input"
-            type="tel"
-            maxLength={20}
-            required
-            value={deliveryPhone}
-            onChange={(e) => onDeliveryPhoneChange(e.target.value)}
-            placeholder="+509 …"
-            disabled={busy}
-            style={{ marginTop: 4 }}
-          />
-        </label>
-        <label className="small" htmlFor="med-order-zone" style={{ color: "var(--gray-700, #3f4f4b)" }}>
-          Quartier ou zone de livraison (obligatoire)
-          <input
-            id="med-order-zone"
-            className="input"
-            type="text"
-            maxLength={80}
-            required
-            value={deliveryZone}
-            onChange={(e) => onDeliveryZoneChange(e.target.value)}
-            placeholder="Ex. : nom de votre quartier"
-            disabled={busy}
-            style={{ marginTop: 4 }}
-          />
-        </label>
-      </div>
+      {coverageClosed ? (
+        <p className="small" style={{ margin: "4px 0 10px", color: "var(--gray-700, #3f4f4b)", fontWeight: 600 }}>
+          La livraison Medika n’est pas encore disponible dans votre zone. Vous pouvez télécharger votre
+          ordonnance ci-dessus et acheter vos médicaments en pharmacie.
+        </p>
+      ) : (
+        <div style={{ display: "grid", gap: 8 }}>
+          <label className="small" htmlFor="med-order-address" style={{ color: "var(--gray-700, #3f4f4b)" }}>
+            Adresse de livraison (obligatoire)
+            <input
+              id="med-order-address"
+              className="input"
+              type="text"
+              maxLength={500}
+              required
+              value={deliveryAddress}
+              onChange={(e) => onDeliveryAddressChange(e.target.value)}
+              placeholder="Ex. : 12, rue Ka o, Port-au-Prince"
+              disabled={busy}
+              style={{ marginTop: 4 }}
+            />
+          </label>
+          <label className="small" htmlFor="med-order-zone" style={{ color: "var(--gray-700, #3f4f4b)" }}>
+            Zone de livraison Medika (obligatoire)
+            <select
+              id="med-order-zone"
+              className="input"
+              required
+              value={deliveryZoneId}
+              onChange={(e) => onDeliveryZoneChange(e.target.value)}
+              disabled={busy || zonesLoading}
+              style={{ marginTop: 4 }}
+            >
+              <option value="">{zonesLoading ? "Chargement des zones desservies…" : "— Sélectionnez votre zone —"}</option>
+              {zones.map((z) => (
+                <option key={z.id} value={z.id}>
+                  {z.zone_name} — {z.city}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="small" htmlFor="med-order-phone" style={{ color: "var(--gray-700, #3f4f4b)" }}>
+            Téléphone pour la livraison (obligatoire)
+            <input
+              id="med-order-phone"
+              className="input"
+              type="tel"
+              maxLength={20}
+              required
+              value={deliveryPhone}
+              onChange={(e) => onDeliveryPhoneChange(e.target.value)}
+              placeholder="+509 …"
+              disabled={busy}
+              style={{ marginTop: 4 }}
+            />
+          </label>
+        </div>
+      )}
       <p className="tiny" style={{ marginTop: 8, color: "var(--gray-700, #3f4f4b)" }}>
-        La disponibilité est vérifiée selon les zones actuellement desservies. Si votre adresse n’est pas
-        couverte, vous pourrez toujours utiliser l’ordonnance pour acheter vos médicaments en pharmacie.
+        {selectedZone
+          ? `Zone sélectionnée : ${selectedZone.zone_name} (${selectedZone.city}). La disponibilité est vérifiée au moment de la demande.`
+          : "La disponibilité est vérifiée selon les zones actuellement desservies. Si votre adresse n’est pas couverte, vous pourrez toujours utiliser l’ordonnance pour acheter vos médicaments en pharmacie."}
       </p>
-      <button type="button" className="btn btn-primary" style={{ marginTop: 10 }} onClick={onCreate} disabled={busy}>
+      <button
+        type="button"
+        className="btn btn-primary"
+        style={{ marginTop: 10 }}
+        onClick={onCreate}
+        disabled={busy || coverageClosed || !deliveryZoneId}
+      >
         <Clock size={15} aria-hidden /> {busy ? "Envoi…" : "Demander le prix et la livraison avec Medika"}
       </button>
     </section>
@@ -381,7 +413,9 @@ export function MedicationOrderPanel({
   const [error, setError] = useState<unknown>(null);
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
-  const [deliveryZone, setDeliveryZone] = useState("");
+  const [deliveryZoneId, setDeliveryZoneId] = useState("");
+  const [zones, setZones] = useState<DeliveryZone[]>([]);
+  const [zonesLoading, setZonesLoading] = useState(true);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [paymentMessage, setPaymentMessage] = useState<string | null>(null);
 
@@ -436,6 +470,29 @@ export function MedicationOrderPanel({
     };
   }, [token, consultation.id]);
 
+  useEffect(() => {
+    let alive = true;
+    // Active coverage zones for the order form (issue #82 §7 — explicit
+    // records, fail closed when none is configured).
+    if (token) {
+      getDeliveryZones(token)
+        .then((r) => {
+          if (alive) setZones(r.zones ?? []);
+        })
+        .catch(() => {
+          if (alive) setZones([]);
+        })
+        .finally(() => {
+          if (alive) setZonesLoading(false);
+        });
+    } else if (alive) {
+      setZonesLoading(false);
+    }
+    return () => {
+      alive = false;
+    };
+  }, [token]);
+
   const run = async (action: () => Promise<void>) => {
     if (busy) return; // anti double-submit
     setBusy(true);
@@ -452,15 +509,21 @@ export function MedicationOrderPanel({
 
   const onCreate = () =>
     run(async () => {
+      const zone = zones.find((z) => z.id === deliveryZoneId);
+      if (!zone) {
+        // Fail closed client-side too: no zone record selected → no request.
+        throw new ApiError("network", 0, "Veuillez sélectionner une zone de livraison Medika dans la liste.");
+      }
       const created = await createMedicationOrder(token ?? "", consultation.id, {
         delivery_address: deliveryAddress.trim(),
+        delivery_city: zone.city,
         delivery_phone: deliveryPhone.trim(),
-        delivery_zone: deliveryZone.trim(),
+        delivery_zone_id: zone.id,
       });
       setOrder(created);
       setDeliveryAddress("");
       setDeliveryPhone("");
-      setDeliveryZone("");
+      setDeliveryZoneId("");
     });
 
   const onAccept = () =>
@@ -570,6 +633,9 @@ export function MedicationOrderPanel({
             <p className="small">Votre paiement MonCash a été vérifié. L’équipe Medika peut maintenant préparer votre commande.</p>
           </section>
         )}
+        {order.status === "PAID" && (
+          <MedicationDeliveryTracking token={token} orderId={order.id} />
+        )}
       </div>
     );
   }
@@ -580,12 +646,139 @@ export function MedicationOrderPanel({
         busy={busy}
         deliveryAddress={deliveryAddress}
         deliveryPhone={deliveryPhone}
-        deliveryZone={deliveryZone}
+        deliveryZoneId={deliveryZoneId}
+        zones={zones}
+        zonesLoading={zonesLoading}
         onDeliveryAddressChange={setDeliveryAddress}
         onDeliveryPhoneChange={setDeliveryPhone}
-        onDeliveryZoneChange={setDeliveryZone}
+        onDeliveryZoneChange={setDeliveryZoneId}
         onCreate={onCreate}
       />
     </div>
+  );
+}
+
+/**
+ * Patient delivery tracking (issue #82 §7) — shown once the order is PAID.
+ * Self-fetching: 404 (not yet assigned) renders an honest "being organized"
+ * state; otherwise the status, the scheduled date and the full status
+ * history are shown, with receipt confirmation available ONLY at the
+ * server's AWAITING_CONFIRMATION stage. French copy, no medical content.
+ */
+const DELIVERY_STATUS_FR: Record<string, string> = {
+  ASSIGNED: "Livraison affectée à un membre de l’équipe",
+  PHARMACY_PREPARING: "Préparation en cours à la pharmacie",
+  READY_FOR_PICKUP: "Prête au retrait par l’équipe Medika",
+  PICKED_UP: "Colis récupéré à la pharmacie",
+  OUT_FOR_DELIVERY: "En route vers votre adresse",
+  AWAITING_CONFIRMATION: "Livré — veuillez confirmer la réception",
+  DELIVERED: "Livraison terminée",
+  FAILED_ATTEMPT: "Tentative de livraison échouée — notre équipe vous contactera",
+  RETURNED_ESCALATED: "Retournée à notre équipe pour traitement",
+};
+const DELIVERY_EVENT_FR: Record<string, string> = {
+  ASSIGNED: "Livraison affectée",
+  PHARMACY_PREPARING: "Préparation en pharmacie",
+  READY_FOR_PICKUP: "Prête au retrait",
+  PICKED_UP: "Récupérée à la pharmacie",
+  OUT_FOR_DELIVERY: "En livraison",
+  AWAITING_CONFIRMATION: "Remise au patient — en attente de confirmation",
+  DELIVERED: "Livrée (confirmée par le patient)",
+  FAILED_ATTEMPT: "Tentative échouée",
+  RETURNED_ESCALATED: "Retournée / escaladée",
+};
+
+export function MedicationDeliveryTracking({ token, orderId }: { token?: string | null; orderId: string }) {
+  const [tracking, setTracking] = useState<DeliveryTracking | null>(null);
+  const [missing, setMissing] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!token) return;
+    try {
+      const t = await getDeliveryTracking(token, orderId);
+      setTracking(t);
+      setMissing(false);
+      setFailed(false);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        setMissing(true); // pas encore affectée — état honnête, pas une erreur
+      } else {
+        setFailed(true);
+      }
+    }
+  }, [token, orderId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const onConfirm = async () => {
+    if (!token || busy) return;
+    setBusy(true); setMessage(null);
+    try {
+      await confirmDeliveryReceipt(token, orderId);
+      setMessage("Merci ! Votre réception est confirmée.");
+      await load();
+    } catch (err) {
+      setMessage(err instanceof ApiError && err.status === 409
+        ? "La confirmation n’est pas encore disponible à ce stade de la livraison."
+        : "La confirmation a échoué. Réessayez.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="card" style={{ margin: 12 }} aria-label="Suivi de la livraison">
+      <h3 style={{ marginTop: 0, color: "var(--green-800)" }}>Suivi de la livraison</h3>
+      <p className="small" style={{ color: "var(--gray-700, #3f4f4b)" }}>
+        La livraison est offerte par Medika dans les zones desservies.
+      </p>
+      {missing && (
+        <p className="small" role="status">
+          Votre livraison est en cours d’organisation par notre équipe. Cette page sera mise à jour dès
+          qu’un livreur est affecté.
+        </p>
+      )}
+      {failed && (
+        <div>
+          <p className="small" role="alert">Impossible de charger le suivi pour le moment. Réessayez plus tard.</p>
+          <button type="button" className="btn btn-secondary" onClick={() => void load()}>Réessayer</button>
+        </div>
+      )}
+      {tracking && (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <strong>{DELIVERY_STATUS_FR[tracking.status] ?? tracking.status}</strong>
+            <span className="tiny">
+              Prévue le {new Date(tracking.scheduled_for).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+              {tracking.urgent ? " · livraison urgente" : ""}
+            </span>
+          </div>
+          <ol style={{ margin: "10px 0 0", paddingLeft: 18 }}>
+            {tracking.events.map((ev, i) => (
+              <li key={i} className="small">
+                {DELIVERY_EVENT_FR[ev.event_type] ?? ev.event_type}
+                {ev.created_at ? ` — ${new Date(ev.created_at).toLocaleString("fr-FR")}` : ""}
+              </li>
+            ))}
+          </ol>
+          {tracking.status === "AWAITING_CONFIRMATION" && (
+            <div style={{ marginTop: 10 }}>
+              <button type="button" className="btn btn-primary" onClick={onConfirm} disabled={busy}>
+                {busy ? "Confirmation…" : "Confirmer la réception"}
+              </button>
+              <p className="tiny" style={{ marginTop: 6, color: "var(--gray-700, #3f4f4b)" }}>
+                En confirmant, vous attestez avoir reçu vos médicaments.
+              </p>
+            </div>
+          )}
+          {message && <p className="small" role="status" style={{ marginTop: 8 }}>{message}</p>}
+        </div>
+      )}
+    </section>
   );
 }

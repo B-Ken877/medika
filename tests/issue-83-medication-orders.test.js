@@ -15,16 +15,29 @@
  */
 'use strict';
 
-// The integration suite uses one explicitly configured test zone. Production
-// must set MEDIKA_MEDICATION_DELIVERY_ZONES to its approved exact allowlist.
-process.env.MEDIKA_MEDICATION_DELIVERY_ZONES = 'Port-au-Prince';
+// Coverage is record-based (issue #82 §7): migration 013 seeds the
+// Port-au-Prince zone INACTIVE; this suite activates the exact zone record
+// it needs — there is no env allowlist anymore, and with no active zone the
+// API fails closed (503 not configured / 422 inactive-unknown zone).
 
 process.env.REQUIRE_PAYMENT = 'false';
 process.env.MONCASH_CLIENT_ID = 'test-medika-client';
 process.env.MONCASH_CLIENT_SECRET = 'test-medika-secret';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { createRequire } from 'node:module';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 const h = await import('./helpers');
+
+const __dirname83 = path.dirname(fileURLToPath(import.meta.url));
+// The payment routes do `require('../moncash')` natively (vitest
+// externalizes CJS) — patch THAT instance, the same object the routes hold.
+// A plain `await import('../src/moncash.js')` creates a second vitest-side
+// instance and the spy never intercepts (the merged issue-#84 tests carried
+// this latent bug — fixed as part of consolidated #82).
+const nativeRequire = createRequire(path.resolve(__dirname83, '../src/routes/medication-payments.js'));
+const nativeMoncash = nativeRequire('../moncash.js');
 
 let r, users, token = {};
 let db;
@@ -86,7 +99,8 @@ async function createOrder(patient, consId, extra = {}) {
     .send({
       delivery_address: '12, rue Ka o, Port-au-Prince',
       delivery_phone: '+50937142536',
-      delivery_zone: 'Port-au-Prince',
+      delivery_city: 'Port-au-Prince',
+      delivery_zone_id: 'ZONE_PAP',
       ...extra,
     });
 }
@@ -140,6 +154,9 @@ beforeAll(async () => {
   token.doctor2 = await h.loginToken(r, 't.doctor2');
   token.admin = await h.loginToken(r, 't.admin');
   db = await import('../src/db.js').then((m) => m.default ?? m);
+  // Activate the seeded Port-au-Prince zone record — the exact record-based
+  // coverage an administrator would configure (issue #82 §7).
+  await db.query(`UPDATE delivery_zones SET active = TRUE WHERE id = 'ZONE_PAP'`);
 });
 
 afterAll(async () => {
@@ -149,14 +166,18 @@ afterAll(async () => {
 describe('issue #83 — order creation', () => {
   it('patient creates a request on an issued prescription; SLA is exactly 30 minutes from the request', async () => {
     const { consId, patient } = await consultationWithPrescription();
-    const res = await createOrder(patient, consId, { delivery_address: '12 rue Ka o', delivery_phone: '+50912345678', delivery_zone: 'Port-au-Prince' });
+    const res = await createOrder(patient, consId, { delivery_address: '12 rue Ka o', delivery_phone: '+50912345678' });
     expect(res.status).toBe(201);
     expect(res.body.status).toBe('REQUESTED');
     expect(res.body.reference).toMatch(/^CMD-\d{4}-[0-9A-F]{10}$/);
     expect(res.body.sla_state).toBe('PENDING');
     expect(res.body.delivery_address).toBe('12 rue Ka o');
     expect(res.body.delivery_phone).toBe('+50912345678');
+    // The order is bound to the exact zone RECORD (legacy free-text column
+    // keeps the zone-name snapshot for older clients/admin display).
     expect(res.body.delivery_zone).toBe('Port-au-Prince');
+    expect(res.body.delivery_city).toBe('Port-au-Prince');
+    expect(res.body.delivery_zone_id).toBe('ZONE_PAP');
     // Exact SLA math: deadline − request = 1800 s (controllable-clock test:
     // pure arithmetic assertion, no sleeps).
     expect(res.body.sla_deadline_at - res.body.requested_at).toBe(1800);
@@ -703,26 +724,58 @@ describe('issue #83 — delivery coverage, contact validation, and free delivery
 
     const overlongAddress = await createOrder(patient, consId, { delivery_address: 'A'.repeat(501) });
     expect(overlongAddress.status).toBe(400);
-    const overlongZone = await createOrder(patient, consId, { delivery_zone: 'Z'.repeat(81) });
+    const overlongZone = await createOrder(patient, consId, { delivery_zone_id: 'Z'.repeat(81) });
     expect(overlongZone.status).toBe(400);
   });
 
-  it('fails closed for an unconfigured zone list and rejects zones not explicitly allowlisted', async () => {
+  it('coverage is record-based: 503 with zero active zones, 422 for inactive/unknown zone, 400 for city/zone mismatch', async () => {
     const { consId, patient } = await consultationWithPrescription();
-    const configured = process.env.MEDIKA_MEDICATION_DELIVERY_ZONES;
     try {
-      delete process.env.MEDIKA_MEDICATION_DELIVERY_ZONES;
+      // No active zone anywhere → honest 503 (delivery not configured).
+      await db.query(`UPDATE delivery_zones SET active = FALSE`);
       const notConfigured = await createOrder(patient, consId);
       expect(notConfigured.status).toBe(503);
       expect(notConfigured.body.code).toBe('MEDIKA_DELIVERY_NOT_CONFIGURED');
 
-      process.env.MEDIKA_MEDICATION_DELIVERY_ZONES = 'Port-au-Prince';
-      const unsupported = await createOrder(patient, consId, { delivery_zone: 'Delmas' });
-      expect(unsupported.status).toBe(422);
-      expect(unsupported.body.code).toBe('DELIVERY_ZONE_NOT_SUPPORTED');
+      // Zone active again, but an unknown/inactive zone id fails closed.
+      await db.query(`UPDATE delivery_zones SET active = TRUE WHERE id = 'ZONE_PAP'`);
+      const unknownZone = await createOrder(patient, consId, { delivery_zone_id: 'ZONE_NOWHERE' });
+      expect(unknownZone.status).toBe(422);
+      expect(unknownZone.body.code).toBe('DELIVERY_ZONE_NOT_SUPPORTED');
+
+      // A zone deactivated AFTER the form loaded fails closed at submission
+      // time while other zones remain serviceable (distinct from the 503
+      // "nothing configured at all" case above).
+      await db.query(
+        `INSERT INTO delivery_zones (id, city, zone_name, active) VALUES ('ZONE_DELMAS', 'Port-au-Prince', 'Delmas', TRUE)
+         ON CONFLICT (city, zone_name) DO UPDATE SET active = TRUE`
+      );
+      await db.query(`UPDATE delivery_zones SET active = FALSE WHERE id = 'ZONE_PAP'`);
+      const deactivated = await createOrder(patient, consId, { delivery_zone_id: 'ZONE_PAP' });
+      expect(deactivated.status).toBe(422);
+      expect(deactivated.body.code).toBe('DELIVERY_ZONE_NOT_SUPPORTED');
+      await db.query(`UPDATE delivery_zones SET active = TRUE WHERE id = 'ZONE_PAP'`);
+
+      // The client-supplied city must match the selected zone record.
+      const cityMismatch = await createOrder(patient, consId, { delivery_city: 'Cap-Haïtien' });
+      expect(cityMismatch.status).toBe(400);
+      expect(cityMismatch.body.code).toBe('INVALID_DELIVERY_DETAILS');
     } finally {
-      process.env.MEDIKA_MEDICATION_DELIVERY_ZONES = configured;
+      await db.query(`UPDATE delivery_zones SET active = TRUE WHERE id = 'ZONE_PAP'`);
+      await db.query(`DELETE FROM delivery_zones WHERE id = 'ZONE_DELMAS'`);
     }
+  });
+
+  it('patient zone picker endpoint exposes only ACTIVE zone records', async () => {
+    const { patient } = await consultationWithPrescription();
+    const res = await r.get('/api/delivery-zones').set('Authorization', `Bearer ${patient.token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.zones).toEqual([{ id: 'ZONE_PAP', city: 'Port-au-Prince', zone_name: 'Port-au-Prince' }]);
+    // Deactivated zones disappear from the picker (fail closed).
+    await db.query(`UPDATE delivery_zones SET active = FALSE WHERE id = 'ZONE_PAP'`);
+    const res2 = await r.get('/api/delivery-zones').set('Authorization', `Bearer ${patient.token}`);
+    expect(res2.body.zones).toEqual([]);
+    await db.query(`UPDATE delivery_zones SET active = TRUE WHERE id = 'ZONE_PAP'`);
   });
 
   it('never stores or returns a patient delivery fee, even if an admin sends one', async () => {
@@ -759,7 +812,7 @@ describe('issue #84 — medication MonCash payments', () => {
       .set('Authorization', 'Bearer ' + patient.token);
     expect(accepted.status).toBe(200);
 
-    const moncash = await import('../src/moncash.js').then((m) => m.default ?? m);
+    const moncash = nativeMoncash;
     const createSpy = vi.spyOn(moncash, 'createPayment').mockResolvedValue({
       redirectUrl: 'https://moncash.example/checkout',
     });
@@ -806,7 +859,7 @@ describe('issue #84 — medication MonCash payments', () => {
       .send(quotePayload(pharmacy.id));
     await r.post('/api/medication-orders/' + created.body.id + '/accept')
       .set('Authorization', 'Bearer ' + patient.token);
-    const moncash = await import('../src/moncash.js').then((m) => m.default ?? m);
+    const moncash = nativeMoncash;
     vi.spyOn(moncash, 'createPayment').mockResolvedValue({ redirectUrl: 'https://moncash.example/checkout' });
     const other = await freshPatient();
     const response = await r.post('/api/medication-orders/' + created.body.id + '/payment/create')
@@ -826,7 +879,7 @@ describe('issue #84 — medication MonCash payments', () => {
     await r.post('/api/medication-orders/' + created.body.id + '/accept')
       .set('Authorization', 'Bearer ' + patient.token);
 
-    const moncash = await import('../src/moncash.js').then((m) => m.default ?? m);
+    const moncash = nativeMoncash;
     vi.spyOn(moncash, 'createPayment').mockResolvedValue({ redirectUrl: 'https://moncash.example/checkout' });
     const start = await r.post('/api/medication-orders/' + created.body.id + '/payment/create')
       .set('Authorization', 'Bearer ' + patient.token).send({});
@@ -863,7 +916,7 @@ it('reuses the same MonCash redirect for repeated create requests', async () => 
     .set('Authorization', 'Bearer ' + token.admin).send(quotePayload(pharmacy.id));
   await r.post('/api/medication-orders/' + created.body.id + '/accept')
     .set('Authorization', 'Bearer ' + patient.token);
-  const moncash = await import('../src/moncash.js').then((m) => m.default ?? m);
+  const moncash = nativeMoncash;
   const createSpy = vi.spyOn(moncash, 'createPayment').mockResolvedValue({
     redirectUrl: 'https://moncash.example/idempotent-checkout',
   });
@@ -886,7 +939,7 @@ it('holds a completed payment for manual review if the quote expires during chec
     .set('Authorization', 'Bearer ' + token.admin).send(quotePayload(pharmacy.id));
   await r.post('/api/medication-orders/' + created.body.id + '/accept')
     .set('Authorization', 'Bearer ' + patient.token);
-  const moncash = await import('../src/moncash.js').then((m) => m.default ?? m);
+  const moncash = nativeMoncash;
   vi.spyOn(moncash, 'createPayment').mockResolvedValue({ redirectUrl: 'https://moncash.example/review-checkout' });
   const start = await r.post('/api/medication-orders/' + created.body.id + '/payment/create')
     .set('Authorization', 'Bearer ' + patient.token).send({});
