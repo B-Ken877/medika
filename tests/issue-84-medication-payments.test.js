@@ -12,7 +12,7 @@ process.env.MONCASH_CLIENT_SECRET = '';
 process.env.MEDIKA_MEDICATION_DELIVERY_ZONES = 'Port-au-Prince';
 process.env.REQUIRE_PAYMENT = 'false';
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 const h = await import('./helpers');
 let r, users, token = {}, db;
 
@@ -25,6 +25,9 @@ beforeAll(async () => {
   token.admin = await h.loginToken(r, 't.admin');
   const dbModule = await import('../src/db.js').then((m) => m.default ?? m);
   db = dbModule;
+});
+beforeEach(async () => {
+  await db.query("UPDATE consultations SET status = 'TERMINE', updated_at = now() WHERE status IN ('RECHERCHE_MEDECIN','EN_COURS')");
 });
 afterAll(async () => { await h.closeAll(); });
 
