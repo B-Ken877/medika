@@ -44,10 +44,20 @@ router.post('/consultations/:id/medication-order', authenticate, requireRole('pa
       patient: req.user,
       deliveryAddress: typeof body.delivery_address === 'string' ? body.delivery_address.trim() : '',
       deliveryPhone: typeof body.delivery_phone === 'string' ? body.delivery_phone.trim() : '',
+      deliveryZone: typeof body.delivery_zone === 'string' ? body.delivery_zone.trim() : '',
     });
 
     if (result.outcome === 'NOT_FOUND') return res.status(404).json({ error: 'Not found' });
     if (result.outcome === 'FORBIDDEN') return res.status(404).json({ error: 'Not found' });
+    if (result.outcome === 'INVALID_DELIVERY_DETAILS') {
+      return res.status(400).json({ error: result.error, code: 'INVALID_DELIVERY_DETAILS' });
+    }
+    if (result.outcome === 'SERVICE_UNAVAILABLE') {
+      return res.status(503).json({ error: result.error, code: 'MEDIKA_DELIVERY_NOT_CONFIGURED' });
+    }
+    if (result.outcome === 'OUT_OF_COVERAGE') {
+      return res.status(422).json({ error: result.error, code: 'DELIVERY_ZONE_NOT_SUPPORTED' });
+    }
     if (result.outcome === 'NO_PRESCRIPTION') {
       return res.status(409).json({
         error: 'Aucune ordonnance délivrée sur cette consultation : la demande de prix nécessite une ordonnance du médecin.',
