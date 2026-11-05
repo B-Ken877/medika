@@ -38,7 +38,9 @@ const cronRoutes = require('./routes/crons');
 const notificationRoutes = require('./routes/notifications');
 const medicationOrderRoutes = require('./routes/medication-orders');
 const medicationPaymentRoutes = require('./routes/medication-payments');
+const deliveryRoutes = require('./routes/deliveries');
 const adminMedicationOrderRoutes = require('./routes/admin-medication-orders');
+const adminDeliveryRoutes = require('./routes/admin-deliveries');
 
 /**
  * CORS: native clients (Android/OkHttp) send no Origin header and pass
@@ -114,9 +116,11 @@ function createApp() {
   app.use('/api', notificationRoutes); // /api/notifications/* (issue #36)
   app.use('/api', medicationOrderRoutes); // /api/consultations/:id/medication-order + /api/medication-orders/* (issue #83, patient side)
   app.use('/api', medicationPaymentRoutes); // verified MonCash medication payments (issue #84)
+  app.use('/api', deliveryRoutes); // delivery-employee portal + patient tracking (issue #82)
   app.use('/api', cronRoutes); // /api/crons/* (deadline processor — auth guarded)
   app.use('/api/admin', adminRoutes); // router-level admin guard applies to /api/admin/* only
   app.use('/api/admin', adminMedicationOrderRoutes); // /api/admin/pharmacies + /api/admin/medication-orders/* (issue #83, ops side)
+  app.use('/api/admin', adminDeliveryRoutes); // /api/admin/delivery-* + /api/admin/deliveries/* (issue #82)
   app.use('/api', callRoutes);
 
   app.use(notFoundHandler);

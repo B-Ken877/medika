@@ -46,6 +46,12 @@ const CATEGORY_FOR_EVENT = {
   'medication:quoted': 'consultations',
   'medication:paid': 'consultations',
   'medication:payment-review': 'consultations',
+  // Issue #82 (delivery): assignment + custody updates. Grouped under the
+  // 'consultations' category (DB CHECK in migration 007 has no 'delivery'
+  // category); the deep link opens the consultation's document view. Copy
+  // stays generic — never diagnosis or medication contents.
+  'medication:delivery-assigned': 'consultations',
+  'medication:delivery-update': 'consultations',
 };
 
 const CATEGORIES = ['consultations', 'messages', 'calls', 'wallet'];
