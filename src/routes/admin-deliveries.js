@@ -161,6 +161,22 @@ router.post('/deliveries/:id/expenses', async (req, res, next) => {
       notes: req.body?.notes, admin: req.user,
     });
     if (result.outcome === 'NOT_FOUND') return res.status(404).json({ error: 'Livraison introuvable.' });
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
+    const today = now.toISOString().slice(0, 10);
+    const report = await deliveries.report({ from: monthStart, to: today });
+    if (report.budget_alert) {
+      const monthKey = today.slice(0, 7);
+      const { rows: admins } = await query("SELECT id FROM users WHERE role = 'admin'");
+      for (const admin of admins) notifications.emit({
+        userId: admin.id,
+        eventType: 'medication:delivery-budget-alert',
+        idempotencyKey: 'delivery-budget:' + monthKey + ':threshold:' + admin.id,
+        title: 'Medika',
+        body: 'Les dépenses internes de livraison ont atteint le seuil budgétaire configuré pour ce mois.',
+        url: '/admin/livraisons',
+      });
+    }
     res.status(201).json({ success: true, expense: result.expense });
   } catch (err) { next(err); }
 });
