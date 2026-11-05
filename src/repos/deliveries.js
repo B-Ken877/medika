@@ -193,6 +193,24 @@ async function listAll({ status } = {}) {
   return rows.map(deliveryApi);
 }
 
+// Admin order-detail view: custody history + internal expense ledger for one
+// delivery (admin role only — the route is behind the admin guard).
+async function adminDetail(deliveryId) {
+  const { rows } = await query(DELIVERY_SELECT + ' WHERE d.id = $1', [deliveryId]);
+  if (!rows[0]) return null;
+  const { rows: events } = await query(
+    `SELECT event_type, actor_name, actor_role, reason, created_at
+       FROM medication_delivery_events WHERE delivery_id = $1 ORDER BY created_at ASC`,
+    [deliveryId]
+  );
+  const { rows: expenses } = await query(
+    `SELECT id, amount_htg, category, notes, created_at
+       FROM medication_delivery_expenses WHERE delivery_id = $1 ORDER BY created_at DESC`,
+    [deliveryId]
+  );
+  return { ...deliveryApi(rows[0]), events, expenses };
+}
+
 async function transition({ deliveryId, employeeId, employeeName, eventType, reason, idempotencyKey }) {
   const knownTarget = Object.values(EMPLOYEE_EVENTS).some((events) => events.includes(eventType));
   if (!knownTarget) return { outcome: 'INVALID_EVENT' };
@@ -405,6 +423,7 @@ module.exports = {
   assignDelivery,
   listForEmployee,
   listAll,
+  adminDetail,
   transition,
   trackingForPatient,
   confirmByPatient,

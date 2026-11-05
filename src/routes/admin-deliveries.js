@@ -98,6 +98,15 @@ router.get('/deliveries', async (req, res, next) => {
   try { res.json(await deliveries.listAll({ status: req.query.status })); } catch (err) { next(err); }
 });
 
+// One delivery's operational detail: custody history + internal expenses.
+router.get('/deliveries/:id', async (req, res, next) => {
+  try {
+    const detail = await deliveries.adminDetail(req.params.id);
+    if (!detail) return res.status(404).json({ error: 'Livraison introuvable.' });
+    res.json(detail);
+  } catch (err) { next(err); }
+});
+
 router.post('/deliveries/assign', async (req, res, next) => {
   try {
     const result = await deliveries.assignDelivery({
