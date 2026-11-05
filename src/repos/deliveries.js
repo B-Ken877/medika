@@ -279,6 +279,10 @@ async function report({ from, to }) {
       WHERE id = 'DEFAULT'`
   );
   const budget = budgetRows[0] || null;
+  const { rows: monthSpendRows } = await query(
+    "SELECT COALESCE(SUM(amount_htg),0)::int AS amount_htg FROM medication_delivery_expenses WHERE created_at >= date_trunc('month', now()) AND created_at < date_trunc('month', now()) + interval '1 month'"
+  );
+  const currentMonthSpend = Number(monthSpendRows[0]?.amount_htg || 0);
   const successful = row.delivered || 0;
   const rangeParams = [from, to];
   const { rows: weekly } = await query(
@@ -303,7 +307,8 @@ async function report({ from, to }) {
     ...row,
     cost_per_successful_delivery_htg: successful > 0 ? Math.round(row.expense_htg / successful) : null,
     budget,
-    budget_alert: Boolean(budget && row.expense_htg >= Math.round(budget.monthly_budget_htg * budget.alert_threshold_percent / 100)),
+    budget_spend_current_month_htg: currentMonthSpend,
+    budget_alert: Boolean(budget && currentMonthSpend >= Math.round(budget.monthly_budget_htg * budget.alert_threshold_percent / 100)),
     weekly, monthly,
   };
 }
