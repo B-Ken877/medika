@@ -1,4 +1,4 @@
-Last updated: 2026-11-05T18:55:00Z (cron-202611060132)
+Last updated: 2026-11-05T19:25:00Z (cron-202611060132)
 
 ## MAJOR CONTEXT RESET (this run)
 Issue #82 was REPURPOSED by the owner (issue body rewritten ~17:31Z, directive
@@ -108,17 +108,23 @@ issue body (18 acceptance criteria + 12 sections of spec).
   notifications categories, wiring. tests/issue-82-delivery-operations
   9/9; backend total 515/515 (42 files).
 
+- P3-UI DONE (commit b864aaa, PUSHED): livreur portal, admin livraisons
+  (list/detail/assign/zones/employees/reports+budget), patient delivery
+  tracking + confirm, login redirect, admin nav, Role type.
+
 ## Next action (next run)
 1. Check lock + heartbeat; check for new owner comments on #82 / branch.
-2. P3-UI: (a) medika-admin (admin)/livraisons page (queue, detail with
-   events+expenses, assign form with employee select + Friday default +
-   urgent reason, expenses, reports+budget card, zones + employees CRUD);
-   (b) medika-web/app/livreur employee portal (own deliveries, allowed
-   transitions with idempotency keys); (c) patient delivery tracking panel
-   (MedicationOrderPanel PAID state -> tracking + confirm receipt).
-   Reference PR #95 files for pages, then exceed them (FR, states).
-3. P4: swap admin medication queue to zone records display; admin zones
-   already via /api/admin/delivery-zones.
-4. P5: full verification (backend/web/admin suites, typecheck, lint,
-   builds both apps) -> open ONE PR -> IN REVIEW + evidence comment.
+2. P5 verification sweep (rerun everything fresh in one pass):
+   - backend `npx vitest run` (expect 515/515, 42 files)
+   - medika-web `npx vitest run` (543/543), `tsc --noEmit`, `npm run lint`,
+     `npm run build`
+   - medika-admin `npm run build`
+   - migration chain test from a CLEAN db (drop+recreate embedded db or
+     fresh DATABASE_URL; scripts/migrate.js) + note exact order 001-013.
+3. PR: open ONE PR feat/issue-82-complete-medication-journey -> main,
+   reference issue #82, fill exact commands/counts, migration order +
+   rollout notes, walkthrough, risks, head SHA. Label #82 IN REVIEW +
+   evidence comment (do NOT close issue, do NOT merge).
+4. Optional if budget: browser screenshot of ordonnance screen (desktop +
+   mobile) for the PR; medication-order admin page zone display polish.
 One issue at a time. Never merge. Never push main.
