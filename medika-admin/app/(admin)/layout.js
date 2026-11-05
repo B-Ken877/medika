@@ -15,6 +15,7 @@ const navItems = [
   { href: '/tarification', label: 'Tarification', icon: Tag },
   { href: '/customer-care', label: 'Service client', icon: Headphones },
   { href: '/medicaments', label: 'Médicaments et pharmacies', icon: Pill },
+  { href: '/livraisons', label: 'Livraisons', icon: Pill },
   { href: '/finance', label: 'Finance', icon: DollarSign },
   { href: '/payouts', label: 'Versements', icon: Wallet },
 ];
