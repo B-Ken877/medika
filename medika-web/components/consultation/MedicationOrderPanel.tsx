@@ -545,11 +545,20 @@ export function MedicationOrderPanel({
                 <a className="btn btn-secondary" href={paymentUrl} target="_blank" rel="noopener noreferrer">Ouvrir MonCash</a>
               </p>
             )}
-            {paymentUrl && (
+            {order.payment?.status === "PENDING" && (
               <button type="button" className="btn btn-primary" onClick={onVerifyPayment} disabled={busy}>
                 Vérifier mon paiement
               </button>
             )}
+            {order.payment?.status === "REVIEW" && (
+              <div className="alert alert-warning" role="alert" style={{ marginTop: 10 }}>
+                Votre paiement a été reçu, mais nécessite une vérification par notre équipe. Ne procédez pas à un deuxième paiement.
+              </div>
+            )}
+            {order.payment?.status === "FAILED" && (
+              <p className="small" role="alert">Le paiement précédent a échoué. Vous pouvez réessayer.</p>
+            )}
+            {order.payment?.payment_reference && <p className="tiny">Référence : {order.payment.payment_reference}</p>}
             {paymentMessage && <p className="small" role="status" style={{ marginTop: 8 }}>{paymentMessage}</p>}
           </section>
         )}
