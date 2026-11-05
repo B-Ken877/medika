@@ -6,6 +6,7 @@ const moncash = require('../moncash');
 const { simulationAllowed } = require('../config');
 const { authenticate, requireRole } = require('../auth');
 const notifications = require('../notifications/emit');
+const { query } = require('../db');
 const router = express.Router();
 
 function simulatedTransactionId(reference) {
@@ -80,14 +81,28 @@ router.post('/medication-orders/:id/payment/verify', authenticate, requireRole('
     const error = mapOutcome(res, result);
     if (error) return error;
     if (result.outcome === 'PAID') {
+      const notificationKey = 'medication-order:' + req.params.id + ':payment:' + result.payment.id + ':paid';
       notifications.emit({
         userId: req.user.id,
         eventType: 'medication:paid',
-        idempotencyKey: 'medication-order:' + req.params.id + ':payment:' + result.payment.id + ':paid',
+        idempotencyKey: notificationKey,
         title: 'Medika',
         body: 'Votre paiement a été confirmé. Votre demande est transmise à notre équipe pour la préparation.',
         url: '/app/consultations',
       });
+      // Notify the operations team as well; the event contains no clinical or
+      // prescription details and the audit record is already committed.
+      const { rows: admins } = await query("SELECT id FROM users WHERE role = 'admin'");
+      for (const admin of admins) {
+        notifications.emit({
+          userId: admin.id,
+          eventType: 'medication:paid',
+          idempotencyKey: notificationKey + ':admin:' + admin.id,
+          title: 'Medika',
+          body: 'Un paiement MonCash a été confirmé. Une demande de médicaments est prête pour la préparation.',
+          url: '/admin/medicaments',
+        });
+      }
       return res.json({ success: true, status: 'PAID', payment: result.payment });
     }
     if (result.outcome === 'PENDING') return res.status(202).json({ success: false, status: 'PENDING', error: 'Le paiement n’est pas encore confirmé par MonCash. Réessayez dans quelques instants.' });
