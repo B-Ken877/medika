@@ -948,6 +948,13 @@ describe('issue #85 — Medika-owned delivery operations', () => {
         .send({ event_type: eventType });
       expect(response.status).toBe(200);
     }
+
+    const duplicateEvent = await r.post('/api/delivery/' + assigned.body.delivery_id + '/events')
+      .set('Authorization', 'Bearer ' + employee.token)
+      .set('Idempotency-Key', 'delivery-step-key-0-' + orderId)
+      .send({ event_type: 'PHARMACY_PREPARING' });
+    expect(duplicateEvent.status).toBe(200);
+    expect(duplicateEvent.body.duplicate).toBe(true);
     const tracking = await r.get('/api/medication-orders/' + orderId + '/delivery')
       .set('Authorization', 'Bearer ' + patient.token);
     expect(tracking.status).toBe(200);
@@ -962,12 +969,17 @@ describe('issue #85 — Medika-owned delivery operations', () => {
     const expense = await r.post('/api/admin/deliveries/' + assigned.body.delivery_id + '/expenses')
       .set('Authorization', 'Bearer ' + token.admin).send({ amount_htg: 85, category: 'TRANSPORT', notes: 'Trajet aller-retour' });
     expect(expense.status).toBe(201);
+
+    const budget = await r.put('/api/admin/delivery-budget').set('Authorization', 'Bearer ' + token.admin)
+      .send({ monthly_budget_htg: 100, alert_threshold_percent: 80 });
+    expect(budget.status).toBe(200);
     const today = new Date().toISOString().slice(0, 10);
     const report = await r.get('/api/admin/delivery-reports?from=' + today + '&to=' + today)
       .set('Authorization', 'Bearer ' + token.admin);
     expect(report.status).toBe(200);
     expect(report.body.delivered).toBeGreaterThanOrEqual(1);
     expect(report.body.expense_htg).toBeGreaterThanOrEqual(85);
+    expect(report.body.budget_alert).toBe(true);
   });
 
   it('rejects patient orders in a zone that has not been explicitly activated', async () => {
