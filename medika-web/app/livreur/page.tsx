@@ -10,6 +10,7 @@ type Delivery = {
   pickup_pharmacy_name: string; pickup_reference: string; scheduled_for: string;
   urgent: boolean; status: string;
 };
+const STATUS_FR: Record<string, string> = { ASSIGNED: "Affectée", PHARMACY_PREPARING: "Préparation en pharmacie", READY_FOR_PICKUP: "Prête au retrait", PICKED_UP: "Récupérée", OUT_FOR_DELIVERY: "En livraison", AWAITING_CONFIRMATION: "En attente de confirmation", DELIVERED: "Livrée", FAILED_ATTEMPT: "Tentative échouée", RETURNED_ESCALATED: "Retournée / escaladée" };
 const NEXT: Record<string, { type: string; label: string }[]> = {
   ASSIGNED: [{ type: "PHARMACY_PREPARING", label: "Pharmacie contactée" }],
   PHARMACY_PREPARING: [{ type: "READY_FOR_PICKUP", label: "Médicaments prêts" }],
@@ -72,7 +73,7 @@ export default function DeliveryEmployeePortal() {
             <article className="card" key={d.id} style={{ padding: 18 }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                 <div><strong>{d.reference}</strong><p className="small">{d.urgent ? "Livraison urgente" : "Livraison planifiée"} · {new Date(d.scheduled_for).toLocaleDateString("fr-FR")}</p></div>
-                <span className="badge badge-green">{d.status}</span>
+                <span className="badge badge-green">{STATUS_FR[d.status] || d.status}</span>
               </div>
               <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
                 <div><strong>Pharmacie de retrait :</strong> {d.pickup_pharmacy_name}</div>
