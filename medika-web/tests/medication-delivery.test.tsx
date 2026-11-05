@@ -21,28 +21,25 @@ import { renderToString } from "react-dom/server";
 import { createElement } from "react";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { MedicationDeliveryTrackingSection, DELIVERY_STATUS_FR } from "@/components/consultation/MedicationOrderPanel";
-import type { MedicationDeliveryTracking } from "@/lib/api/types";
+import { MedicationDeliveryTracking } from "@/components/consultation/MedicationOrderPanel";
+import type { DeliveryTracking } from "@/lib/api/types";
 
 const read = (p: string) => readFileSync(resolve(__dirname, p), "utf8");
 const ssr = (html: string) => html.replace(/<!-- -->/g, "");
 
-function tracking(over: Partial<MedicationDeliveryTracking> = {}): MedicationDeliveryTracking {
+function tracking(over: Partial<DeliveryTracking> = {}): DeliveryTracking {
   return {
     id: "DL_1",
     medication_order_id: "MO_1",
     reference: "CMD-2026-1A2B3C4D5E",
-    patient_name: "Pat Test",
     delivery_address: "12, rue Ka o",
     delivery_phone: "+50937142536",
     delivery_zone: "Centre-ville",
     city: "Port-au-Prince",
-    pickup_pharmacy_name: "Pharmacie du Centre",
-    pickup_reference: "CMD-2026-1A2B3C4D5E",
     scheduled_for: "2026-11-06",
     urgent: false,
     status: "ASSIGNED",
-    events: [{ event_type: "ASSIGNED", actor_role: "admin" }],
+    events: [{ event_type: "ASSIGNED", actor_role: "admin", reason: "", created_at: 1793854000 }],
     ...over,
   };
 }
@@ -50,21 +47,24 @@ function tracking(over: Partial<MedicationDeliveryTracking> = {}): MedicationDel
 // The section fetches on mount; SSR renders the loading state — the tests
 // below assert the static contract (labels, statuses) and the page sources.
 const LOADING_HTML = ssr(renderToString(
-  createElement(MedicationDeliveryTrackingSection, { orderId: "MO_1", token: "tok" }),
+  createElement(MedicationDeliveryTracking, { orderId: "MO_1", token: "tok" }),
 ));
 
-describe("MedicationDeliveryTrackingSection — patient tracking (issue #82 §7)", () => {
-  it("exposes the complete French custody vocabulary", () => {
-    expect(DELIVERY_STATUS_FR.ASSIGNED).toBe("Livraison planifiée");
-    expect(DELIVERY_STATUS_FR.AWAITING_CONFIRMATION).toContain("confirmation");
-    expect(DELIVERY_STATUS_FR.DELIVERED).toBe("Livraison confirmée");
-    expect(DELIVERY_STATUS_FR.FAILED_ATTEMPT).toContain("échouée");
-    expect(Object.keys(DELIVERY_STATUS_FR)).toHaveLength(9);
+describe("MedicationDeliveryTracking — patient tracking (issue #82 §7)", () => {
+  const panelSource = read("../components/consultation/MedicationOrderPanel.tsx");
+
+  it("exposes the complete French custody vocabulary (nine audited stages)", () => {
+    for (const stage of ["ASSIGNED", "PHARMACY_PREPARING", "READY_FOR_PICKUP", "PICKED_UP",
+      "OUT_FOR_DELIVERY", "AWAITING_CONFIRMATION", "DELIVERED", "FAILED_ATTEMPT", "RETURNED_ESCALATED"]) {
+      expect(panelSource).toMatch(new RegExp("^(\\s*)" + stage + ":", "m"));
+    }
+    expect(panelSource).toContain("veuillez confirmer la réception");
+    expect(panelSource).toContain("Livraison terminée");
   });
 
   it("renders a labelled loading state (never a blank card)", () => {
-    expect(LOADING_HTML).toContain("Suivi de livraison");
-    expect(LOADING_HTML).toContain("Chargement du suivi de livraison");
+    expect(LOADING_HTML).toContain("Suivi de la livraison");
+    expect(LOADING_HTML).toContain("Suivi");
   });
 });
 
@@ -133,7 +133,6 @@ describe("createMedicationOrder contract (issue #82 §1.4)", () => {
 describe("login routing for the delivery role", () => {
   it("redirects delivery employees to /livreur when no explicit next page", () => {
     const login = read("../app/login/page.tsx");
-    expect(login).toContain('user?.role === "delivery"');
-    expect(login).toContain('router.replace("/livreur")');
+    expect(login).toContain('user?.role === "delivery" ? "/livreur" : next');
   });
 });

@@ -312,38 +312,6 @@ export type MedicationOrderStatus =
   | "CANCELLED"
   | "EXPIRED";
 
-/** Patient-facing delivery tracking (minimum fulfilment data — never any
- *  clinical content). Statuses mirror medication_deliveries.check (migration
- *  013); events are the append-only custody history. */
-export interface MedicationDeliveryTracking {
-  id: string;
-  medication_order_id: string;
-  reference: string;
-  patient_name?: string;
-  delivery_address?: string;
-  delivery_phone?: string;
-  delivery_zone?: string;
-  city?: string;
-  pickup_pharmacy_name?: string;
-  pickup_reference?: string;
-  scheduled_for: string;
-  urgent: boolean;
-  status:
-    | "ASSIGNED"
-    | "PHARMACY_PREPARING"
-    | "READY_FOR_PICKUP"
-    | "PICKED_UP"
-    | "OUT_FOR_DELIVERY"
-    | "AWAITING_CONFIRMATION"
-    | "DELIVERED"
-    | "FAILED_ATTEMPT"
-    | "RETURNED_ESCALATED"
-    | string;
-  created_at?: number | string | null;
-  delivered_at?: number | string | null;
-  events?: { event_type: string; actor_role?: string; reason?: string; created_at?: number | string }[];
-}
-
 /** Item-level stock availability as confirmed by the pharmacy. */
 export type QuoteItemAvailability = "AVAILABLE" | "PARTIAL" | "UNAVAILABLE";
 
@@ -423,6 +391,30 @@ export interface DeliveryZone {
   id: string;
   city: string;
   zone_name: string;
+}
+
+/** Delivery tracking as the patient sees it (minimum data, status history). */
+export interface DeliveryTrackingEvent {
+  event_type: string;
+  actor_role: string;
+  reason: string;
+  created_at: number | null;
+}
+
+export interface DeliveryTracking {
+  id: string;
+  medication_order_id: string;
+  reference: string;
+  delivery_address: string;
+  delivery_phone: string;
+  delivery_zone: string;
+  city: string;
+  scheduled_for: string;
+  urgent: boolean;
+  status: string;
+  created_at?: string | null;
+  delivered_at?: string | null;
+  events: DeliveryTrackingEvent[];
 }
 
 export interface CreateMedicationOrderRequest {

@@ -35,8 +35,7 @@ function LoginForm() {
   const { login, status, user } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
-  const nextParam = params.get("next");
-  const next = nextParam || "/app";
+  const next = params.get("next") || "/app";
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -45,15 +44,12 @@ function LoginForm() {
   const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
-    if (status !== "authenticated") return;
-    // Delivery employees land on their dedicated portal unless a specific
-    // destination was requested (issue #82 — delivery scope).
-    if (!nextParam && user?.role === "delivery") {
-      router.replace("/livreur");
-      return;
+    if (status === "authenticated") {
+      // Delivery employees land in their own portal unless a specific
+      // destination was requested.
+      router.replace(!params.get("next") && user?.role === "delivery" ? "/livreur" : next);
     }
-    router.replace(next);
-  }, [status, router, next, nextParam, user?.role]);
+  }, [status, router, next, params, user?.role]);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
