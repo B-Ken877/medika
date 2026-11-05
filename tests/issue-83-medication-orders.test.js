@@ -15,6 +15,10 @@
  */
 'use strict';
 
+// The integration suite uses one explicitly configured test zone. Production
+// must set MEDIKA_MEDICATION_DELIVERY_ZONES to its approved exact allowlist.
+process.env.MEDIKA_MEDICATION_DELIVERY_ZONES = 'Port-au-Prince';
+
 process.env.REQUIRE_PAYMENT = 'false';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -77,7 +81,12 @@ async function releaseConsultation(consId) {
 async function createOrder(patient, consId, extra = {}) {
   return r.post(`/api/consultations/${consId}/medication-order`)
     .set('Authorization', `Bearer ${patient.token}`)
-    .send(extra);
+    .send({
+      delivery_address: '12, rue Ka o, Port-au-Prince',
+      delivery_phone: '+50937142536',
+      delivery_zone: 'Port-au-Prince',
+      ...extra,
+    });
 }
 
 async function createPharmacy(extra = {}) {
@@ -138,7 +147,7 @@ afterAll(async () => {
 describe('issue #83 — order creation', () => {
   it('patient creates a request on an issued prescription; SLA is exactly 30 minutes from the request', async () => {
     const { consId, patient } = await consultationWithPrescription();
-    const res = await createOrder(patient, consId, { delivery_address: '12 rue Ka o', delivery_phone: '+5091234567' });
+    const res = await createOrder(patient, consId, { delivery_address: '12 rue Ka o', delivery_phone: '+50912345678', delivery_zone: 'Port-au-Prince' });
     expect(res.status).toBe(201);
     expect(res.body.status).toBe('REQUESTED');
     expect(res.body.reference).toMatch(/^CMD-\d{4}-[0-9A-F]{10}$/);
@@ -669,5 +678,59 @@ describe('issue #83 — server-side transition validation (client status values 
     expect(detail.body.whatsapp.message).toContain('Paracétamol');
     // The handoff never leaks patient identity.
     expect(detail.body.whatsapp.message).not.toContain(patient.name);
+  });
+});
+
+ 
+describe('issue #83 — delivery coverage, contact validation, and free delivery', () => {
+  it('rejects missing address, missing phone, and malformed Haitian phone numbers', async () => {
+    const { consId, patient } = await consultationWithPrescription();
+    const missingAddress = await createOrder(patient, consId, { delivery_address: '   ' });
+    expect(missingAddress.status).toBe(400);
+    expect(missingAddress.body.code).toBe('INVALID_DELIVERY_DETAILS');
+
+    const missingPhone = await createOrder(patient, consId, { delivery_phone: ' ' });
+    expect(missingPhone.status).toBe(400);
+    expect(missingPhone.body.code).toBe('INVALID_DELIVERY_DETAILS');
+
+    const malformedPhone = await createOrder(patient, consId, { delivery_phone: '+509123' });
+    expect(malformedPhone.status).toBe(400);
+    expect(malformedPhone.body.code).toBe('INVALID_DELIVERY_DETAILS');
+  });
+
+  it('fails closed for an unconfigured zone list and rejects zones not explicitly allowlisted', async () => {
+    const { consId, patient } = await consultationWithPrescription();
+    const configured = process.env.MEDIKA_MEDICATION_DELIVERY_ZONES;
+    try {
+      delete process.env.MEDIKA_MEDICATION_DELIVERY_ZONES;
+      const notConfigured = await createOrder(patient, consId);
+      expect(notConfigured.status).toBe(503);
+      expect(notConfigured.body.code).toBe('MEDIKA_DELIVERY_NOT_CONFIGURED');
+
+      process.env.MEDIKA_MEDICATION_DELIVERY_ZONES = 'Port-au-Prince';
+      const unsupported = await createOrder(patient, consId, { delivery_zone: 'Delmas' });
+      expect(unsupported.status).toBe(422);
+      expect(unsupported.body.code).toBe('DELIVERY_ZONE_NOT_SUPPORTED');
+    } finally {
+      process.env.MEDIKA_MEDICATION_DELIVERY_ZONES = configured;
+    }
+  });
+
+  it('never stores or returns a patient delivery fee, even if an admin sends one', async () => {
+    const { consId, patient } = await consultationWithPrescription();
+    const order = (await createOrder(patient, consId)).body;
+    const pharmacy = await createPharmacy();
+    const response = await r.post('/api/admin/medication-orders/' + order.id + '/quotes')
+      .set('Authorization', 'Bearer ' + token.admin)
+      .send(quotePayload(pharmacy.id, { delivery_fee_htg: 999 }));
+    expect(response.status).toBe(201);
+    expect(response.body).not.toHaveProperty('delivery_fee_htg');
+    const patientView = await r.get('/api/consultations/' + consId + '/medication-order')
+      .set('Authorization', 'Bearer ' + patient.token);
+    expect(patientView.body.quote).not.toHaveProperty('delivery_fee_htg');
+    const schema = await db.query(
+      "SELECT column_name FROM information_schema.columns WHERE table_name = 'pharmacy_quotes' AND column_name = 'delivery_fee_htg'"
+    );
+    expect(schema.rows).toHaveLength(0);
   });
 });
