@@ -32,7 +32,14 @@ async function createIntent({ orderId, patient, simulated }) {
     );
     const quote = quotes[0];
     if (!quote) return { outcome: 'NO_QUOTE' };
-    if (new Date(quote.expires_at).getTime() <= Date.now()) return { outcome: 'QUOTE_EXPIRED' };
+    if (new Date(quote.expires_at).getTime() <= Date.now()) {
+      await client.query("UPDATE medication_orders SET status = 'EXPIRED', updated_at = now() WHERE id = $1", [orderId]);
+      await client.query(
+        "INSERT INTO medication_order_events (order_id,event_type,actor_id,actor_name,actor_role,details) VALUES ($1,'QUOTE_EXPIRED',NULL,'Système','system',$2::jsonb)",
+        [orderId, JSON.stringify({ reason: 'DEVIS_EXPIRE_AVANT_PAIEMENT', quote_id: quote.id })]
+      );
+      return { outcome: 'QUOTE_EXPIRED' };
+    }
     const amount = Number(quote.total_htg);
     if (!Number.isSafeInteger(amount) || amount <= 0) return { outcome: 'INVALID_AMOUNT' };
 
