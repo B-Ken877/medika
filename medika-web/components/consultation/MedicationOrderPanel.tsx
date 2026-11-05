@@ -31,8 +31,86 @@ import {
   createMedicationPayment,
   verifyMedicationPayment,
 } from "@/lib/api/endpoints";
-import { ApiError } from "@/lib/api/client";
+import { ApiError, apiFetch } from "@/lib/api/client";
 import { ErrorAlert, Spinner } from "@/components/ui/primitives";
+
+
+type DeliveryTrackingData = {
+  id: string;
+  status: string;
+  scheduled_for: string;
+  urgent: boolean;
+  delivery_zone: string;
+  city: string;
+  events: { event_type: string; reason?: string; created_at: string }[];
+};
+const DELIVERY_STATUS_FR: Record<string, string> = {
+  ASSIGNED: "Livraison planifiée",
+  PHARMACY_PREPARING: "La pharmacie prépare votre commande",
+  READY_FOR_PICKUP: "Commande prête au retrait",
+  PICKED_UP: "Commande récupérée",
+  OUT_FOR_DELIVERY: "En cours de livraison",
+  AWAITING_CONFIRMATION: "En attente de votre confirmation",
+  DELIVERED: "Livraison confirmée",
+  FAILED_ATTEMPT: "Tentative de livraison échouée",
+  RETURNED_ESCALATED: "Retour en cours de traitement",
+};
+
+function MedicationDeliveryTracking({ orderId, token }: { orderId: string; token: string }) {
+  const [tracking, setTracking] = useState<DeliveryTrackingData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    try {
+      const data = await apiFetch<DeliveryTrackingData>("/api/medication-orders/" + encodeURIComponent(orderId) + "/delivery", { token });
+      setTracking(data); setError(null);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) { setTracking(null); setError(null); }
+      else setError(e instanceof Error ? e.message : "Le suivi est momentanément indisponible.");
+    } finally { setLoading(false); }
+  }, [orderId, token]);
+  useEffect(() => { void load(); }, [load]);
+  const confirm = async () => {
+    setBusy(true); setError(null);
+    try {
+      await apiFetch("/api/medication-orders/" + encodeURIComponent(orderId) + "/delivery/confirm", { method: "POST", token, body: {} });
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "La confirmation a échoué."); }
+    finally { setBusy(false); }
+  };
+  return (
+    <section className="card" style={{ margin: 12 }} aria-label="Suivi de livraison">
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+        <h3 style={{ margin: 0, color: "var(--green-800)" }}>Suivi de votre livraison</h3>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => void load()} disabled={loading}>Actualiser</button>
+      </div>
+      {loading ? <p className="small">Chargement du suivi…</p> : !tracking ? (
+        <p className="small" style={{ marginTop: 10 }}>Votre paiement est confirmé. La livraison sera planifiée par notre équipe. Vous recevrez une notification dès son affectation.</p>
+      ) : (
+        <>
+          <p style={{ marginTop: 10 }}><strong>{DELIVERY_STATUS_FR[tracking.status] || tracking.status}</strong></p>
+          <p className="small">{tracking.urgent ? "Livraison prioritaire" : "Livraison régulière"} · {new Date(tracking.scheduled_for).toLocaleDateString("fr-FR")} · {tracking.delivery_zone}, {tracking.city}</p>
+          {tracking.status === "AWAITING_CONFIRMATION" && (
+            <button type="button" className="btn btn-primary" onClick={() => void confirm()} disabled={busy}>
+              {busy ? "Confirmation…" : "Confirmer la réception"}
+            </button>
+          )}
+          {tracking.status === "DELIVERED" && <p className="alert alert-success" role="status">Réception confirmée. Merci de faire confiance à Medika.</p>}
+          <ol className="small" style={{ marginTop: 12, paddingLeft: 20 }}>
+            {tracking.events.map((event, index) => (
+              <li key={tracking.id + "-" + index} style={{ marginBottom: 6 }}>
+                {DELIVERY_STATUS_FR[event.event_type] || event.event_type}
+                {event.created_at ? " · " + new Date(event.created_at).toLocaleString("fr-FR") : ""}
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
+      {error && <p className="small" role="alert" style={{ color: "var(--danger, #b3261e)" }}>{error}</p>}
+    </section>
+  );
+}
 
 const AVAILABILITY_LABELS_FR: Record<string, string> = {
   AVAILABLE: "Disponible",
@@ -277,18 +355,24 @@ export function MedicationOrderCta({
   deliveryAddress,
   deliveryPhone,
   deliveryZone,
+  deliveryCity,
+  serviceZones,
   onDeliveryAddressChange,
   onDeliveryPhoneChange,
   onDeliveryZoneChange,
+  onDeliveryCityChange,
   onCreate,
 }: {
   busy: boolean;
   deliveryAddress: string;
   deliveryPhone: string;
   deliveryZone: string;
+  deliveryCity: string;
+  serviceZones: { id: string; city: string; zone_name: string }[];
   onDeliveryAddressChange: (value: string) => void;
   onDeliveryPhoneChange: (value: string) => void;
   onDeliveryZoneChange: (value: string) => void;
+  onDeliveryCityChange: (value: string) => void;
   onCreate: () => void;
 }) {
   return (
@@ -334,27 +418,25 @@ export function MedicationOrderCta({
             style={{ marginTop: 4 }}
           />
         </label>
+        <label className="small" htmlFor="med-order-city" style={{ color: "var(--gray-700, #3f4f4b)" }}>
+          Ville (obligatoire)
+          <select id="med-order-city" className="input" required value={deliveryCity} onChange={(e) => onDeliveryCityChange(e.target.value)} disabled={busy} style={{ marginTop: 4 }}>
+            {[...new Set(serviceZones.map((z) => z.city))].map((city) => <option key={city} value={city}>{city}</option>)}
+          </select>
+        </label>
         <label className="small" htmlFor="med-order-zone" style={{ color: "var(--gray-700, #3f4f4b)" }}>
           Quartier ou zone de livraison (obligatoire)
-          <input
-            id="med-order-zone"
-            className="input"
-            type="text"
-            maxLength={80}
-            required
-            value={deliveryZone}
-            onChange={(e) => onDeliveryZoneChange(e.target.value)}
-            placeholder="Ex. : nom de votre quartier"
-            disabled={busy}
-            style={{ marginTop: 4 }}
-          />
+          <select id="med-order-zone" className="input" required value={deliveryZone} onChange={(e) => onDeliveryZoneChange(e.target.value)} disabled={busy || serviceZones.length === 0} style={{ marginTop: 4 }}>
+            {serviceZones.filter((z) => z.city === deliveryCity).map((z) => <option key={z.id} value={z.zone_name}>{z.zone_name}</option>)}
+          </select>
         </label>
       </div>
       <p className="tiny" style={{ marginTop: 8, color: "var(--gray-700, #3f4f4b)" }}>
         La disponibilité est vérifiée selon les zones actuellement desservies. Si votre adresse n’est pas
         couverte, vous pourrez toujours utiliser l’ordonnance pour acheter vos médicaments en pharmacie.
       </p>
-      <button type="button" className="btn btn-primary" style={{ marginTop: 10 }} onClick={onCreate} disabled={busy}>
+      {serviceZones.length === 0 && <p className="alert alert-info" role="status">Aucune zone de livraison n’est actuellement configurée. Vous pouvez télécharger l’ordonnance et acheter vos médicaments en pharmacie.</p>}
+      <button type="button" className="btn btn-primary" style={{ marginTop: 10 }} onClick={onCreate} disabled={busy || serviceZones.length === 0}>
         <Clock size={15} aria-hidden /> {busy ? "Envoi…" : "Demander le prix et la livraison avec Medika"}
       </button>
     </section>
@@ -382,6 +464,8 @@ export function MedicationOrderPanel({
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
   const [deliveryZone, setDeliveryZone] = useState("");
+  const [deliveryCity, setDeliveryCity] = useState("Port-au-Prince");
+  const [serviceZones, setServiceZones] = useState<{ id: string; city: string; zone_name: string }[]>([]);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [paymentMessage, setPaymentMessage] = useState<string | null>(null);
 
@@ -406,6 +490,17 @@ export function MedicationOrderPanel({
       if (!token) {
         setChecked(true);
         return;
+      }
+      try {
+        const zones = await apiFetch<{ id: string; city: string; zone_name: string }[]>("/api/delivery-zones", { token });
+        if (!alive) return;
+        setServiceZones(zones);
+        if (zones.length > 0) {
+          setDeliveryCity(zones[0].city);
+          setDeliveryZone(zones[0].zone_name);
+        }
+      } catch (zoneError) {
+        if (alive) setError(zoneError);
       }
       try {
         const o = await getMedicationOrderByConsultation(token, consultation.id);
@@ -456,6 +551,7 @@ export function MedicationOrderPanel({
         delivery_address: deliveryAddress.trim(),
         delivery_phone: deliveryPhone.trim(),
         delivery_zone: deliveryZone.trim(),
+        delivery_city: deliveryCity,
       });
       setOrder(created);
       setDeliveryAddress("");
@@ -537,30 +633,19 @@ export function MedicationOrderPanel({
           <section className="card" style={{ margin: 12 }} aria-label="Paiement MonCash">
             <h3 style={{ marginTop: 0, color: "var(--green-800)" }}>Paiement du devis</h3>
             <p className="small">Le montant est calculé à partir du devis confirmé. Aucun frais de livraison ne vous est facturé.</p>
-            {order.payment?.status !== "REVIEW" && (
-              <button type="button" className="btn btn-primary" onClick={onStartPayment} disabled={busy}>
-                {order.payment?.status === "FAILED" ? "Réessayer avec MonCash" : "Payer avec MonCash"}
-              </button>
-            )}
+            <button type="button" className="btn btn-primary" onClick={onStartPayment} disabled={busy}>
+              Payer avec MonCash
+            </button>
             {paymentUrl && (
               <p style={{ marginTop: 10 }}>
                 <a className="btn btn-secondary" href={paymentUrl} target="_blank" rel="noopener noreferrer">Ouvrir MonCash</a>
               </p>
             )}
-            {order.payment?.status === "PENDING" && (
+            {paymentUrl && (
               <button type="button" className="btn btn-primary" onClick={onVerifyPayment} disabled={busy}>
                 Vérifier mon paiement
               </button>
             )}
-            {order.payment?.status === "REVIEW" && (
-              <div className="alert alert-warning" role="alert" style={{ marginTop: 10 }}>
-                Votre paiement a été reçu, mais nécessite une vérification par notre équipe. Ne procédez pas à un deuxième paiement.
-              </div>
-            )}
-            {order.payment?.status === "FAILED" && (
-              <p className="small" role="alert">Le paiement précédent a échoué. Vous pouvez réessayer.</p>
-            )}
-            {order.payment?.payment_reference && <p className="tiny">Référence : {order.payment.payment_reference}</p>}
             {paymentMessage && <p className="small" role="status" style={{ marginTop: 8 }}>{paymentMessage}</p>}
           </section>
         )}
@@ -570,6 +655,7 @@ export function MedicationOrderPanel({
             <p className="small">Votre paiement MonCash a été vérifié. L’équipe Medika peut maintenant préparer votre commande.</p>
           </section>
         )}
+        {order.status === "PAID" && token && <MedicationDeliveryTracking orderId={order.id} token={token} />}
       </div>
     );
   }
@@ -581,9 +667,15 @@ export function MedicationOrderPanel({
         deliveryAddress={deliveryAddress}
         deliveryPhone={deliveryPhone}
         deliveryZone={deliveryZone}
+        deliveryCity={deliveryCity}
+        serviceZones={serviceZones}
         onDeliveryAddressChange={setDeliveryAddress}
         onDeliveryPhoneChange={setDeliveryPhone}
         onDeliveryZoneChange={setDeliveryZone}
+        onDeliveryCityChange={(city) => {
+          setDeliveryCity(city);
+          setDeliveryZone(serviceZones.find((z) => z.city === city)?.zone_name || "");
+        }}
         onCreate={onCreate}
       />
     </div>
