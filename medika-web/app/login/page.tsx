@@ -32,7 +32,7 @@ function BrandMark({ size = 36 }: { size?: number }) {
 }
 
 function LoginForm() {
-  const { login, status } = useAuth();
+  const { login, status, user } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") || "/app";
