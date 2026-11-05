@@ -3,11 +3,11 @@
  *
  * Contracts:
  *  1. CTA « Demander le prix et la livraison avec Medika » with the explicit
- *     independence notice (download/print without ordering) + optional
- *     delivery context fields.
+ *     independence notice (download/print without ordering) + required
+ *     address, Haitian phone, and explicitly allowlisted delivery zone.
  *  2. Quote review: pharmacy, itemized availability (Disponible / Stock
  *     partiel / Indisponible), unit price × quantity = subtotal in HTG,
- *     total, delivery fee when present, quote validity, no-substitution note.
+ *     medication-only total, free-delivery notice, quote validity, no-substitution note.
  *  3. Decision path: Accepter / Refuser / Annuler / nouvelle demande; the
  *     payment step is an honest NEXT STEP note (dependent issue #84) — never
  *     a fake payment button.
@@ -89,8 +89,10 @@ describe("MedicationOrderCta — « Demander le prix et la livraison avec Medika
       busy: false,
       deliveryAddress: "",
       deliveryPhone: "",
+      deliveryZone: "Port-au-Prince",
       onDeliveryAddressChange: noop,
       onDeliveryPhoneChange: noop,
+      onDeliveryZoneChange: noop,
       onCreate: noop,
     }),
   ));
@@ -101,9 +103,10 @@ describe("MedicationOrderCta — « Demander le prix et la livraison avec Medika
     expect(html).toContain("Vous restez libre d’acheter vos médicaments vous-même");
   });
 
-  it("offers optional delivery context fields", () => {
-    expect(html).toContain("Adresse de livraison (optionnelle)");
-    expect(html).toContain("Téléphone pour la livraison (optionnel)");
+  it("requires delivery address, Haitian phone, and delivery zone", () => {
+    expect(html).toContain("Adresse de livraison (obligatoire)");
+    expect(html).toContain("Téléphone pour la livraison (obligatoire)");
+    expect(html).toContain("Quartier ou zone de livraison (obligatoire)");
   });
 });
 
@@ -118,8 +121,6 @@ describe("MedicationQuoteView — the pharmacy quote as the patient reviews it",
       pharmacy: { id: "PH_1", name: "Pharmacie du Centre", whatsapp_number: "50937001122" },
       items: quoteItems,
       total_htg: 575,
-      delivery_fee_htg: 150,
-      delivery_notes: "Zone métropolitaine",
       agent_name: "Admin Test",
       confirmation_source: "WHATSAPP",
       confirmed_at: 1793854000,
@@ -142,15 +143,16 @@ describe("MedicationQuoteView — the pharmacy quote as the patient reviews it",
     expect(html).toContain("Quantité confirmée par la pharmacie : 4 comprimés sur 6");
   });
 
-  it("shows unit price × quantity = subtotal, the total and the delivery fee in HTG", () => {
+  it("shows unit price × quantity = subtotal, medication-only total and free delivery copy", () => {
     expect(html).toContain("25 HTG × 15 =");
     expect(html).toContain("375 HTG");
     expect(html).toContain("50 HTG × 4 =");
     expect(html).toContain("200 HTG");
     expect(html).toContain("Total des médicaments");
     expect(html).toContain("575 HTG");
-    expect(html).toContain("Frais de livraison — Zone métropolitaine");
-    expect(html).toContain("150 HTG");
+    expect(html).toContain("Livraison offerte par Medika dans les zones desservies.");
+    expect(html).not.toContain("Frais de livraison");
+    expect(html).not.toContain("150 HTG");
   });
 
   it("never prices an unavailable item and states the no-substitution rule", () => {
