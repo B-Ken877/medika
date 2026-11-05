@@ -363,6 +363,7 @@ export interface MedicationOrder {
   delivery_address?: string;
   delivery_phone?: string;
   delivery_zone?: string;
+  delivery_city?: string;
   requested_at?: number | null;
   /** 30-minute operations SLA target (epoch seconds, from the request). */
   sla_deadline_at?: number | null;
@@ -382,6 +383,7 @@ export interface CreateMedicationOrderRequest {
   delivery_address: string;
   delivery_phone: string;
   delivery_zone: string;
+  delivery_city: string;
 }
 
 export interface MedicationPayment {
