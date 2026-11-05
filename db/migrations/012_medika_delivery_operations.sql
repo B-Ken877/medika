@@ -5,6 +5,8 @@ ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
 ALTER TABLE users ADD CONSTRAINT users_role_check
   CHECK (role IN ('patient', 'doctor', 'admin', 'delivery'));
 
+ALTER TABLE medication_orders ADD COLUMN IF NOT EXISTS delivery_city TEXT NOT NULL DEFAULT 'Port-au-Prince';
+
 CREATE TABLE IF NOT EXISTS delivery_zones (
   id TEXT PRIMARY KEY,
   city TEXT NOT NULL,
