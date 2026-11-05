@@ -3,6 +3,10 @@
 const crypto = require('crypto');
 const { query, withTransaction } = require('../db');
 
+function normalizeZone(value) {
+  return String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim().replace(/\\s+/g, ' ').toLocaleLowerCase('fr');
+}
+
 const EMPLOYEE_EVENTS = {
   ASSIGNED: ['PHARMACY_PREPARING'],
   PHARMACY_PREPARING: ['READY_FOR_PICKUP'],
@@ -79,7 +83,7 @@ async function assignDelivery({ orderId, employeeId, zoneId, scheduledFor, urgen
       'SELECT * FROM delivery_zones WHERE id = $1 AND active = TRUE', [zoneId]
     );
     const zone = zones[0];
-    if (!zone || zone.city !== order.delivery_city || zone.zone_name.toLocaleLowerCase('fr') !== String(order.delivery_zone).toLocaleLowerCase('fr')) {
+    if (!zone || zone.city !== order.delivery_city || normalizeZone(zone.zone_name) !== normalizeZone(order.delivery_zone)) {
       return { outcome: 'INVALID_ZONE' };
     }
     const { rows: quotes } = await client.query(
