@@ -50,6 +50,7 @@ const CATEGORY_FOR_EVENT = {
   'medication:delivery-update': 'consultations',
   'medication:delivery-delivered': 'consultations',
   'medication:urgent-unavailable': 'consultations',
+  'medication:delivery-budget-alert': 'consultations',
 };
 
 const CATEGORIES = ['consultations', 'messages', 'calls', 'wallet'];
