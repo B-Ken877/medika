@@ -61,7 +61,7 @@ export default function DeliveryEmployeePortal() {
   return (
     <main className="container" style={{ maxWidth: 900, padding: "24px 16px" }}>
       <header style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-        <div><p className="tiny" style={{ color: "var(--green-700)" }}>MEDIKA · LOGISTIQUE</p><h1 style={{ color: "var(--green-900)" }}>Mes livraisons</h1><p className="small">Bonjour {user.name}. Vous voyez uniquement les commandes qui vous sont affectées.</p></div>
+        <div><p className="tiny" style={{ color: "var(--green-700)" }}>MEDIKA · LOGISTIQUE</p><h1 style={{ color: "var(--green-900)" }}>Mes livraisons</h1><p className="small">Bonjour {user.name}. Vous voyez uniquement les commandes qui vous sont affectées.</p></div><button className="btn btn-secondary" onClick={() => void load()} disabled={loading}>Actualiser</button>
         <button className="btn btn-secondary" onClick={() => { logout(); router.replace("/login"); }}>Déconnexion</button>
       </header>
       {error && <div className="alert alert-error" role="alert" style={{ marginTop: 16 }}>{error}</div>}
