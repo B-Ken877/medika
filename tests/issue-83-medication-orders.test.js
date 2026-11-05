@@ -153,6 +153,8 @@ describe('issue #83 — order creation', () => {
     expect(res.body.reference).toMatch(/^CMD-\d{4}-[0-9A-F]{10}$/);
     expect(res.body.sla_state).toBe('PENDING');
     expect(res.body.delivery_address).toBe('12 rue Ka o');
+    expect(res.body.delivery_phone).toBe('+50912345678');
+    expect(res.body.delivery_zone).toBe('Port-au-Prince');
     // Exact SLA math: deadline − request = 1800 s (controllable-clock test:
     // pure arithmetic assertion, no sleeps).
     expect(res.body.sla_deadline_at - res.body.requested_at).toBe(1800);
