@@ -274,6 +274,7 @@ export default function OrderDetailModal({ orderId, pharmacies, onClose, onSaved
                 <div><strong>Téléphone :</strong> {detail.delivery_phone || '—'}</div>
                 <div><strong>Quartier / zone :</strong> {detail.delivery_zone || '—'}</div>
                 <div><strong>Statut :</strong> {detail.status_label_fr || detail.status}</div>
+                {detail.payment && <div style={{ marginTop: 8, padding: 10, border: '1px solid var(--mk-border)', borderRadius: 8 }}><strong>Paiement MonCash :</strong> {detail.payment.status === 'PAID' ? 'Confirmé' : detail.payment.status === 'PENDING' ? 'En attente' : detail.payment.status === 'FAILED' ? 'Échoué' : 'Expiré'}<div>Montant vérifié : {detail.payment.verified_amount_htg ?? detail.payment.amount_htg} HTG</div><div>Référence : {detail.payment.reference}</div>{detail.payment.transaction_id && <div>Transaction : {detail.payment.transaction_id}</div>}</div>}
                 <div><strong>Demande créée :</strong> {formatDate(detail.requested_at)}</div>
                 <div>
                   <strong>Échéance opérationnelle (SLA 30 min) :</strong> {formatDate(detail.sla_deadline_at)}
