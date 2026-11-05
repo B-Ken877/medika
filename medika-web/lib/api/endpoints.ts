@@ -17,6 +17,7 @@ import type {
   MedicalHistory,
   MedicalHistorySnapshot,
   MedicationOrder,
+  MedicationPayment,
   PrescriptionDocument,
   ReadReceiptResult,
   SaveConsultationNoteRequest,
