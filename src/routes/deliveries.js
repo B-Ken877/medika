@@ -19,6 +19,7 @@ router.post('/delivery/:id/events', authenticate, requireRole('delivery'), async
     const result = await deliveries.transition({
       deliveryId: req.params.id,
       employeeId: req.user.id,
+      employeeName: req.user.name,
       eventType,
       reason: req.body?.reason,
       idempotencyKey: req.get('Idempotency-Key'),
