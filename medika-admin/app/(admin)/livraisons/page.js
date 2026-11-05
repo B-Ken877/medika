@@ -74,6 +74,9 @@ export default function LivraisonsPage() {
   const toggleEmployee = (e) => submit(async () => {
     await apiFetch('/admin/delivery-employees/' + encodeURIComponent(e.id) + '/availability', { method: 'PATCH', body: { is_available: !e.is_available } });
   });
+  const toggleZone = (z) => submit(async () => {
+    await apiFetch('/admin/delivery-zones', { method: 'POST', body: { id: z.id, city: z.city, zone_name: z.zone_name, active: !z.active } });
+  });
 
   const paidOrders = orders.filter((o) => o.status === 'PAID' && !deliveries.some((d) => d.medication_order_id === o.id));
   return (
@@ -107,7 +110,7 @@ export default function LivraisonsPage() {
           <input className="form-input" placeholder="Quartier / zone exacte" value={zone.zone_name} onChange={(e) => setZone({ ...zone, zone_name: e.target.value })} />
         </div>
         <button className="btn btn-primary" style={{ marginTop: 10 }} disabled={busy} onClick={saveZone}>Ajouter / activer la zone</button>
-        <div style={{ marginTop: 12 }}>{zones.map((z) => <div key={z.id} className="small" style={{ padding: 6, borderBottom: '1px solid var(--mk-border)' }}>{z.zone_name}, {z.city} · {z.active ? 'Active' : 'Inactive'}</div>)}</div>
+        <div style={{ marginTop: 12 }}>{zones.map((z) => <div key={z.id} className="small" style={{ padding: 6, borderBottom: '1px solid var(--mk-border)', display: 'flex', justifyContent: 'space-between', gap: 8 }}>{z.zone_name}, {z.city} · {z.active ? 'Active' : 'Inactive'} <button className="btn btn-sm btn-secondary" onClick={() => toggleZone(z)} disabled={busy}>{z.active ? 'Désactiver' : 'Activer'}</button></div>)}</div>
       </section>
 
       <section className="card" style={{ padding: 18, marginBottom: 16 }}>
@@ -160,6 +163,8 @@ export default function LivraisonsPage() {
           <div><strong>{formatCurrency(report.expense_htg)}</strong><div className="small">Dépenses internes</div></div>
           <div><strong>{report.cost_per_successful_delivery_htg == null ? '—' : formatCurrency(report.cost_per_successful_delivery_htg)}</strong><div className="small">Coût par livraison réussie</div></div>
           <div><strong>{report.budget_alert ? 'Seuil atteint' : 'Sous le seuil'}</strong><div className="small">Alerte budget</div></div>
+          <div><strong>{report.weekly?.length || 0}</strong><div className="small">Semaines dans la période</div></div>
+          <div><strong>{report.monthly?.length || 0}</strong><div className="small">Mois dans la période</div></div>
         </div>}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }}>
           <input className="form-input" type="number" min="0" placeholder="Budget mensuel HTG" value={budget.monthly_budget_htg} onChange={(e) => setBudget({ ...budget, monthly_budget_htg: e.target.value })} />
