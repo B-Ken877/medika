@@ -35,6 +35,7 @@ function deliveryApi(row) {
     pickup_reference: row.pickup_reference,
     assigned_employee_id: row.assigned_to,
     scheduled_for: row.scheduled_for,
+    delivery_window: row.delivery_window || 'JOURNEE',
     urgent: Boolean(row.urgent),
     status: row.status,
     created_at: row.created_at,
@@ -54,8 +55,10 @@ async function addEvent(client, { deliveryId, type, actor, reason, idempotencyKe
   return rows.length > 0;
 }
 
-async function assignDelivery({ orderId, employeeId, zoneId, scheduledFor, urgent, urgentReason, admin }) {
+async function assignDelivery({ orderId, employeeId, zoneId, scheduledFor, deliveryWindow = 'JOURNEE', urgent, urgentReason, admin }) {
   const date = dateOnly(scheduledFor);
+  const allowedWindows = ['MATIN', 'APRES_MIDI', 'SOIR', 'JOURNEE'];
+  if (!allowedWindows.includes(deliveryWindow)) return { outcome: 'INVALID_WINDOW' };
   if (!date) return { outcome: 'INVALID_DATE' };
   const isUrgent = urgent === true;
   if (!isUrgent && date.getUTCDay() !== 5) return { outcome: 'FRIDAY_ONLY' };
@@ -93,10 +96,10 @@ async function assignDelivery({ orderId, employeeId, zoneId, scheduledFor, urgen
     const id = 'DL_' + crypto.randomUUID();
     await client.query(
       `INSERT INTO medication_deliveries
-        (id, medication_order_id, assigned_to, zone_id, scheduled_for, urgent,
+        (id, medication_order_id, assigned_to, zone_id, scheduled_for, delivery_window, urgent,
          urgent_reason, pickup_pharmacy_name, pickup_reference, created_by)
-       VALUES ($1,$2,$3,$4,$5::date,$6,$7,$8,$9,$10)`,
-      [id, orderId, employeeId, zoneId, scheduledFor, isUrgent,
+       VALUES ($1,$2,$3,$4,$5::date,$6,$7,$8,$9,$10,$11)`,
+      [id, orderId, employeeId, zoneId, scheduledFor, deliveryWindow, isUrgent,
         String(urgentReason || '').trim().slice(0, 500), quotes[0].pharmacy_name,
         order.reference, admin.id]
     );
@@ -216,6 +219,33 @@ async function confirmByPatient({ orderId, patientId }) {
   });
 }
 
+async function recordUrgentUnavailable({ orderId, reason, admin }) {
+  const cleanReason = String(reason || '').trim().slice(0, 500);
+  if (cleanReason.length < 8) return { outcome: 'REASON_REQUIRED' };
+  return withTransaction(async (client) => {
+    const { rows: orders } = await client.query(
+      'SELECT id, patient_id, status FROM medication_orders WHERE id = $1 FOR UPDATE', [orderId]
+    );
+    const order = orders[0];
+    if (!order) return { outcome: 'NOT_FOUND' };
+    if (order.status !== 'PAID') return { outcome: 'NOT_PAID' };
+    const { rows: assigned } = await client.query(
+      'SELECT id FROM medication_deliveries WHERE medication_order_id = $1 FOR UPDATE', [orderId]
+    );
+    if (assigned[0]) return { outcome: 'ALREADY_ASSIGNED' };
+    const { rows: prior } = await client.query(
+      "SELECT id FROM medication_order_events WHERE order_id = $1 AND event_type = 'DELIVERY_URGENT_UNAVAILABLE' LIMIT 1",
+      [orderId]
+    );
+    if (prior[0]) return { outcome: 'ALREADY_NOTIFIED', patientId: order.patient_id };
+    await client.query(
+      "INSERT INTO medication_order_events (order_id,event_type,actor_id,actor_name,actor_role,details) VALUES ($1,'DELIVERY_URGENT_UNAVAILABLE',$2,$3,'admin',$4::jsonb)",
+      [orderId, admin.id, String(admin.name || ''), JSON.stringify({ reason: cleanReason })]
+    );
+    return { outcome: 'RECORDED', patientId: order.patient_id };
+  });
+}
+
 async function recordExpense({ deliveryId, amount, category, notes, admin }) {
   if (!Number.isSafeInteger(amount) || amount < 0) return { outcome: 'INVALID_AMOUNT' };
   const { rows: deliveries } = await query(
@@ -318,5 +348,5 @@ async function upsertZone({ id, city, zoneName, active }) {
 
 module.exports = {
   assignDelivery, listForEmployee, listAll, transition, trackingForPatient,
-  confirmByPatient, recordExpense, report, setBudget, listZones, upsertZone,
+  confirmByPatient, recordUrgentUnavailable, recordExpense, report, setBudget, listZones, upsertZone,
 };
