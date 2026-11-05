@@ -51,6 +51,17 @@ async function createIntent({ orderId, patientId, simulated = false }) {
     );
     if (existing[0]) {
       if (existing[0].amount_htg !== amount) return { outcome: 'AMOUNT_CHANGED' };
+      if (existing[0].status === 'FAILED') {
+        const reference = 'MED_' + crypto.randomUUID().replace(/-/g, '');
+        const { rows: retried } = await client.query(
+          `UPDATE medication_payments
+              SET payment_reference = $2, status = 'PENDING', transaction_id = NULL,
+                  provider_raw = NULL, simulated = $3, verified_at = NULL, updated_at = now()
+            WHERE id = $1 RETURNING *`,
+          [existing[0].id, reference, simulated]
+        );
+        return { outcome: 'PENDING', payment: toApi(retried[0]) };
+      }
       return { outcome: existing[0].status, payment: toApi(existing[0]) };
     }
 
