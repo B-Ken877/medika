@@ -21,6 +21,7 @@ export default function LivraisonsPage() {
   const [zone, setZone] = useState({ city: 'Port-au-Prince', zone_name: 'Port-au-Prince', active: true });
   const [assignment, setAssignment] = useState({ medication_order_id: '', employee_id: '', zone_id: '', scheduled_for: nextFriday(), delivery_window: 'MATIN', urgent: false, urgent_reason: '' });
   const [expense, setExpense] = useState({ delivery_id: '', amount_htg: '', notes: '' });
+  const [urgentUnavailable, setUrgentUnavailable] = useState({ medication_order_id: '', reason: '' });
   const [period, setPeriod] = useState({ from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) });
   const [budget, setBudget] = useState({ monthly_budget_htg: '', alert_threshold_percent: 80 });
 
@@ -58,6 +59,13 @@ export default function LivraisonsPage() {
   const assign = () => submit(async () => {
     await apiFetch('/admin/deliveries/assign', { method: 'POST', body: assignment });
     setAssignment((v) => ({ ...v, medication_order_id: '', urgent: false, urgent_reason: '', scheduled_for: nextFriday() }));
+  });
+  const notifyUrgentUnavailable = () => submit(async () => {
+    await apiFetch('/admin/deliveries/urgent-unavailable', {
+      method: 'POST',
+      body: urgentUnavailable,
+    });
+    setUrgentUnavailable({ medication_order_id: '', reason: '' });
   });
   const saveExpense = () => submit(async () => {
     await apiFetch('/admin/deliveries/' + encodeURIComponent(expense.delivery_id) + '/expenses', {
@@ -140,6 +148,19 @@ export default function LivraisonsPage() {
         <label className="small" style={{ display: 'block', marginTop: 10 }}><input type="checkbox" checked={assignment.urgent} onChange={(e) => setAssignment({ ...assignment, urgent: e.target.checked })} /> Exception urgente</label>
         {assignment.urgent && <textarea className="form-input" style={{ marginTop: 8 }} placeholder="Justification de l’urgence" value={assignment.urgent_reason} onChange={(e) => setAssignment({ ...assignment, urgent_reason: e.target.value })} />}
         <button className="btn btn-primary" style={{ marginTop: 10 }} disabled={busy || !assignment.medication_order_id || !assignment.employee_id || !assignment.zone_id} onClick={assign}>Affecter la livraison</button>
+      </section>
+
+      <section className="card" style={{ padding: 18, marginBottom: 16 }}>
+        <h2>Informer d’une urgence non réalisable</h2>
+        <p className="small">Si aucune équipe ne peut assurer une livraison urgente, informez le patient. Il pourra acheter lui-même les médicaments avec son ordonnance, sans attendre la livraison régulière.</p>
+        <div className="grid grid-2" style={{ gap: 10 }}>
+          <select className="form-input" value={urgentUnavailable.medication_order_id} onChange={(e) => setUrgentUnavailable({ ...urgentUnavailable, medication_order_id: e.target.value })}>
+            <option value="">Choisir une commande payée</option>
+            {paidOrders.map((o) => <option key={o.id} value={o.id}>{o.reference} · {o.patient_name}</option>)}
+          </select>
+          <input className="form-input" value={urgentUnavailable.reason} onChange={(e) => setUrgentUnavailable({ ...urgentUnavailable, reason: e.target.value })} maxLength={500} placeholder="Motif opérationnel (8 caractères minimum)" />
+        </div>
+        <button className="btn btn-secondary" style={{ marginTop: 10 }} disabled={busy || !urgentUnavailable.medication_order_id || urgentUnavailable.reason.trim().length < 8} onClick={notifyUrgentUnavailable}>Informer le patient</button>
       </section>
 
       <section className="card" style={{ padding: 18, marginBottom: 16 }}>
