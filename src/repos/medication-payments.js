@@ -130,6 +130,12 @@ async function markVerified({ paymentId, patientId, transactionId, verifiedAmoun
     );
     const order = orderRows[0];
     if (!order || order.status !== 'ACCEPTED') return { outcome: 'INVALID_STATE' };
+    const { rows: quoteRows } = await client.query(
+      `SELECT * FROM pharmacy_quotes WHERE order_id = $1 AND superseded_at IS NULL
+       ORDER BY confirmed_at DESC LIMIT 1 FOR UPDATE`,
+      [snapshot.medication_order_id]
+    );
+    const quote = quoteRows[0];
     const { rows: paymentRows } = await client.query(
       'SELECT * FROM medication_payments WHERE id = $1 FOR UPDATE', [paymentId]
     );
@@ -151,12 +157,6 @@ async function markVerified({ paymentId, patientId, transactionId, verifiedAmoun
       );
       return { outcome: 'VERIFICATION_MISMATCH' };
     }
-    const { rows: quoteRows } = await client.query(
-      `SELECT * FROM pharmacy_quotes WHERE order_id = $1 AND superseded_at IS NULL
-       ORDER BY confirmed_at DESC LIMIT 1 FOR UPDATE`,
-      [payment.medication_order_id]
-    );
-    const quote = quoteRows[0];
     const quoteStillValid = quote && quote.id === payment.quote_id &&
       new Date(quote.expires_at).getTime() > Date.now() &&
       Number(quote.total_htg) === Number(payment.amount_htg);
