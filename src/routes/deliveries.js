@@ -7,6 +7,14 @@ const notifications = require('../notifications/emit');
 
 const router = express.Router();
 
+router.get('/delivery-zones', authenticate, requireRole('patient'), async (req, res, next) => {
+  try {
+    const { query } = require('../db');
+    const { rows } = await query('SELECT id, city, zone_name FROM delivery_zones WHERE active = TRUE ORDER BY city, zone_name');
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
 router.get('/delivery/my', authenticate, requireRole('delivery'), async (req, res, next) => {
   try {
     res.json(await deliveries.listForEmployee(req.user.id));
