@@ -20,6 +20,8 @@
 process.env.MEDIKA_MEDICATION_DELIVERY_ZONES = 'Port-au-Prince';
 
 process.env.REQUIRE_PAYMENT = 'false';
+process.env.MONCASH_CLIENT_ID = 'test-medika-client';
+process.env.MONCASH_CLIENT_SECRET = 'test-medika-secret';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 const h = await import('./helpers');
@@ -834,7 +836,7 @@ describe('issue #84 — medication MonCash payments', () => {
     });
     const pending = await r.post('/api/medication-orders/' + created.body.id + '/payment/verify')
       .set('Authorization', 'Bearer ' + patient.token).send({});
-    expect(pending.status).toBe(200);
+    expect(pending.status).toBe(202);
     expect(pending.body.success).toBe(false);
 
     vi.spyOn(moncash, 'retrieveByOrderId').mockResolvedValueOnce({
@@ -850,3 +852,59 @@ describe('issue #84 — medication MonCash payments', () => {
     expect(retry.body.payment.payment_reference).not.toBe(start.body.payment.payment_reference);
     vi.restoreAllMocks();
   });
+
+
+
+it('reuses the same MonCash redirect for repeated create requests', async () => {
+  const { consId, patient } = await consultationWithPrescription();
+  const created = await createOrder(patient, consId);
+  const pharmacy = await createPharmacy();
+  await r.post('/api/admin/medication-orders/' + created.body.id + '/quotes')
+    .set('Authorization', 'Bearer ' + token.admin).send(quotePayload(pharmacy.id));
+  await r.post('/api/medication-orders/' + created.body.id + '/accept')
+    .set('Authorization', 'Bearer ' + patient.token);
+  const moncash = await import('../src/moncash.js').then((m) => m.default ?? m);
+  const createSpy = vi.spyOn(moncash, 'createPayment').mockResolvedValue({
+    redirectUrl: 'https://moncash.example/idempotent-checkout',
+  });
+  const first = await r.post('/api/medication-orders/' + created.body.id + '/payment/create')
+    .set('Authorization', 'Bearer ' + patient.token).send({});
+  const second = await r.post('/api/medication-orders/' + created.body.id + '/payment/create')
+    .set('Authorization', 'Bearer ' + patient.token).send({});
+  expect(first.status).toBe(200);
+  expect(second.status).toBe(200);
+  expect(second.body.redirectUrl).toBe(first.body.redirectUrl);
+  expect(createSpy).toHaveBeenCalledTimes(1);
+  vi.restoreAllMocks();
+});
+
+it('holds a completed payment for manual review if the quote expires during checkout', async () => {
+  const { consId, patient } = await consultationWithPrescription();
+  const created = await createOrder(patient, consId);
+  const pharmacy = await createPharmacy();
+  const quote = await r.post('/api/admin/medication-orders/' + created.body.id + '/quotes')
+    .set('Authorization', 'Bearer ' + token.admin).send(quotePayload(pharmacy.id));
+  await r.post('/api/medication-orders/' + created.body.id + '/accept')
+    .set('Authorization', 'Bearer ' + patient.token);
+  const moncash = await import('../src/moncash.js').then((m) => m.default ?? m);
+  vi.spyOn(moncash, 'createPayment').mockResolvedValue({ redirectUrl: 'https://moncash.example/review-checkout' });
+  const start = await r.post('/api/medication-orders/' + created.body.id + '/payment/create')
+    .set('Authorization', 'Bearer ' + patient.token).send({});
+  await backdateQuoteExpiry(quote.body.id, 1);
+  vi.spyOn(moncash, 'retrieveByOrderId').mockResolvedValue({
+    reference: start.body.payment.payment_reference,
+    transactionId: 'TX_EXPIRED_QUOTE_84',
+    amount: 675,
+    status: 'completed',
+    raw: { status: 'successful', cost: 675 },
+  });
+  const verified = await r.post('/api/medication-orders/' + created.body.id + '/payment/verify')
+    .set('Authorization', 'Bearer ' + patient.token).send({});
+  expect(verified.status).toBe(409);
+  expect(verified.body.code).toBe('PAYMENT_REVIEW_REQUIRED');
+  const order = await r.get('/api/consultations/' + consId + '/medication-order')
+    .set('Authorization', 'Bearer ' + patient.token);
+  expect(order.body.status).toBe('ACCEPTED');
+  expect(order.body.payment.status).toBe('REVIEW');
+  vi.restoreAllMocks();
+});

@@ -6,16 +6,23 @@ const { simulationAllowed } = require('../config');
 const moncash = require('../moncash');
 const payments = require('../repos/medication-payments');
 const notifications = require('../notifications/emit');
+const { query } = require('../db');
 
 function emitPaidNotification(userId, orderId) {
+  const key = `medication-order:${orderId}:payment-verified`;
   notifications.emit({
-    userId,
-    eventType: 'medication:paid',
-    idempotencyKey: `medication-order:${orderId}:payment-verified`,
+    userId, eventType: 'medication:paid', idempotencyKey: key + ':patient',
     title: 'Medika',
     body: 'Votre paiement a été confirmé. Votre commande est transmise à notre équipe.',
     url: '/app/consultations',
   });
+  query("SELECT id FROM users WHERE role = 'admin'")
+    .then(({ rows }) => rows.forEach((admin) => notifications.emit({
+      userId: admin.id, eventType: 'medication:paid', idempotencyKey: key + ':admin:' + admin.id,
+      title: 'Medika', body: 'Un paiement MonCash a été confirmé. Une demande de médicaments est prête pour la préparation.',
+      url: '/admin/medicaments',
+    })))
+    .catch(() => {});
 }
 
 const router = express.Router();
@@ -32,6 +39,8 @@ router.post('/medication-orders/:id/payment/create', authenticate, requireRole('
     if (result.outcome === 'QUOTE_EXPIRED') return res.status(409).json({ error: 'Ce devis a expiré. Demandez un devis actualisé.', code: 'QUOTE_EXPIRED' });
     if (result.outcome === 'INVALID_AMOUNT') return res.status(409).json({ error: 'Le montant du devis ne peut pas être payé.', code: 'INVALID_AMOUNT' });
     if (result.outcome === 'AMOUNT_CHANGED') return res.status(409).json({ error: 'Le montant du devis a changé. Contactez Medika pour obtenir un nouveau devis.', code: 'AMOUNT_CHANGED' });
+    if (result.outcome === 'QUOTE_CHANGED') return res.status(409).json({ error: 'Le devis a changé depuis votre acceptation. Contactez Medika pour confirmer le nouveau montant.', code: 'QUOTE_CHANGED' });
+    if (result.outcome === 'REVIEW') return res.status(409).json({ error: 'Un paiement précédent nécessite une vérification par notre équipe.', code: 'PAYMENT_REVIEW_REQUIRED' });
     if (result.outcome === 'PAID') return res.json({ success: true, paid: true, payment: result.payment });
     if (result.outcome === 'FAILED') return res.status(409).json({ error: 'Ce paiement a échoué. Contactez Medika pour réinitialiser le paiement.', code: 'PAYMENT_FAILED' });
 
@@ -42,14 +51,27 @@ router.post('/medication-orders/:id/payment/create', authenticate, requireRole('
         redirectUrl: '/payment/simulated?orderId=' + encodeURIComponent(payment.payment_reference),
       });
     }
+    if (result.redirectUrl) {
+      return res.json({ success: true, simulated: false, payment, redirectUrl: result.redirectUrl });
+    }
     if (!moncash.moncashConfigured()) {
       return res.status(503).json({ error: 'Le service MonCash n’est pas configuré.', code: 'MONCASH_UNAVAILABLE' });
     }
-    const gateway = await moncash.createPayment({
-      amount: payment.amount_htg,
-      orderId: payment.payment_reference,
-    });
-    return res.json({ success: true, simulated: false, payment, redirectUrl: gateway.redirectUrl });
+    const claimed = await payments.claimProviderCreation(req.params.id, req.user.id);
+    if (!claimed) {
+      return res.status(202).json({ success: false, status: 'PENDING', error: 'La création du paiement est déjà en cours. Réessayez dans quelques instants.' });
+    }
+    try {
+      const gateway = await moncash.createPayment({
+        amount: payment.amount_htg,
+        orderId: payment.payment_reference,
+      });
+      await payments.saveRedirectUrl(req.params.id, req.user.id, gateway.redirectUrl);
+      return res.json({ success: true, simulated: false, payment, redirectUrl: gateway.redirectUrl });
+    } catch (err) {
+      await payments.releaseProviderCreation(req.params.id, req.user.id);
+      throw err;
+    }
   } catch (err) {
     if (String(err.message || '').startsWith('moncash_')) {
       return res.status(502).json({ error: 'Le service MonCash est temporairement inaccessible. Réessayez.', code: 'MONCASH_PROVIDER_ERROR' });
@@ -66,6 +88,7 @@ router.post('/medication-orders/:id/payment/verify', authenticate, requireRole('
       emitPaidNotification(req.user.id, row.medication_order_id);
       return res.json({ success: true, payment: payments.toApi(row) });
     }
+    if (row.status === 'REVIEW') return res.status(409).json({ error: 'Votre paiement a été reçu, mais nécessite une vérification par notre équipe. Ne payez pas une deuxième fois.', code: 'PAYMENT_REVIEW_REQUIRED' });
     if (row.status !== 'PENDING') return res.status(409).json({ error: 'Ce paiement n’est plus vérifiable.', code: 'PAYMENT_NOT_PENDING' });
 
     let verified;
@@ -85,9 +108,18 @@ router.post('/medication-orders/:id/payment/verify', authenticate, requireRole('
     }
 
     if (!verified || verified.status !== 'completed') {
-      return res.json({
+      if (verified && verified.status === 'failed') {
+        await payments.markFailed(row.id, verified.raw || { status: 'failed' });
+        return res.status(200).json({
+          success: false,
+          payment: { status: 'FAILED', transactionId: null },
+          error: 'Le paiement a échoué. Vous pouvez réessayer avec une nouvelle référence.',
+        });
+      }
+      return res.status(202).json({
         success: false,
         payment: { status: verified?.status || 'pending', transactionId: null },
+        error: 'Le paiement est toujours en attente de confirmation.',
       });
     }
 
@@ -107,6 +139,23 @@ router.post('/medication-orders/:id/payment/verify', authenticate, requireRole('
     });
     if (saved.outcome === 'DUPLICATE_TRANSACTION' || saved.outcome === 'TRANSACTION_CONFLICT') {
       return res.status(409).json({ error: 'Cette transaction MonCash est déjà associée à un autre paiement.', code: 'DUPLICATE_TRANSACTION' });
+    }
+    if (saved.outcome === 'REVIEW') {
+      const key = 'medication-order:' + row.medication_order_id + ':payment-review:' + row.id;
+      notifications.emit({
+        userId: req.user.id, eventType: 'medication:payment-review', idempotencyKey: key + ':patient',
+        title: 'Medika', body: 'Votre paiement a été reçu et nécessite une vérification par notre équipe. Ne procédez pas à un deuxième paiement.',
+        url: '/app/consultations',
+      });
+      const { rows: admins } = await query("SELECT id FROM users WHERE role = 'admin'");
+      for (const admin of admins) {
+        notifications.emit({
+          userId: admin.id, eventType: 'medication:payment-review', idempotencyKey: key + ':admin:' + admin.id,
+          title: 'Medika', body: 'Un paiement de médicaments nécessite une vérification manuelle avant toute préparation.',
+          url: '/admin/medicaments',
+        });
+      }
+      return res.status(409).json({ error: 'Votre paiement a été reçu, mais nécessite une vérification par notre équipe. Ne payez pas une deuxième fois.', code: 'PAYMENT_REVIEW_REQUIRED' });
     }
     if (saved.outcome !== 'PAID') return res.status(409).json({ error: 'Le paiement n’a pas pu être confirmé.', code: 'PAYMENT_NOT_CONFIRMED' });
     emitPaidNotification(req.user.id, row.medication_order_id);

@@ -8,8 +8,10 @@ function toApi(row) {
   return {
     id: row.id,
     medication_order_id: row.medication_order_id,
+    quote_id: row.quote_id || null,
     payment_reference: row.payment_reference,
-    amount_htg: row.amount_htg,
+    amount_htg: Number(row.amount_htg),
+    verified_amount_htg: row.verified_amount_htg == null ? null : Number(row.verified_amount_htg),
     currency: row.currency,
     status: row.status,
     transaction_id: row.transaction_id,
@@ -40,7 +42,10 @@ async function createIntent({ orderId, patientId, simulated = false }) {
        ORDER BY confirmed_at DESC LIMIT 1 FOR UPDATE`, [orderId]
     );
     const quote = quotes[0];
-    if (!quote || new Date(quote.expires_at).getTime() <= Date.now()) {
+    if (!quote) return { outcome: 'QUOTE_EXPIRED' };
+    if (new Date(quote.expires_at).getTime() <= Date.now()) {
+      await client.query("UPDATE medication_orders SET status = 'EXPIRED', updated_at = now() WHERE id = $1", [orderId]);
+      await client.query("INSERT INTO medication_order_events (order_id,event_type,actor_name,actor_role,details) VALUES ($1,'QUOTE_EXPIRED','Système','system',$2::jsonb)", [orderId, JSON.stringify({ reason: 'DEVIS_EXPIRE_AVANT_PAIEMENT', quote_id: quote.id })]);
       return { outcome: 'QUOTE_EXPIRED' };
     }
     const amount = Number(quote.total_htg);
@@ -50,31 +55,56 @@ async function createIntent({ orderId, patientId, simulated = false }) {
       'SELECT * FROM medication_payments WHERE medication_order_id = $1 FOR UPDATE', [orderId]
     );
     if (existing[0]) {
-      if (existing[0].amount_htg !== amount) return { outcome: 'AMOUNT_CHANGED' };
+      if (existing[0].amount_htg !== amount || (existing[0].quote_id && existing[0].quote_id !== quote.id)) return { outcome: 'QUOTE_CHANGED' };
       if (existing[0].status === 'FAILED') {
         const reference = 'MED_' + crypto.randomUUID().replace(/-/g, '');
         const { rows: retried } = await client.query(
           `UPDATE medication_payments
-              SET payment_reference = $2, status = 'PENDING', transaction_id = NULL,
-                  provider_raw = NULL, simulated = $3, verified_at = NULL, updated_at = now()
+              SET quote_id = $2, payment_reference = $3, amount_htg = $4,
+                  status = 'PENDING', transaction_id = NULL, verified_amount_htg = NULL,
+                  provider_raw = NULL, simulated = $5, verified_at = NULL,
+                  redirect_url = NULL, create_started_at = NULL, updated_at = now()
             WHERE id = $1 RETURNING *`,
-          [existing[0].id, reference, simulated]
+          [existing[0].id, quote.id, reference, amount, simulated]
         );
-        return { outcome: 'PENDING', payment: toApi(retried[0]) };
+        await client.query("INSERT INTO medication_order_events (order_id,event_type,actor_id,actor_name,actor_role,details) VALUES ($1,'PAYMENT_PENDING',$2,'Patient','patient',$3::jsonb)", [orderId, patientId, JSON.stringify({ quote_id: quote.id, amount_htg: amount, retry: true })]);
+        return { outcome: 'PENDING', payment: toApi(retried[0]), redirectUrl: null };
       }
-      return { outcome: existing[0].status, payment: toApi(existing[0]) };
+      return { outcome: existing[0].status, payment: toApi(existing[0]), redirectUrl: existing[0].redirect_url || null };
     }
 
     const paymentId = 'MP_' + crypto.randomUUID();
     const reference = 'MED_' + crypto.randomUUID().replace(/-/g, '');
     const { rows: inserted } = await client.query(
       `INSERT INTO medication_payments
-        (id, medication_order_id, patient_id, payment_reference, amount_htg, simulated)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [paymentId, orderId, patientId, reference, amount, simulated]
+        (id, medication_order_id, quote_id, patient_id, payment_reference, amount_htg, simulated)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [paymentId, orderId, quote.id, patientId, reference, amount, simulated]
     );
-    return { outcome: 'PENDING', payment: toApi(inserted[0]) };
+    await client.query("INSERT INTO medication_order_events (order_id,event_type,actor_id,actor_name,actor_role,details) VALUES ($1,'PAYMENT_PENDING',$2,'Patient','patient',$3::jsonb)", [orderId, patientId, JSON.stringify({ quote_id: quote.id, amount_htg: amount })]);
+    return { outcome: 'PENDING', payment: toApi(inserted[0]), redirectUrl: null };
   });
+}
+
+async function claimProviderCreation(orderId, patientId) {
+  const { rows } = await query(
+    "UPDATE medication_payments p SET create_started_at = now(), updated_at = now() FROM medication_orders o WHERE p.medication_order_id = $1 AND o.id = p.medication_order_id AND o.patient_id = $2 AND p.status = 'PENDING' AND p.redirect_url IS NULL AND (p.create_started_at IS NULL OR p.create_started_at < now() - interval '2 minutes') RETURNING p.*",
+    [orderId, patientId]
+  );
+  return rows[0] || null;
+}
+async function saveRedirectUrl(orderId, patientId, redirectUrl) {
+  const { rows } = await query(
+    "UPDATE medication_payments p SET redirect_url = $3, create_started_at = NULL, updated_at = now() FROM medication_orders o WHERE p.medication_order_id = $1 AND o.id = p.medication_order_id AND o.patient_id = $2 AND p.status = 'PENDING' RETURNING p.id",
+    [orderId, patientId, redirectUrl]
+  );
+  return rows.length > 0;
+}
+async function releaseProviderCreation(orderId, patientId) {
+  await query(
+    "UPDATE medication_payments p SET create_started_at = NULL, updated_at = now() FROM medication_orders o WHERE p.medication_order_id = $1 AND o.id = p.medication_order_id AND o.patient_id = $2 AND p.status = 'PENDING' AND p.redirect_url IS NULL",
+    [orderId, patientId]
+  );
 }
 
 async function findByOrderId(orderId) {
@@ -87,16 +117,36 @@ async function findByOrderId(orderId) {
 /** Commit payment and order state together, only after server-side MonCash verification. */
 async function markVerified({ paymentId, patientId, transactionId, verifiedAmount, providerRaw, simulated = false }) {
   return withTransaction(async (client) => {
-    const { rows } = await client.query(
+    // Lock in the same order as createIntent (order first, payment second)
+    // to avoid a create/verify deadlock under concurrent requests.
+    const { rows: snapshotRows } = await client.query(
+      'SELECT * FROM medication_payments WHERE id = $1', [paymentId]
+    );
+    const snapshot = snapshotRows[0];
+    if (!snapshot || snapshot.patient_id !== patientId) return { outcome: 'NOT_FOUND' };
+    const { rows: orderRows } = await client.query(
+      'SELECT * FROM medication_orders WHERE id = $1 AND patient_id = $2 FOR UPDATE',
+      [snapshot.medication_order_id, patientId]
+    );
+    const order = orderRows[0];
+    if (!order || order.status !== 'ACCEPTED') return { outcome: 'INVALID_STATE' };
+    const { rows: quoteRows } = await client.query(
+      `SELECT * FROM pharmacy_quotes WHERE order_id = $1 AND superseded_at IS NULL
+       ORDER BY confirmed_at DESC LIMIT 1 FOR UPDATE`,
+      [snapshot.medication_order_id]
+    );
+    const quote = quoteRows[0];
+    const { rows: paymentRows } = await client.query(
       'SELECT * FROM medication_payments WHERE id = $1 FOR UPDATE', [paymentId]
     );
-    const payment = rows[0];
+    const payment = paymentRows[0];
     if (!payment || payment.patient_id !== patientId) return { outcome: 'NOT_FOUND' };
     if (payment.status === 'PAID') {
       return payment.transaction_id === transactionId
         ? { outcome: 'PAID', payment: toApi(payment) }
         : { outcome: 'TRANSACTION_CONFLICT' };
     }
+    if (payment.status === 'REVIEW') return { outcome: 'REVIEW', payment: toApi(payment) };
     if (payment.status !== 'PENDING') return { outcome: 'INVALID_STATE' };
     if (!transactionId || !Number.isSafeInteger(Number(verifiedAmount)) ||
         Number(verifiedAmount) !== Number(payment.amount_htg)) {
@@ -107,11 +157,32 @@ async function markVerified({ paymentId, patientId, transactionId, verifiedAmoun
       );
       return { outcome: 'VERIFICATION_MISMATCH' };
     }
+    const quoteStillValid = quote && quote.id === payment.quote_id &&
+      new Date(quote.expires_at).getTime() > Date.now() &&
+      Number(quote.total_htg) === Number(payment.amount_htg);
+
     const { rows: collision } = await client.query(
       'SELECT id FROM medication_payments WHERE transaction_id = $1 AND id <> $2',
       [transactionId, paymentId]
     );
     if (collision.length) return { outcome: 'DUPLICATE_TRANSACTION' };
+
+    if (!quoteStillValid) {
+      const { rows: reviewRows } = await client.query(
+        `UPDATE medication_payments SET status = 'REVIEW', transaction_id = $2,
+           verified_amount_htg = $3, provider_raw = $4::jsonb, simulated = $5,
+           verified_at = now(), updated_at = now() WHERE id = $1 RETURNING *`,
+        [paymentId, String(transactionId), Number(verifiedAmount), JSON.stringify(providerRaw || {}), Boolean(simulated)]
+      );
+      await client.query(
+        "INSERT INTO medication_order_events (order_id,event_type,actor_id,actor_name,actor_role,details) VALUES ($1,'PAYMENT_REVIEW',$2,'Système','system',$3::jsonb)",
+        [payment.medication_order_id, patientId, JSON.stringify({
+          reason: 'QUOTE_EXPIRED_OR_CHANGED_AFTER_PAYMENT', payment_id: paymentId,
+          transaction_id: transactionId, verified_amount_htg: verifiedAmount,
+        })]
+      );
+      return { outcome: 'REVIEW', payment: toApi(reviewRows[0]) };
+    }
 
     const { rows: updated } = await client.query(
       `UPDATE medication_payments
@@ -144,12 +215,19 @@ async function markVerified({ paymentId, patientId, transactionId, verifiedAmoun
 }
 
 async function markFailed(paymentId, providerRaw) {
-  const { rows } = await query(
-    `UPDATE medication_payments SET status = 'FAILED', provider_raw = $2::jsonb, updated_at = now()
-      WHERE id = $1 AND status = 'PENDING' RETURNING *`,
-    [paymentId, JSON.stringify(providerRaw || {})]
-  );
-  return rows[0] || null;
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      "UPDATE medication_payments SET status = 'FAILED', provider_raw = $2::jsonb, updated_at = now() WHERE id = $1 AND status = 'PENDING' RETURNING *",
+      [paymentId, JSON.stringify(providerRaw || {})]
+    );
+    const payment = rows[0];
+    if (!payment) return null;
+    await client.query(
+      "INSERT INTO medication_order_events (order_id,event_type,actor_name,actor_role,details) VALUES ($1,'PAYMENT_FAILED','Système','system',$2::jsonb)",
+      [payment.medication_order_id, JSON.stringify({ payment_id: payment.id, payment_reference: payment.payment_reference })]
+    );
+    return payment;
+  });
 }
 
-module.exports = { toApi, createIntent, findByOrderId, markVerified, markFailed };
+module.exports = { toApi, createIntent, claimProviderCreation, saveRedirectUrl, releaseProviderCreation, findByOrderId, markVerified, markFailed };

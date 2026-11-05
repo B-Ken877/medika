@@ -368,6 +368,7 @@ export interface MedicationOrder {
   sla_deadline_at?: number | null;
   sla_state?: "PENDING" | "ESCALATED" | string;
   quote?: MedicationQuote | null;
+  payment?: MedicationPayment | null;
   /** Server-derived next step — the client never guesses from raw status. */
   next_step?:
     | "WAITING_MEDIKA"
@@ -389,8 +390,10 @@ export interface MedicationPayment {
   medication_order_id: string;
   payment_reference: string;
   amount_htg: number;
+  verified_amount_htg?: number | null;
+  quote_id?: string | null;
   currency: 'HTG';
-  status: 'PENDING' | 'PAID' | 'FAILED';
+  status: 'PENDING' | 'PAID' | 'FAILED' | 'REVIEW';
   transaction_id?: string | null;
   simulated: boolean;
   created_at?: number | null;
