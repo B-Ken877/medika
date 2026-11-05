@@ -65,9 +65,13 @@ export default function LivraisonsPage() {
     });
     setExpense({ delivery_id: '', amount_htg: '', notes: '' });
   });
-  const loadReport = () => submit(async () => {
-    setReport(await apiFetch('/admin/delivery-reports?from=' + period.from + '&to=' + period.to));
-  });
+  const loadReport = async () => {
+    if (busy) return;
+    setBusy(true); setError('');
+    try { setReport(await apiFetch('/admin/delivery-reports?from=' + period.from + '&to=' + period.to)); }
+    catch (e) { setError(e.message || 'Impossible de calculer le rapport.'); }
+    finally { setBusy(false); }
+  };
   const saveBudget = () => submit(async () => {
     await apiFetch('/admin/delivery-budget', { method: 'PUT', body: { monthly_budget_htg: Number(budget.monthly_budget_htg), alert_threshold_percent: Number(budget.alert_threshold_percent) } });
   });
