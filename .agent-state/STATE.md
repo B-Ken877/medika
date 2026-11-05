@@ -1,4 +1,4 @@
-Last updated: 2026-11-05T18:20:00Z (cron-202611060132)
+Last updated: 2026-11-05T18:55:00Z (cron-202611060132)
 
 ## MAJOR CONTEXT RESET (this run)
 Issue #82 was REPURPOSED by the owner (issue body rewritten ~17:31Z, directive
@@ -102,18 +102,23 @@ issue body (18 acceptance criteria + 12 sections of spec).
   legacy fallback + retryable French error state, fonts.ready + 2x DPR PNG
   capture, independence phrase. Web 543/543, tsc clean.
 
+- P3-backend DONE (commit 358ec13, PUSHED): deliveries repo+routes (custody
+  chain, PAID-only Friday/urgent assignment, employee isolation, patient
+  confirm, expenses/budget/reports, admin employee+zone provisioning),
+  notifications categories, wiring. tests/issue-82-delivery-operations
+  9/9; backend total 515/515 (42 files).
+
 ## Next action (next run)
-1. Check lock + LOCK heartbeat; verify no new owner review comment on #82.
-2. P3: delivery integration from PR #95 reference (audit, don't copy
-   blindly): src/repos/deliveries.js + routes (patient tracking, employee
-   portal /delivery/my + events with idempotency keys, admin assign/expense/
-   report/zones). Enforce server-side: PAID-orders-only assignment, Friday
-   scheduling (America/Port-au-Prince), reasoned urgent exceptions, employee
-   isolation in EVERY query, custody transition matrix + patient
-   confirmation, notification emission after commit. Migration 013 exists.
-3. Admin UI: (admin)/livraisons page + zone/employee management; web
-   app/livreur employee portal; patient delivery tracking panel.
-4. P4: admin zones/employees CRUD + swap admin queue to zone records.
-5. P5: full verification (backend/web/admin suites, typecheck, lint,
-   builds) -> open ONE PR -> IN REVIEW.
+1. Check lock + heartbeat; check for new owner comments on #82 / branch.
+2. P3-UI: (a) medika-admin (admin)/livraisons page (queue, detail with
+   events+expenses, assign form with employee select + Friday default +
+   urgent reason, expenses, reports+budget card, zones + employees CRUD);
+   (b) medika-web/app/livreur employee portal (own deliveries, allowed
+   transitions with idempotency keys); (c) patient delivery tracking panel
+   (MedicationOrderPanel PAID state -> tracking + confirm receipt).
+   Reference PR #95 files for pages, then exceed them (FR, states).
+3. P4: swap admin medication queue to zone records display; admin zones
+   already via /api/admin/delivery-zones.
+4. P5: full verification (backend/web/admin suites, typecheck, lint,
+   builds both apps) -> open ONE PR -> IN REVIEW + evidence comment.
 One issue at a time. Never merge. Never push main.
