@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api/client";
 type Delivery = {
   id: string; medication_order_id: string; reference: string; patient_name: string;
   delivery_address: string; delivery_phone: string; delivery_zone: string; city: string;
-  pickup_pharmacy_name: string; pickup_reference: string; scheduled_for: string;
+  pickup_pharmacy_name: string; pickup_reference: string; scheduled_for: string; delivery_window: string;
   urgent: boolean; status: string;
 };
 const STATUS_FR: Record<string, string> = { ASSIGNED: "Affectée", PHARMACY_PREPARING: "Préparation en pharmacie", READY_FOR_PICKUP: "Prête au retrait", PICKED_UP: "Récupérée", OUT_FOR_DELIVERY: "En livraison", AWAITING_CONFIRMATION: "En attente de confirmation", DELIVERED: "Livrée", FAILED_ATTEMPT: "Tentative échouée", RETURNED_ESCALATED: "Retournée / escaladée" };
@@ -72,7 +72,7 @@ export default function DeliveryEmployeePortal() {
           {deliveries.map((d) => (
             <article className="card" key={d.id} style={{ padding: 18 }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                <div><strong>{d.reference}</strong><p className="small">{d.urgent ? "Livraison urgente" : "Livraison planifiée"} · {new Date(d.scheduled_for).toLocaleDateString("fr-FR")}</p></div>
+                <div><strong>{d.reference}</strong><p className="small">{d.urgent ? "Livraison urgente" : "Livraison planifiée"} · {new Date(d.scheduled_for).toLocaleDateString("fr-FR")} · {{ MATIN: "Matin · 08 h–12 h", APRES_MIDI: "Après-midi · 12 h–17 h", SOIR: "Soir · 17 h–20 h", JOURNEE: "Toute la journée" }[d.delivery_window] || "Toute la journée"}</p></div>
                 <span className="badge badge-green">{STATUS_FR[d.status] || d.status}</span>
               </div>
               <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
