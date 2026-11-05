@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS medication_orders (
   -- Optional patient-provided delivery context for the manual quote call.
   delivery_address         TEXT NOT NULL DEFAULT '',
   delivery_phone           TEXT NOT NULL DEFAULT '',
+  delivery_zone            TEXT NOT NULL DEFAULT '',
   created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -115,8 +116,6 @@ CREATE TABLE IF NOT EXISTS pharmacy_quotes (
   pharmacy_whatsapp   TEXT NOT NULL DEFAULT '',
   items               JSONB NOT NULL DEFAULT '[]'::jsonb,
   total_htg           INTEGER NOT NULL CHECK (total_htg >= 0),
-  delivery_fee_htg    INTEGER CHECK (delivery_fee_htg IS NULL OR delivery_fee_htg >= 0),
-  delivery_notes      TEXT NOT NULL DEFAULT '',
   agent_id            TEXT REFERENCES users(id) ON DELETE SET NULL,
   agent_name          TEXT NOT NULL DEFAULT '',
   -- How the pharmacy response was confirmed (default: WhatsApp phone call).
