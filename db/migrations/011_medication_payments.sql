@@ -25,6 +25,8 @@ CREATE TABLE medication_payments (
   transaction_id TEXT UNIQUE,
   verified_amount_htg INTEGER,
   simulated BOOLEAN NOT NULL DEFAULT FALSE,
+  redirect_url TEXT,
+  create_started_at TIMESTAMPTZ,
   provider_raw JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
