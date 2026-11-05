@@ -31,8 +31,86 @@ import {
   createMedicationPayment,
   verifyMedicationPayment,
 } from "@/lib/api/endpoints";
-import { ApiError } from "@/lib/api/client";
+import { ApiError, apiFetch } from "@/lib/api/client";
 import { ErrorAlert, Spinner } from "@/components/ui/primitives";
+
+
+type DeliveryTrackingData = {
+  id: string;
+  status: string;
+  scheduled_for: string;
+  urgent: boolean;
+  delivery_zone: string;
+  city: string;
+  events: { event_type: string; reason?: string; created_at: string }[];
+};
+const DELIVERY_STATUS_FR: Record<string, string> = {
+  ASSIGNED: "Livraison planifiée",
+  PHARMACY_PREPARING: "La pharmacie prépare votre commande",
+  READY_FOR_PICKUP: "Commande prête au retrait",
+  PICKED_UP: "Commande récupérée",
+  OUT_FOR_DELIVERY: "En cours de livraison",
+  AWAITING_CONFIRMATION: "En attente de votre confirmation",
+  DELIVERED: "Livraison confirmée",
+  FAILED_ATTEMPT: "Tentative de livraison échouée",
+  RETURNED_ESCALATED: "Retour en cours de traitement",
+};
+
+function MedicationDeliveryTracking({ orderId, token }: { orderId: string; token: string }) {
+  const [tracking, setTracking] = useState<DeliveryTrackingData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    try {
+      const data = await apiFetch<DeliveryTrackingData>("/api/medication-orders/" + encodeURIComponent(orderId) + "/delivery", { token });
+      setTracking(data); setError(null);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) { setTracking(null); setError(null); }
+      else setError(e instanceof Error ? e.message : "Le suivi est momentanément indisponible.");
+    } finally { setLoading(false); }
+  }, [orderId, token]);
+  useEffect(() => { void load(); }, [load]);
+  const confirm = async () => {
+    setBusy(true); setError(null);
+    try {
+      await apiFetch("/api/medication-orders/" + encodeURIComponent(orderId) + "/delivery/confirm", { method: "POST", token, body: {} });
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "La confirmation a échoué."); }
+    finally { setBusy(false); }
+  };
+  return (
+    <section className="card" style={{ margin: 12 }} aria-label="Suivi de livraison">
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+        <h3 style={{ margin: 0, color: "var(--green-800)" }}>Suivi de votre livraison</h3>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => void load()} disabled={loading}>Actualiser</button>
+      </div>
+      {loading ? <p className="small">Chargement du suivi…</p> : !tracking ? (
+        <p className="small" style={{ marginTop: 10 }}>Votre paiement est confirmé. La livraison sera planifiée par notre équipe. Vous recevrez une notification dès son affectation.</p>
+      ) : (
+        <>
+          <p style={{ marginTop: 10 }}><strong>{DELIVERY_STATUS_FR[tracking.status] || tracking.status}</strong></p>
+          <p className="small">{tracking.urgent ? "Livraison prioritaire" : "Livraison régulière"} · {new Date(tracking.scheduled_for).toLocaleDateString("fr-FR")} · {tracking.delivery_zone}, {tracking.city}</p>
+          {tracking.status === "AWAITING_CONFIRMATION" && (
+            <button type="button" className="btn btn-primary" onClick={() => void confirm()} disabled={busy}>
+              {busy ? "Confirmation…" : "Confirmer la réception"}
+            </button>
+          )}
+          {tracking.status === "DELIVERED" && <p className="alert alert-success" role="status">Réception confirmée. Merci de faire confiance à Medika.</p>}
+          <ol className="small" style={{ marginTop: 12, paddingLeft: 20 }}>
+            {tracking.events.map((event, index) => (
+              <li key={tracking.id + "-" + index} style={{ marginBottom: 6 }}>
+                {DELIVERY_STATUS_FR[event.event_type] || event.event_type}
+                {event.created_at ? " · " + new Date(event.created_at).toLocaleString("fr-FR") : ""}
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
+      {error && <p className="small" role="alert" style={{ color: "var(--danger, #b3261e)" }}>{error}</p>}
+    </section>
+  );
+}
 
 const AVAILABILITY_LABELS_FR: Record<string, string> = {
   AVAILABLE: "Disponible",
@@ -559,6 +637,7 @@ export function MedicationOrderPanel({
             <p className="small">Votre paiement MonCash a été vérifié. L’équipe Medika peut maintenant préparer votre commande.</p>
           </section>
         )}
+        {order.status === "PAID" && token && <MedicationDeliveryTracking orderId={order.id} token={token} />}
       </div>
     );
   }
