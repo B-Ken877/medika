@@ -8,7 +8,7 @@
  * established that convention (e.g. CreateConsultationRequest).
  */
 
-export type Role = "patient" | "doctor" | "admin";
+export type Role = "patient" | "doctor" | "admin" | "delivery";
 
 export type ConsultationStatus =
   | "RECHERCHE_MEDECIN"
@@ -363,6 +363,7 @@ export interface MedicationOrder {
   delivery_address?: string;
   delivery_phone?: string;
   delivery_zone?: string;
+  delivery_city?: string;
   requested_at?: number | null;
   /** 30-minute operations SLA target (epoch seconds, from the request). */
   sla_deadline_at?: number | null;
