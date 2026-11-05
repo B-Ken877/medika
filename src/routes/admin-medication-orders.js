@@ -25,6 +25,7 @@
 
 const express = require('express');
 const ordersRepo = require('../repos/medication-orders');
+const medicationPayments = require('../repos/medication-payments');
 const notifications = require('../notifications/emit');
 const { query } = require('../db');
 
@@ -144,7 +145,8 @@ router.get('/medication-orders/:id', async (req, res, next) => {
         });
       }
     }
-    res.json({ ...detail, whatsapp });
+    const paymentRow = await medicationPayments.findByOrderId(req.params.id);
+    res.json({ ...detail, payment: medicationPayments.toApi(paymentRow), whatsapp });
   } catch (err) { next(err); }
 });
 
