@@ -307,6 +307,7 @@ export type MedicationOrderStatus =
   | "ESCALATED"
   | "QUOTED"
   | "ACCEPTED"
+  | "PAID"
   | "DECLINED"
   | "CANCELLED"
   | "EXPIRED";
@@ -349,6 +350,19 @@ export interface MedicationQuote {
   expired?: boolean;
 }
 
+export interface MedicationPayment {
+  id: number;
+  order_id: string;
+  quote_id: string;
+  reference: string;
+  amount_htg: number;
+  currency: "HTG";
+  status: "PENDING" | "PAID" | "FAILED" | "EXPIRED" | string;
+  transaction_id?: string | null;
+  simulated?: boolean;
+  verified_at?: number | null;
+}
+
 export interface MedicationOrder {
   id: string;
   reference: string;
@@ -368,6 +382,7 @@ export interface MedicationOrder {
   sla_deadline_at?: number | null;
   sla_state?: "PENDING" | "ESCALATED" | string;
   quote?: MedicationQuote | null;
+  payment?: MedicationPayment | null;
   /** Server-derived next step — the client never guesses from raw status. */
   next_step?:
     | "WAITING_MEDIKA"
