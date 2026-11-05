@@ -2,29 +2,46 @@
 
 /**
  * Patient/doctor-facing prescription document — « Ordonnance médicale »
- * (consolidated issue #82 §3 — critical visual deliverable).
+ * (issue #101 — professional Medika ordonnance; supersedes the #82 §3 layout).
  *
- * The document IS the visual focus: a white medical-document surface with a
- * clear header (title, stable reference, issue date), aligned identity
- * blocks (prescriber + patient, only verified recorded values), readable
- * numbered medication rows that wrap long drug names, general instructions
- * and a factual footer. Restrained Medika green branding; no fabricated
- * signature, credential or verification claim. Strictly NO prices (the
- * server allowlist guarantees it; only allowlisted fields are rendered).
+ * A formal French medical document: real Medika logo asset from the repo
+ * (`/icons/icon-512.png`, never invented artwork), deep-emerald branding with
+ * restrained mint accents, formal title « PRESCRIPTION MÉDICALE / ORDONNANCE »,
+ * a confidential-document marking, aligned identity blocks (prescriber +
+ * patient — only verified recorded values), an Rx prescription section with
+ * numbered wrap-safe medication rows, general instructions, a clearly
+ * DESIGNATED (always empty) signature space above the printed prescriber
+ * identity, and a Medika-Haïti factual footer. Strictly NO prices (the server
+ * allowlist guarantees it; only allowlisted fields are rendered).
  *
- * States (issue #82 §3): loading, retryable error, empty, and a legacy
+ * Data honesty (inherited from #82, kept intact):
+ * - Fields without a recorded value are omitted, never invented. The current
+ *   PrescriptionDocument payload carries NO patient birth date, NO doctor
+ *   contact details and NO stored signature image — so none is rendered
+ *   (schema gap documented in the PR; needs a separate migration review).
+ * - The prescriber identity is ONLY `doc.doctor.name` (authoritative record).
+ *   `consultation.doctor_id` is an internal identifier, NOT a display name —
+ *   it is never rendered anywhere on the document (owner review, PR #104).
+ *   When no recorded name exists the prescriber block shows the same
+ *   empty-value marker as every other block and the signature caption is
+ *   omitted entirely.
+ * - No fabricated signature, registration number, credential or verification
+ *   claim — the signature area is a designated empty space.
+ *
+ * States (issue #82 §3, kept): loading, retryable error, empty, and a legacy
  * free-text fallback ONLY when the structured endpoint genuinely answers
  * 404 (pre-#82 record) — network/server errors are never silently swapped
  * for the legacy text.
  *
- * Actions: « Télécharger l'ordonnance » (high-quality PNG of the document
- * node only, html2canvas lazily imported, fonts awaited before capture,
- * 2× DPR, French feedback on failure) and « Imprimer / Enregistrer en PDF »
- * (browser print pipeline; @media print isolates the document on A4).
+ * Actions (issue #101): « Télécharger en PNG » (high-quality capture of the
+ * document node only, html2canvas lazily imported, fonts awaited before
+ * capture, 2× DPR, French feedback on failure) and « Exporter en PDF (A4) »
+ * (browser print pipeline; @media print isolates the document on A4 with
+ * page-break-safe medication rows).
  * The independent-purchase alternative is explicit in French.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ClipboardList, Download, Printer, RefreshCw, Stethoscope } from "lucide-react";
+import { ClipboardList, Download, Printer, RefreshCw } from "lucide-react";
 import type { Consultation, PrescriptionDocument } from "@/lib/api/types";
 import { getPrescriptionDocument } from "@/lib/api/endpoints";
 import { ApiError } from "@/lib/api/client";
@@ -47,21 +64,47 @@ function formatIssueDate(epochSeconds?: number | null): string | null {
 
 const INK = "#122d28";
 const MUTED = "#3f4f4b";
+const EMERALD = "#145b50"; // institutional deep emerald (manifest theme_color)
+const MINT_LINE = "#d9ece0";
+const MINT_SOFT = "#e9f6ef";
 
 /** Small uppercase section label — the document's visual rhythm. */
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function SectionLabel({ children, withRx = false }: { children: React.ReactNode; withRx?: boolean }) {
   return (
-    <div
-      style={{
-        fontSize: "0.7rem",
-        fontWeight: 700,
-        letterSpacing: "0.09em",
-        textTransform: "uppercase",
-        color: "#5b7470",
-        marginBottom: 6,
-      }}
-    >
-      {children}
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+      {withRx && (
+        <span
+          aria-hidden
+          style={{
+            width: 26,
+            height: 26,
+            borderRadius: 7,
+            background: EMERALD,
+            color: "#ffffff",
+            fontFamily: "Georgia, 'Times New Roman', serif",
+            fontStyle: "italic",
+            fontWeight: 700,
+            fontSize: "0.9rem",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            letterSpacing: "0.02em",
+          }}
+        >
+          Rx
+        </span>
+      )}
+      <span
+        style={{
+          fontSize: "0.7rem",
+          fontWeight: 700,
+          letterSpacing: "0.12em",
+          textTransform: "uppercase",
+          color: EMERALD,
+        }}
+      >
+        {children}
+      </span>
     </div>
   );
 }
@@ -80,17 +123,21 @@ function MedicationEntry({ item, index }: { item: PrescriptionDocument["items"][
     item.refills ? `Renouvellements : ${item.refills}` : null,
   ].filter(Boolean);
   return (
-    <div style={{ display: "flex", gap: 10, padding: "10px 0", borderBottom: "1px solid #e3ece9" }}>
+    <div
+      className="ordonnance-entry"
+      style={{ display: "flex", gap: 12, padding: "12px 0", borderBottom: "1px solid #e3ece9" }}
+    >
       <div
         aria-hidden
         style={{
           flexShrink: 0,
-          width: 22,
-          height: 22,
+          width: 24,
+          height: 24,
           borderRadius: 999,
-          background: "#e7f2ee",
-          color: "#1f6f5c",
-          fontSize: "0.78rem",
+          background: MINT_SOFT,
+          border: "1px solid " + MINT_LINE,
+          color: EMERALD,
+          fontSize: "0.8rem",
           fontWeight: 700,
           display: "flex",
           alignItems: "center",
@@ -100,16 +147,18 @@ function MedicationEntry({ item, index }: { item: PrescriptionDocument["items"][
       >
         {index + 1}
       </div>
-      <div style={{ minWidth: 0, overflowWrap: "anywhere" }}>
-        <div style={{ fontWeight: 700, color: INK, fontSize: "0.95rem" }}>{heading}</div>
+      <div style={{ minWidth: 0, overflowWrap: "anywhere", flex: 1 }}>
+        <div style={{ fontWeight: 700, color: INK, fontSize: "0.98rem", fontFamily: "Georgia, 'Times New Roman', serif" }}>
+          {heading}
+        </div>
         {details.length > 0 && (
-          <div style={{ fontSize: "0.88rem", color: MUTED, marginTop: 2 }}>{details.join(" · ")}</div>
+          <div style={{ fontSize: "0.88rem", color: MUTED, marginTop: 4, lineHeight: 1.5 }}>{details.join("  ·  ")}</div>
         )}
         {supply.length > 0 && (
-          <div style={{ fontSize: "0.88rem", color: MUTED, marginTop: 2 }}>{supply.join(" · ")}</div>
+          <div style={{ fontSize: "0.86rem", color: MUTED, marginTop: 3 }}>{supply.join("  ·  ")}</div>
         )}
         {item.instructions ? (
-          <div style={{ fontSize: "0.86rem", fontStyle: "italic", color: MUTED, marginTop: 3 }}>
+          <div style={{ fontSize: "0.87rem", fontStyle: "italic", color: MUTED, marginTop: 4, lineHeight: 1.5 }}>
             {item.instructions}
           </div>
         ) : null}
@@ -128,95 +177,163 @@ export function OrdonnanceDocumentBody({
   doc,
   legacyText,
   fallbackPatientName,
-  fallbackDoctorId,
 }: {
   doc: PrescriptionDocument | null;
   legacyText: string;
   fallbackPatientName?: string | null;
-  fallbackDoctorId?: string | null;
 }) {
   const hasStructured = Boolean(doc);
   const reference = doc?.reference ?? null;
   const issueDate = formatIssueDate(doc?.issued_at);
+  // Authoritative prescriber identity ONLY — never the consultation's
+  // internal doctor_id (owner review correction, PR #104).
+  const doctorName = doc?.doctor?.name ?? null;
   return (
     <div
       className="ordonnance-doc"
       style={{
         background: "#ffffff",
         color: INK,
-        borderRadius: 12,
-        border: "1px solid #dbe7e3",
-        padding: "20px 18px",
-        boxShadow: "0 1px 2px rgba(18,45,40,0.06)",
+        borderRadius: 14,
+        border: `1px solid ${MINT_LINE}`,
+        padding: "26px 24px 20px",
+        boxShadow: "0 1px 2px rgba(18,45,40,0.06), 0 12px 32px -18px rgba(13,58,50,0.18)",
       }}
     >
-      {/* ── Header: brand + title, reference + date ─────────────────────── */}
+      {/* ── Header: Medika logo asset + identity, confidential marking ──── */}
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div
-            aria-hidden
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: 10,
-              background: "#1f6f5c",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "#ffffff",
-            }}
-          >
-            <Stethoscope size={20} aria-hidden />
-          </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {/* Real Medika logo asset shipped in this repository (no invented artwork).
+              Deliberately a plain same-origin <img>: the PNG capture (html2canvas)
+              needs a stable, already-loaded element without srcset/lazy variants. */}
+          {/* eslint-disable-next-line @next/next/no-img-element -- html2canvas capture requires a plain <img>; 2.8KB same-origin asset */}
+          <img
+            src="/icons/icon-512.png"
+            alt="Medika"
+            width={44}
+            height={44}
+            style={{ width: 44, height: 44, borderRadius: 12, display: "block" }}
+          />
           <div>
-            <h3 style={{ margin: 0, fontSize: "1.22rem", lineHeight: 1.2, fontWeight: 700, color: "#1f6f5c" }}>
-              Ordonnance médicale
-            </h3>
-            <div style={{ fontSize: "0.78rem", color: MUTED, marginTop: 2 }}>Medika · Téléconsultation</div>
+            <div
+              style={{
+                fontFamily: "Georgia, 'Times New Roman', serif",
+                fontSize: "1.3rem",
+                fontWeight: 700,
+                lineHeight: 1.15,
+                color: EMERALD,
+              }}
+            >
+              Medika
+            </div>
+            <div style={{ fontSize: "0.76rem", color: MUTED, marginTop: 2 }}>
+              Téléconsultation · Haïti
+            </div>
           </div>
         </div>
-        <div style={{ textAlign: "right", fontSize: "0.8rem", color: MUTED, lineHeight: 1.5 }}>
-          {reference && (
-            <div style={{ fontWeight: 600, color: INK }}>Réf. : {reference}</div>
-          )}
-          {issueDate && <div>Délivrée le {issueDate}</div>}
+        <div
+          style={{
+            fontSize: "0.62rem",
+            fontWeight: 700,
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
+            color: EMERALD,
+            border: `1px solid ${MINT_LINE}`,
+            background: MINT_SOFT,
+            borderRadius: 999,
+            padding: "5px 12px",
+            whiteSpace: "nowrap",
+          }}
+        >
+          Document médical confidentiel
         </div>
       </div>
-      <div aria-hidden style={{ height: 3, background: "#1f6f5c", borderRadius: 2, marginTop: 14 }} />
 
-      {/* ── Identity blocks: prescriber / patient ───────────────────────── */}
-      <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 14 }}>
+      {/* ── Formal title: PRESCRIPTION MÉDICALE / ORDONNANCE ────────────── */}
+      <div style={{ textAlign: "center", marginTop: 18, marginBottom: 4 }}>
+        <div
+          style={{
+            fontSize: "0.66rem",
+            fontWeight: 700,
+            letterSpacing: "0.22em",
+            textTransform: "uppercase",
+            color: MUTED,
+          }}
+        >
+          Prescription médicale
+        </div>
+        <div
+          style={{
+            fontFamily: "Georgia, 'Times New Roman', serif",
+            fontSize: "1.55rem",
+            fontWeight: 700,
+            letterSpacing: "0.10em",
+            textTransform: "uppercase",
+            color: EMERALD,
+            marginTop: 2,
+            lineHeight: 1.2,
+          }}
+        >
+          Ordonnance
+        </div>
+      </div>
+      <div aria-hidden style={{ height: 3, background: EMERALD, borderRadius: 2, marginTop: 8 }} />
+
+      {/* ── Identity blocks: prescriber / patient / délivrance ──────────── */}
+      <div
+        className="ordonnance-meta"
+        style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 16 }}
+      >
         <div style={{ flex: "1 1 220px", minWidth: 0 }}>
           <SectionLabel>Prescripteur</SectionLabel>
-          <div style={{ fontWeight: 700, fontSize: "0.95rem", overflowWrap: "anywhere" }}>
-            {doc?.doctor?.name ?? fallbackDoctorId ?? "—"}
+          <div
+            style={{
+              fontWeight: 700,
+              fontSize: "0.98rem",
+              overflowWrap: "anywhere",
+              fontFamily: "Georgia, 'Times New Roman', serif",
+            }}
+          >
+            {doctorName ?? "—"}
           </div>
           {doc?.doctor?.specialty && (
-            <div style={{ fontSize: "0.86rem", color: MUTED }}>{doc.doctor.specialty}</div>
+            <div style={{ fontSize: "0.86rem", color: MUTED, marginTop: 2 }}>{doc.doctor.specialty}</div>
           )}
           {doc?.doctor?.license_number && (
-            <div style={{ fontSize: "0.82rem", color: MUTED }}>
+            <div style={{ fontSize: "0.82rem", color: MUTED, marginTop: 2 }}>
               N° d’enregistrement : {doc.doctor.license_number}
             </div>
           )}
           {doc?.doctor?.hospital && (
-            <div style={{ fontSize: "0.82rem", color: MUTED }}>{doc.doctor.hospital}</div>
+            <div style={{ fontSize: "0.82rem", color: MUTED, marginTop: 2 }}>{doc.doctor.hospital}</div>
+          )}
+          {doc?.doctor?.location && (
+            <div style={{ fontSize: "0.82rem", color: MUTED, marginTop: 2 }}>{doc.doctor.location}</div>
           )}
         </div>
         <div style={{ flex: "1 1 180px", minWidth: 0 }}>
           <SectionLabel>Patient</SectionLabel>
-          <div style={{ fontWeight: 700, fontSize: "0.95rem", overflowWrap: "anywhere" }}>
+          <div style={{ fontWeight: 700, fontSize: "0.98rem", overflowWrap: "anywhere" }}>
             {doc?.patient?.name ?? fallbackPatientName ?? "—"}
             {doc?.patient?.age != null && doc.patient.age !== "" ? (
               <span style={{ fontWeight: 400, color: MUTED }}> — {doc.patient.age} ans</span>
             ) : null}
           </div>
         </div>
+        <div style={{ flex: "1 1 170px", minWidth: 0 }}>
+          <SectionLabel>Délivrance</SectionLabel>
+          {issueDate && (
+            <div style={{ fontSize: "0.86rem", color: INK, lineHeight: 1.5 }}>Délivrée le {issueDate}</div>
+          )}
+          {reference && (
+            <div style={{ fontSize: "0.82rem", color: MUTED, marginTop: 2, fontWeight: 600 }}>Réf. : {reference}</div>
+          )}
+        </div>
       </div>
 
-      {/* ── Prescriptions ───────────────────────────────────────────────── */}
-      <div style={{ marginTop: 16 }}>
-        <SectionLabel>Prescriptions</SectionLabel>
+      {/* ── Rx — Prescriptions ──────────────────────────────────────────── */}
+      <div style={{ marginTop: 20 }}>
+        <SectionLabel withRx>Prescriptions</SectionLabel>
         {hasStructured && doc && doc.items.length > 0 && (
           <div style={{ borderTop: "1px solid #e3ece9" }}>
             {doc.items.map((item, i) => (
@@ -232,7 +349,15 @@ export function OrdonnanceDocumentBody({
         {/* Legacy record (pre-#82): the verbatim free text, readable as-is.
            No date/reference is invented for legacy rows. */}
         {!hasStructured && (
-          <div style={{ padding: "6px 0 2px", whiteSpace: "pre-wrap", fontSize: "0.92rem", lineHeight: 1.55, borderTop: "1px solid #e3ece9" }}>
+          <div
+            style={{
+              padding: "6px 0 2px",
+              whiteSpace: "pre-wrap",
+              fontSize: "0.92rem",
+              lineHeight: 1.55,
+              borderTop: "1px solid #e3ece9",
+            }}
+          >
             {legacyText}
           </div>
         )}
@@ -240,20 +365,72 @@ export function OrdonnanceDocumentBody({
 
       {/* ── General instructions ────────────────────────────────────────── */}
       {hasStructured && doc?.general_instructions ? (
-        <div style={{ marginTop: 14 }}>
+        <div style={{ marginTop: 16 }}>
           <SectionLabel>Instructions générales</SectionLabel>
-          <div style={{ whiteSpace: "pre-wrap", fontSize: "0.9rem", lineHeight: 1.55, color: MUTED }}>
+          <div
+            style={{
+              whiteSpace: "pre-wrap",
+              fontSize: "0.9rem",
+              lineHeight: 1.55,
+              color: MUTED,
+              background: MINT_SOFT,
+              border: `1px solid ${MINT_LINE}`,
+              borderRadius: 10,
+              padding: "10px 14px",
+            }}
+          >
             {doc.general_instructions}
           </div>
         </div>
       ) : null}
 
-      {/* ── Footer ──────────────────────────────────────────────────────── */}
+      {/* ── Signature area: designated space, printed prescriber identity ──
+          NO stored signature exists in the data model — the space stays
+          empty; nothing is ever fabricated. */}
+      <div
+        className="ordonnance-sign"
+        style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginTop: 26 }}
+      >
+        <div style={{ flex: "1 1 200px", minWidth: 0, fontSize: "0.8rem", color: MUTED, lineHeight: 1.55 }}>
+          Ordonnance établie lors d’une téléconsultation Medika.
+          <br />
+          Les médicaments prescrits peuvent être achetés en pharmacie sur présentation de ce document.
+        </div>
+        <div style={{ flex: "0 1 230px", minWidth: 200 }}>
+          <div
+            style={{
+              height: 84,
+              border: `1.5px dashed ${MINT_LINE}`,
+              borderRadius: 10,
+              background: "#fcfefd",
+              display: "flex",
+              alignItems: "flex-end",
+              justifyContent: "center",
+              paddingBottom: 8,
+              fontSize: "0.68rem",
+              fontWeight: 700,
+              letterSpacing: "0.10em",
+              textTransform: "uppercase",
+              color: "#7d948f",
+            }}
+          >
+            Signature du prescripteur
+          </div>
+          {doctorName && (
+            <div style={{ fontSize: "0.8rem", color: INK, marginTop: 6, textAlign: "center", fontWeight: 600 }}>
+              {doctorName}
+              {doc?.doctor?.specialty ? <span style={{ fontWeight: 400, color: MUTED }}> — {doc.doctor.specialty}</span> : null}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Footer: Medika identity + Haïti context ─────────────────────── */}
       <div
         style={{
-          marginTop: 18,
+          marginTop: 20,
           paddingTop: 10,
-          borderTop: "1px solid #dbe7e3",
+          borderTop: `2px solid ${EMERALD}`,
           display: "flex",
           justifyContent: "space-between",
           gap: 10,
@@ -262,7 +439,7 @@ export function OrdonnanceDocumentBody({
           color: MUTED,
         }}
       >
-        <span>Document électronique délivré via la plateforme Medika.</span>
+        <span>Medika — plateforme de téléconsultation médicale · Haïti</span>
         {reference && <span>Réf. {reference}</span>}
       </div>
     </div>
@@ -321,7 +498,11 @@ export function PrescriptionPanel({
 
   if (loading) {
     return (
-      <section className="card" style={{ margin: 12 }} aria-label="Ordonnance médicale">
+      <section
+        className="card"
+        style={{ margin: 12, background: "#f7fbf9", borderColor: MINT_LINE }}
+        aria-label="Ordonnance médicale"
+      >
         <Spinner label="Chargement de l’ordonnance…" />
       </section>
     );
@@ -330,7 +511,11 @@ export function PrescriptionPanel({
   // Genuine fetch failure (not a 404): explicit retryable error state.
   if (loadFailed) {
     return (
-      <section className="card" style={{ margin: 12 }} aria-label="Ordonnance médicale">
+      <section
+        className="card"
+        style={{ margin: 12, background: "#f7fbf9", borderColor: MINT_LINE }}
+        aria-label="Ordonnance médicale"
+      >
         <ErrorAlert error={new ApiError("network", 0, "Impossible de charger l’ordonnance. Vérifiez votre connexion puis réessayez.")} />
         <button type="button" className="btn btn-secondary" onClick={retry} style={{ marginTop: 8 }}>
           <RefreshCw size={15} aria-hidden /> Réessayer
@@ -390,12 +575,15 @@ export function PrescriptionPanel({
       aria-label="Ordonnance médicale"
     >
       {/* Actions — outside the captured/printed node, hidden on paper. */}
-      <div className="ordonnance-actions" style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginBottom: 10 }}>
+      <div
+        className="ordonnance-actions"
+        style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginBottom: 10 }}
+      >
         <button type="button" className="btn btn-secondary" onClick={onDownload} disabled={downloading}>
-          <Download size={15} aria-hidden /> {downloading ? "Téléchargement…" : "Télécharger l’ordonnance"}
+          <Download size={15} aria-hidden /> {downloading ? "Téléchargement…" : "Télécharger en PNG"}
         </button>
         <button type="button" className="btn btn-secondary" onClick={onPrint}>
-          <Printer size={15} aria-hidden /> Imprimer / Enregistrer en PDF
+          <Printer size={15} aria-hidden /> Exporter en PDF (A4)
         </button>
       </div>
       <ErrorAlert error={actionError} />
@@ -406,7 +594,6 @@ export function PrescriptionPanel({
           doc={doc}
           legacyText={legacyText}
           fallbackPatientName={consultation.patient_name}
-          fallbackDoctorId={consultation.doctor_id}
         />
       </div>
 

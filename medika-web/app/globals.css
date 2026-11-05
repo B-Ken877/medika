@@ -2929,10 +2929,12 @@ body.has-install-banner .app-main { padding-bottom: calc(var(--bottomnav-h) + 11
 .notif-row.unread { background: rgba(16, 115, 73, 0.05); }
 .notif-row .brand-mark { flex-shrink: 0; }
 
-/* ── Prescription document — « Ordonnance médicale » (issue #82) ─────────────
+/* ── Prescription document — « Ordonnance médicale » (#82, redesign #101) ────
    The action row is screen-only; on paper the document is isolated on A4
    with comfortable margins so it stays readable on paper and in the
-   browser's "save as PDF" flow. */
+   browser's "save as PDF" flow. Issue #101: long documents paginate cleanly
+   — medication rows, the identity/meta strip and the signature block never
+   split across pages; small brand chips keep their exact colors. */
 .ordonnance-actions { display: flex; }
 @media print {
   @page { size: A4; margin: 14mm; }
@@ -2951,8 +2953,17 @@ body.has-install-banner .app-main { padding-bottom: calc(var(--bottomnav-h) + 11
     padding: 0;
     background: #ffffff;
     box-shadow: none;
+    border: 0;
   }
   .ordonnance-actions { display: none !important; }
   /* Never let a stray background color waste toner on paper. */
   body { background: #ffffff !important; }
+  /* Pagination safety (issue #101): one medication row / the meta strip /
+     the signature area never break across two pages. */
+  .ordonnance-entry,
+  .ordonnance-meta,
+  .ordonnance-sign { break-inside: avoid; page-break-inside: avoid; }
+  .ordonnance-sign { break-before: avoid; }
+  /* Small brand chips keep their exact ink (text colors already print). */
+  .ordonnance-doc * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }

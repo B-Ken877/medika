@@ -1,19 +1,27 @@
 /**
- * Issue #82 — « Ordonnance médicale » : structured prescription document.
+ * Issues #82 + #101 — « Ordonnance médicale » : professional Medika
+ * prescription document.
  *
  * Contracts:
- *  1. SSR of the structured document (French title, stable reference,
- *     prescriber identity + credentials only when present, patient, items
- *     with optional fields, general instructions).
+ *  1. SSR of the structured document (formal French title
+ *     « PRESCRIPTION MÉDICALE / ORDONNANCE », stable reference, prescriber
+ *     identity + credentials only when present, patient, items with optional
+ *     fields, general instructions).
  *  2. NO price/financial vocabulary anywhere in the document sources.
- *  3. NO fabricated signature/credential/verification claim.
+ *  3. NO fabricated signature/credential/verification claim — only a clearly
+ *     designated EMPTY signature space with the printed prescriber identity.
  *  4. Legacy free-text prescriptions stay readable (verbatim, no invented
  *     reference/date).
- *  5. Download (« Télécharger l'ordonnance », lazy html2canvas) + print
- *     (« Imprimer / Enregistrer en PDF ») with A4 print isolation CSS.
- *  6. Structured composer (French labels, add/remove, single-issuance
+ *  5. PNG download (« Télécharger en PNG », lazy html2canvas) + PDF export
+ *     (« Exporter en PDF (A4) » via the print pipeline) with A4 print
+ *     isolation and page-break-safe rows.
+ *  6. Real Medika logo asset from the repository (/icons/icon-512.png) —
+ *     never invented artwork; exactly ONE <img> in the document (no
+ *     signature image exists in the data model).
+ *  7. Confidential-medical-document marking and Medika-Haïti footer.
+ *  8. Structured composer (French labels, add/remove, single-issuance
  *     semantics, anti double-submit).
- *  7. Consultation page renders the panel for patient AND doctor when
+ *  9. Consultation page renders the panel for patient AND doctor when
  *     the consultation is finished.
  */
 import { describe, expect, it } from "vitest";
@@ -92,9 +100,17 @@ describe("OrdonnanceDocumentBody — structured document (issue #82)", () => {
     createElement(OrdonnanceDocumentBody, { doc: structuredDoc(), legacyText: "" }),
   ));
 
-  it("titles the document « Ordonnance médicale » and shows the stable reference", () => {
-    expect(html).toContain("Ordonnance médicale");
+  it("titles the document « PRESCRIPTION MÉDICALE / ORDONNANCE » and shows the stable reference (issue #101)", () => {
+    expect(html).toContain("Prescription médicale");
+    expect(html).toContain("Ordonnance");
     expect(html).toContain("Réf. : ORD-2026-1A2B3C4D5E");
+  });
+
+  it("brands the document with the real Medika logo asset, the confidential marking and the Haïti footer (issue #101)", () => {
+    expect(html).toContain("/icons/icon-512.png");
+    expect(html).toContain('alt="Medika"');
+    expect(html).toContain("Document médical confidentiel");
+    expect(html).toContain("Haïti");
   });
 
   it("shows the prescriber identity, specialty and credentials WHEN present", () => {
@@ -104,6 +120,7 @@ describe("OrdonnanceDocumentBody — structured document (issue #82)", () => {
     expect(html).toContain("N° d’enregistrement :");
     expect(html).toContain("MSPP-1");
     expect(html).toContain("Hopital Test");
+    expect(html).toContain("Port-au-Prince");
   });
 
   it("shows the patient identity and age", () => {
@@ -127,7 +144,9 @@ describe("OrdonnanceDocumentBody — structured document (issue #82)", () => {
     expect(html).not.toContain("Quantité : undefined");
   });
 
-  it("renders the general instructions section", () => {
+  it("renders the Rx prescription section and the general instructions section (issue #101)", () => {
+    expect(html).toContain("Prescriptions");
+    expect(html).toContain("Rx");
     expect(html).toContain("Instructions générales");
     expect(html).toContain("Repos et hydratation abondante.");
   });
@@ -158,13 +177,20 @@ describe("OrdonnanceDocumentBody — structured document (issue #82)", () => {
     expect(lower).not.toContain("gourde");
   });
 
-  it("contains no fabricated signature or verification claim", () => {
-    expect(html).not.toContain("Signature");
-    expect(html).not.toContain("signature");
-    expect(html).not.toContain("cachet");
+  it("shows a designated EMPTY signature space, never a fabricated signature or verification claim (issue #101)", () => {
+    // The clearly designated signature space, with the printed prescriber
+    // identity beneath it:
+    expect(html).toContain("Signature du prescripteur");
+    expect(html).toContain("Dr Test");
+    // No verification claim is ever fabricated:
     expect(html).not.toContain("vérifié");
     expect(html).not.toContain("Vérifié");
     expect(html).not.toContain("certifié");
+    expect(html).not.toContain("cachet");
+    // No signature image exists in the data model — the document must ship
+    // exactly ONE <img>: the real Medika logo asset.
+    expect((html.match(/<img/g) ?? []).length).toBe(1);
+    expect(html).not.toMatch(/<img[^>]+sign/i);
   });
 });
 
@@ -174,18 +200,77 @@ describe("OrdonnanceDocumentBody — legacy fallback (pre-#82 records)", () => {
       doc: null,
       legacyText: "Paracétamol 500 mg: 1 tablete 3 fwa pa jou pandan 5 jou",
       fallbackPatientName: "Jean Baptiste",
-      fallbackDoctorId: "d1",
     }),
   ));
 
   it("renders the historical free text verbatim under the French title", () => {
-    expect(html).toContain("Ordonnance médicale");
+    expect(html).toContain("Ordonnance");
     expect(html).toContain("Paracétamol 500 mg: 1 tablete 3 fwa pa jou pandan 5 jou");
   });
 
   it("invents NO reference or issue date for legacy records", () => {
     expect(html).not.toContain("Réf. :");
     expect(html).not.toContain("Délivrée le :");
+  });
+
+  it("invents NO prescriber identity for legacy records — no doctor id, no signature caption", () => {
+    // Legacy records carry no structured doctor data. The old code rendered
+    // the consultation doctor_id (here "d1") as the prescriber's name — it
+    // must never appear as rendered text content:
+    expect(html).toContain("Prescripteur");
+    expect(html).not.toContain(">d1<");
+  });
+});
+
+describe("OrdonnanceDocumentBody — prescriber identity is authoritative ONLY (owner review, PR #104)", () => {
+  // The owner-reported scenario: the consultation's internal doctor_id is an
+  // identifier, not a verified display name. It must NEVER appear on the
+  // document — not as the prescriber's name, not as the signature caption.
+  const RAW_DOCTOR_ID = "d1c0e9a8-77b2-4f9e-a1c3-9f2b5d6e8a10";
+
+  it("renders NO doctor id when the record has doctor.name = null — prescriber shows the empty marker only", () => {
+    const html = ssr(renderToString(
+      createElement(OrdonnanceDocumentBody, {
+        doc: structuredDoc({
+          doctor: { name: null, specialty: null, license_number: null, hospital: null, location: null },
+        }),
+        legacyText: "",
+      }),
+    ));
+    // No recorded name → no name is invented (and the fixture default never
+    // leaks in):
+    expect(html).not.toContain("Dr Test");
+    // The prescriber block shows the same empty-value marker as every other
+    // block — never an identifier:
+    expect(html).toContain("Prescripteur");
+    expect(html).toMatch(/>—</);
+  });
+
+  it("still renders the recorded doctor name verbatim (positive path unchanged)", () => {
+    const html = ssr(renderToString(
+      createElement(OrdonnanceDocumentBody, { doc: structuredDoc(), legacyText: "" }),
+    ));
+    expect(html).toContain("Dr Test");
+    expect(html).toContain("Medecine Generale");
+  });
+
+  it("a UUID-like doctor_id passed via the consultation never reaches the document (panel path)", () => {
+    const html = ssr(renderToString(
+      createElement(PrescriptionPanel, {
+        consultation: consultation({
+          prescription: "Texte historique",
+          doctor_id: RAW_DOCTOR_ID,
+        }),
+      }),
+    ));
+    expect(html).toContain("Texte historique");
+    expect(html).not.toContain(RAW_DOCTOR_ID);
+  });
+
+  it("source contract — the consultation doctor_id is never passed for display", () => {
+    const panel = read("../components/consultation/PrescriptionPanel.tsx");
+    expect(panel).not.toContain("fallbackDoctorId");
+    expect(panel).toContain("const doctorName = doc?.doctor?.name ?? null;");
   });
 });
 
@@ -217,8 +302,8 @@ describe("PrescriptionPanel — actions", () => {
       }),
     ));
     expect(html).toContain("Texte historique lisible");
-    expect(html).toContain("Télécharger l’ordonnance");
-    expect(html).toContain("Imprimer / Enregistrer en PDF");
+    expect(html).toContain("Télécharger en PNG");
+    expect(html).toContain("Exporter en PDF (A4)");
   });
 });
 
@@ -238,10 +323,13 @@ describe("Prescription document — source contracts (issue #82)", () => {
     expect(panel).toContain("ordonnance-${doc?.reference ?? consultation.id}.png");
   });
 
-  it("print isolates only the document (A4, actions hidden)", () => {
+  it("print isolates only the document (A4, actions hidden, page-break-safe rows — issue #101)", () => {
     expect(css).toContain("@page { size: A4; margin: 14mm; }");
     expect(css).toContain(".ordonnance-doc, .ordonnance-doc * { visibility: visible; }");
     expect(css).toMatch(/@media print[\s\S]*\.ordonnance-actions \{ display: none !important; \}/);
+    expect(css).toMatch(
+      /\.ordonnance-entry,\s*\.ordonnance-meta,\s*\.ordonnance-sign \{ break-inside: avoid; page-break-inside: avoid; \}/,
+    );
   });
 
   it("no price/financial identifier exists in the document or composer sources", () => {
@@ -274,8 +362,9 @@ describe("Prescription document — source contracts (issue #82)", () => {
     expect(modal).toContain("Ordonnance médicale");
     expect(modal).toContain("Établir l’ordonnance et clôturer");
     expect(modal).toContain("Instructions générales");
-    expect(panel).toContain("Télécharger l’ordonnance");
-    expect(panel).toContain("Imprimer / Enregistrer en PDF");
+    expect(panel).toContain("Télécharger en PNG");
+    expect(panel).toContain("Exporter en PDF (A4)");
+    expect(panel).toContain("Chargement de l’ordonnance…");
     expect(panel).toContain("Le téléchargement de l’ordonnance a échoué. Réessayez.");
   });
 
