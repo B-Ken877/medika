@@ -254,6 +254,32 @@ describe('medika-admin — basePath contract', () => {
   });
 });
 
+// ─── root package.json — no build script (Express-builder trap) ─────────────
+
+describe('root package.json — no build script (Express-builder trap)', () => {
+  const pkg = readJson('package.json');
+
+  it('keeps a root "build" script OUT (issue #97: npm run build buildStep failure)', () => {
+    // Deployment incident 2026-11: with the project framework preset left on
+    // "express" (instead of "Services"), @vercel/express delegates to
+    // @vercel/node with considerBuildCommand: true, and the node builder
+    // execs projectSettings.buildCommand UNCONDITIONALLY when the project
+    // carries a Build Command override (observed: `npm run build`, which
+    // fails with exit 1 — "Missing script: build" — because the root
+    // intentionally has no build script). Without an override, the same
+    // builder runs the first of vercel-build/now-build/build and SKIPS
+    // silently when none exists (build-utils getScriptName → `if
+    // (!scriptName) return false`), so the repo itself never needs — and
+    // must never grow — a root build script: the web/admin services own
+    // their `next build`, and the api service is built by the Express
+    // entrypoint contract. Adding one here would only silence the dashboard
+    // misconfiguration instead of fixing it.
+    for (const script of ['build', 'vercel-build', 'now-build']) {
+      expect(pkg.scripts?.[script], `root scripts.${script}`).toBeUndefined();
+    }
+  });
+});
+
 // ─── routing ↔ backend coherence ────────────────────────────────────────────
 
 describe('routing ↔ backend coherence', () => {
