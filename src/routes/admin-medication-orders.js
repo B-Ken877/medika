@@ -158,7 +158,7 @@ router.get('/medication-orders/:id', async (req, res, next) => {
  *             unit_price_htg?, quantity?, offered_quantity? }, …],
  *                                             // one line per prescribed item
  *   expires_at,                               // ISO/epoch, future, ≤ 30 days
- *   delivery_fee_htg?, delivery_notes?, confirmation_source?, notes?
+ *   confirmation_source?, notes? (delivery is always free to the patient)
  * }
  *
  * Server-side enforcement: every prescribed item covered exactly once (no
