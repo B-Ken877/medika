@@ -46,6 +46,10 @@ const CATEGORY_FOR_EVENT = {
   'medication:quoted': 'consultations',
   'medication:paid': 'consultations',
   'medication:payment-review': 'consultations',
+  'medication:delivery-assigned': 'consultations',
+  'medication:delivery-update': 'consultations',
+  'medication:delivery-delivered': 'consultations',
+  'medication:urgent-unavailable': 'consultations',
 };
 
 const CATEGORIES = ['consultations', 'messages', 'calls', 'wallet'];
