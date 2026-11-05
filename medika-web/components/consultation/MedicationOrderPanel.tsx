@@ -39,6 +39,7 @@ type DeliveryTrackingData = {
   id: string;
   status: string;
   scheduled_for: string;
+  delivery_window: string;
   urgent: boolean;
   delivery_zone: string;
   city: string;
@@ -90,7 +91,7 @@ function MedicationDeliveryTracking({ orderId, token }: { orderId: string; token
       ) : (
         <>
           <p style={{ marginTop: 10 }}><strong>{DELIVERY_STATUS_FR[tracking.status] || tracking.status}</strong></p>
-          <p className="small">{tracking.urgent ? "Livraison prioritaire" : "Livraison régulière"} · {new Date(tracking.scheduled_for).toLocaleDateString("fr-FR")} · {tracking.delivery_zone}, {tracking.city}</p>
+          <p className="small">{tracking.urgent ? "Livraison prioritaire" : "Livraison régulière"} · {new Date(tracking.scheduled_for).toLocaleDateString("fr-FR")} · {{ MATIN: "Matin · 08 h–12 h", APRES_MIDI: "Après-midi · 12 h–17 h", SOIR: "Soir · 17 h–20 h", JOURNEE: "Toute la journée" }[tracking.delivery_window] || "Toute la journée"} · {tracking.delivery_zone}, {tracking.city}</p>
           {tracking.status === "AWAITING_CONFIRMATION" && (
             <button type="button" className="btn btn-primary" onClick={() => void confirm()} disabled={busy}>
               {busy ? "Confirmation…" : "Confirmer la réception"}
