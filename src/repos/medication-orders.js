@@ -71,7 +71,9 @@ const LIMITS = {
 /** Events that can land in the append-only audit history. */
 const EVENT_TYPES = [
   'REQUESTED', 'QUOTE_RECORDED', 'QUOTE_REVISED', 'PHARMACY_UNREACHABLE',
-  'ACCEPTED', 'DECLINED', 'CANCELLED', 'ESCALATED', 'QUOTE_EXPIRED', 'PAYMENT_VERIFIED',
+  'ACCEPTED', 'DECLINED', 'CANCELLED', 'ESCALATED', 'QUOTE_EXPIRED',
+  'PAYMENT_PENDING', 'PAYMENT_FAILED', 'PAYMENT_VERIFIED', 'PAYMENT_REVIEW',
+  'DELIVERY_URGENT_UNAVAILABLE',
 ];
 
 // ─── Small helpers ───────────────────────────────────────────────────────────
