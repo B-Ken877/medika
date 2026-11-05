@@ -813,3 +813,40 @@ describe('issue #84 — medication MonCash payments', () => {
     vi.restoreAllMocks();
   });
 });
+
+
+  it('keeps pending payments unpaid and permits a fresh reference after a verified mismatch', async () => {
+    const { consId, patient } = await consultationWithPrescription();
+    const created = await createOrder(patient, consId);
+    const pharmacy = await createPharmacy();
+    await r.post('/api/admin/medication-orders/' + created.body.id + '/quotes')
+      .set('Authorization', 'Bearer ' + token.admin).send(quotePayload(pharmacy.id));
+    await r.post('/api/medication-orders/' + created.body.id + '/accept')
+      .set('Authorization', 'Bearer ' + patient.token);
+
+    const moncash = await import('../src/moncash.js').then((m) => m.default ?? m);
+    vi.spyOn(moncash, 'createPayment').mockResolvedValue({ redirectUrl: 'https://moncash.example/checkout' });
+    const start = await r.post('/api/medication-orders/' + created.body.id + '/payment/create')
+      .set('Authorization', 'Bearer ' + patient.token).send({});
+    vi.spyOn(moncash, 'retrieveByOrderId').mockResolvedValueOnce({
+      reference: start.body.payment.payment_reference, transactionId: null,
+      amount: 675, status: 'pending', raw: { status: 'pending' },
+    });
+    const pending = await r.post('/api/medication-orders/' + created.body.id + '/payment/verify')
+      .set('Authorization', 'Bearer ' + patient.token).send({});
+    expect(pending.status).toBe(200);
+    expect(pending.body.success).toBe(false);
+
+    vi.spyOn(moncash, 'retrieveByOrderId').mockResolvedValueOnce({
+      reference: start.body.payment.payment_reference, transactionId: 'TX_WRONG_AMOUNT',
+      amount: 674, status: 'completed', raw: { status: 'successful', cost: 674 },
+    });
+    const mismatch = await r.post('/api/medication-orders/' + created.body.id + '/payment/verify')
+      .set('Authorization', 'Bearer ' + patient.token).send({});
+    expect(mismatch.status).toBe(409);
+    const retry = await r.post('/api/medication-orders/' + created.body.id + '/payment/create')
+      .set('Authorization', 'Bearer ' + patient.token).send({});
+    expect(retry.status).toBe(200);
+    expect(retry.body.payment.payment_reference).not.toBe(start.body.payment.payment_reference);
+    vi.restoreAllMocks();
+  });
