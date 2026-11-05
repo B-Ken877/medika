@@ -342,8 +342,6 @@ async function insertEvent(client, { orderId, type, actor, details = {} }) {
  *   CREATED                — success; { order }
  */
 async function createOrder({ consultationId, patient, deliveryAddress, deliveryPhone, deliveryZone }) {
-  const delivery = validateDeliveryRequest({ deliveryAddress, deliveryPhone, deliveryZone });
-  if (!delivery.ok) return delivery;
   return withTransaction(async (client) => {
     const { rows } = await client.query(
       `SELECT * FROM consultations WHERE id = $1 FOR UPDATE`,
@@ -360,6 +358,11 @@ async function createOrder({ consultationId, patient, deliveryAddress, deliveryP
     );
     const document = docs[0];
     if (!document) return { outcome: 'NO_PRESCRIPTION' };
+
+    // Validate contact details and exact allowlisted zone only after confirming
+    // consultation ownership and an issued prescription (no coverage oracle).
+    const delivery = validateDeliveryRequest({ deliveryAddress, deliveryPhone, deliveryZone });
+    if (!delivery.ok) return delivery;
 
     // The partial unique index backstops this check against concurrent races.
     const { rows: existing } = await client.query(
