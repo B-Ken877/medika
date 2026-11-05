@@ -52,7 +52,9 @@
   isolation: isolate;
 }
 
-/* Decorative field: mint/emerald washes + translucent curved discs.
+/* Decorative field: flowing translucent mint/emerald waves — organic
+   elliptical forms bleeding off-canvas (approved reference, issue #103),
+   NOT repeated discs or hard shapes. Warm white stays dominant.
    z-index: -1 paints above .app-shell's own background but below every
    child (content, header, bottom nav). pointer-events: none keeps taps and
    scroll behavior identical. */
@@ -63,12 +65,11 @@
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(56rem 34rem at 6% -8%, rgba(166, 240, 201, 0.30), transparent 62%),
-    radial-gradient(48rem 32rem at 106% 14%, rgba(111, 167, 154, 0.16), transparent 60%),
-    radial-gradient(40rem 28rem at -10% 88%, rgba(166, 240, 201, 0.22), transparent 58%),
-    radial-gradient(circle 300px at 94% 4%, rgba(207, 234, 219, 0.42) 0 99%, transparent 100%),
-    radial-gradient(circle 420px at -6% 104%, rgba(233, 246, 239, 0.85) 0 99%, transparent 100%),
-    radial-gradient(circle 180px at 78% 58%, rgba(228, 241, 233, 0.55) 0 99%, transparent 100%);
+    radial-gradient(58rem 40rem at 108% -6%, rgba(166, 240, 201, 0.34), transparent 58%),
+    radial-gradient(42rem 30rem at 118% 26%, rgba(111, 167, 154, 0.12), transparent 56%),
+    radial-gradient(46rem 34rem at -14% 84%, rgba(166, 240, 201, 0.20), transparent 56%),
+    radial-gradient(34rem 26rem at 108% 92%, rgba(233, 246, 239, 0.75) 0 99%, transparent 100%),
+    radial-gradient(24rem 18rem at -8% 42%, rgba(207, 234, 219, 0.35), transparent 60%);
 }
 
 /* The chat room keeps the same calm field but with reduced curve density —
@@ -166,88 +167,225 @@
 }
 
 /* ── 5. Akèy hero (patient dashboard only — markup lives in
-       components/consultation/PatientDashboard.tsx) ───────────────────────── */
+       components/consultation/PatientDashboard.tsx). Issue #103: rebuilt to
+       the approved reference — OPEN composition, no card box: large
+       two-line greeting left, artwork stage anchored to the screen's right
+       edge, primary action full-width BELOW the hero. ──────────────────── */
 
 .home-hero {
+  position: relative;
   display: flex;
-  align-items: stretch;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 18px;
-  padding: 22px;
-  border: 1px solid var(--pt-card-border);
-  border-radius: var(--pt-radius-lg);
-  background:
-    radial-gradient(26rem 16rem at 118% -30%, rgba(166, 240, 201, 0.5), transparent 64%),
-    radial-gradient(22rem 14rem at -14% 120%, rgba(111, 167, 154, 0.14), transparent 60%),
-    linear-gradient(180deg, #ffffff 0%, var(--pt-mint-100) 100%);
-  box-shadow: var(--pt-shadow-card);
+  gap: 8px;
+  /* Bleed to the screen edges: the artwork stage anchors to the right edge
+     exactly like the reference, while the copy keeps the page rhythm. */
+  margin-inline: calc(-1 * var(--content-pad));
+  padding: 10px 0 0;
+  min-height: clamp(280px, 40vh, 380px);
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
   overflow: hidden;
 }
 
-.home-hero .hero-copy { min-width: 0; }
-.home-hero .page-title { margin-top: 2px; }
-.home-hero .page-head-actions { margin-top: 14px; }
-
-/* Doctor-artwork placeholder — deliberately neutral, CSS-only, no image
-   dependency. Fixed aspect + radius so a transparent PNG can later drop in
-   via .hero-art img without any layout shift (the slot reserves the box). */
-.hero-art {
-  flex: 0 0 auto;
-  width: 148px;
-  align-self: center;
-  aspect-ratio: 4 / 5;
-  border-radius: 16px;
-  border: 1px solid var(--pt-card-border);
+/* Restrained translucent plus-form near the greeting (reference has a soft
+   plus behind the copy) — blurred, low-opacity, non-interactive. */
+.home-hero::before {
+  content: "";
+  position: absolute;
+  left: 10%;
+  top: 16%;
+  width: 92px;
+  height: 92px;
+  transform: rotate(-8deg);
   background:
-    radial-gradient(120% 90% at 50% 0%, rgba(166, 240, 201, 0.42), transparent 70%),
-    linear-gradient(180deg, var(--pt-mint-100), var(--pt-mint-150));
+    linear-gradient(rgba(207, 234, 219, 0.9), rgba(207, 234, 219, 0.9)) center / 100% 32% no-repeat,
+    linear-gradient(rgba(207, 234, 219, 0.9), rgba(207, 234, 219, 0.9)) center / 32% 100% no-repeat;
+  border-radius: 18px;
+  filter: blur(6px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.home-hero .hero-copy {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 0 28px var(--content-pad);
+}
+
+/* The greeting is the page's primary text element (reference: large,
+   two-line, deep institutional green). */
+.home-hero .page-title {
+  margin-top: 2px;
+  font-size: clamp(30px, 8.4vw, 42px);
+  line-height: 1.12;
+  color: var(--green-700);
+  max-width: 10ch;
+}
+.home-hero .page-desc {
+  margin-top: 10px;
+  max-width: 30ch;
+  padding-right: 8px;
+}
+
+/* Doctor-artwork stage — anchored to the screen's right edge (cropped there
+   in the reference), reserved aspect + radius so the transparent PNG drops
+   in later with no layout shift. Deliberately abstract placeholder: soft
+   translucent forms ONLY — no silhouette, avatar glyph or invented image. */
+.hero-art {
+  position: relative;
+  flex: 0 0 auto;
+  width: min(46%, 232px);
+  align-self: flex-end;
+  aspect-ratio: 4 / 5;
+  border: none;
+  border-radius: 20px 0 0 0;
+  background: linear-gradient(180deg, rgba(233, 246, 239, 0) 0%, var(--pt-mint-100) 78%);
   display: grid;
   place-items: end center;
   overflow: hidden;
 }
 
-/* CSS silhouette: head + shoulders, translucent emerald — a neutral stand-in
-   for the future artwork. */
+/* Abstract placeholder forms: two soft translucent organic shapes. */
 .hero-art .hero-art-shape {
   position: relative;
-  width: 74%;
-  height: 78%;
+  width: 100%;
+  height: 100%;
   display: block;
 }
 .hero-art .hero-art-shape::before {
   content: "";
   position: absolute;
-  left: 50%;
-  top: 6%;
-  transform: translateX(-50%);
-  width: 44%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: rgba(20, 91, 80, 0.20);
+  left: -14%;
+  top: 20%;
+  width: 122%;
+  aspect-ratio: 1.35;
+  transform: rotate(-14deg);
+  border-radius: 50% 50% 46% 54% / 58% 44% 56% 42%;
+  background: radial-gradient(closest-side, rgba(166, 240, 201, 0.55), rgba(166, 240, 201, 0.18) 62%, transparent 76%);
 }
 .hero-art .hero-art-shape::after {
   content: "";
   position: absolute;
-  left: 50%;
-  bottom: 0;
-  transform: translateX(-50%);
-  width: 92%;
-  height: 52%;
-  border-radius: 46% 46% 12% 12% / 70% 70% 8% 8%;
-  background: rgba(20, 91, 80, 0.14);
+  left: 6%;
+  right: -22%;
+  bottom: 10%;
+  height: 36%;
+  border-radius: 48% 52% 0 0 / 100% 100% 0 0;
+  background: radial-gradient(closest-side, rgba(20, 91, 80, 0.12), transparent 80%);
+}
+
+/* Full-width single-line primary action directly below the hero. */
+.app-shell .home-cta-row { margin-top: 16px; }
+.app-shell .home-cta-row .btn {
+  width: 100%;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 @media (max-width: 560px) {
-  .home-hero { padding: 18px; gap: 14px; }
-  .hero-art { width: 104px; border-radius: 14px; }
+  .hero-art { width: 44%; }
 }
 
 @media (min-width: 900px) {
-  .home-hero { padding: 28px; }
-  .hero-art { width: 176px; }
+  .home-hero { min-height: 320px; }
+  .hero-art { width: 300px; border-radius: 24px 0 0 0; }
+}
+
+/* ── 5b. Patient-shell refinements from the #103 audit ───────────────── */
+
+/* The «Medika» wordmark stays visible beside the logo tile at mobile widths
+   (reference header shows it; globals hides it under 400px). Scoped to the
+   patient shell so no other surface changes. */
+.app-shell.patient-shell .app-header .brand .brand-word { display: inline; }
+
+/* Airier summary cards: larger values, more breathing room, softer depth. */
+.app-shell .stat-card {
+  padding: 20px;
+  border-radius: 18px;
+  box-shadow:
+    0 1px 2px rgba(13, 58, 50, 0.04),
+    0 10px 24px -14px rgba(13, 58, 50, 0.12);
+}
+.app-shell .stat-card .stat-value { font-size: 32px; line-height: 38px; margin-top: 12px; }
+.app-shell .stat-card .stat-label { font-size: 13px; }
+
+/* History: one white card per consultation (reference), no status chips. */
+.app-shell .panel-row.history-card {
+  border: 1px solid var(--pt-card-border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--pt-shadow-card);
+  margin-bottom: 10px;
+}
+.app-shell .panel-row.history-card:last-child { border-bottom: 1px solid var(--pt-card-border); }
+.app-shell .panel-row.history-card:hover { background: var(--surface); }
+
+/* Active-state indicator: thin underline at the bar's bottom edge (reference). */
+.app-shell .bottom-nav a { position: relative; }
+.app-shell .bottom-nav a.active::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 5px;
+  width: 42px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--green-500);
 }
 
 /* ── 6. Small print ───────────────────────────────────────────────────────── */
 
 /* Status/semantic colors, focus rings and reduced-motion behavior stay owned
    by globals.css / visual-polish.css — nothing redefined here. */
+
+/* ── Detached floating patient navigation island (issue #103) ─────────────
+   Keep the mobile navigation independent from the viewport edge. This
+   override is patient-only; doctor/admin navigation retains the shared bar. */
+.app-shell.patient-shell .bottom-nav {
+  position: fixed;
+  left: 50%;
+  right: auto;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+  transform: translateX(-50%);
+  width: min(440px, calc(100% - 32px));
+  height: 68px;
+  padding: 5px 8px;
+  border: 1px solid rgba(30, 91, 70, 0.12);
+  border-radius: 999px;
+  background: rgba(253, 255, 254, 0.94);
+  box-shadow:
+    0 12px 32px rgba(21, 65, 48, 0.13),
+    0 2px 8px rgba(21, 65, 48, 0.06);
+  overflow: visible;
+}
+
+.app-shell.patient-shell .bottom-nav a {
+  border-radius: 999px;
+  gap: 3px;
+  padding: 5px 2px;
+  min-height: 54px;
+  font-size: 10px;
+}
+
+.app-shell.patient-shell .bottom-nav a.active {
+  color: var(--green-700, var(--green-500));
+  background: rgba(218, 244, 230, 0.56);
+}
+
+.app-shell.patient-shell .bottom-nav a.active::after {
+  display: none;
+}
+
+.app-shell.patient-shell .app-main {
+  padding-bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom, 0px) + 64px);
+}
+
+@media (min-width: 900px) {
+  .app-shell.patient-shell .bottom-nav { display: none; }
+  .app-shell.patient-shell .app-main { padding-bottom: 48px; }
+}

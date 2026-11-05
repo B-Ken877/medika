@@ -160,7 +160,7 @@ function AppShellInner({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className={`app-shell${isConsultationChat ? " chat-mode" : ""}`}>
+    <div className={`app-shell${user.role === "patient" ? " patient-shell" : ""}${isConsultationChat ? " chat-mode" : ""}`}>
       <header className="app-header">
         <Link href="/app" className="brand" aria-label="Medika — Akèy">
           <span className="brand-mark" aria-hidden>
