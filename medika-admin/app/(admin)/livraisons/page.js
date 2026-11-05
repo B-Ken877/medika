@@ -2,11 +2,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { apiFetch, formatCurrency } from '../../../lib/api';
 
+function localDate(value) {
+  return value.getFullYear() + '-' + String(value.getMonth() + 1).padStart(2, '0') + '-' + String(value.getDate()).padStart(2, '0');
+}
+
 function nextFriday() {
   const d = new Date();
   const delta = ((5 - d.getDay() + 7) % 7) || 7;
   d.setDate(d.getDate() + delta);
-  return d.toISOString().slice(0, 10);
+  return localDate(d);
 }
 
 export default function LivraisonsPage() {
@@ -22,7 +26,7 @@ export default function LivraisonsPage() {
   const [assignment, setAssignment] = useState({ medication_order_id: '', employee_id: '', zone_id: '', scheduled_for: nextFriday(), delivery_window: 'MATIN', urgent: false, urgent_reason: '' });
   const [expense, setExpense] = useState({ delivery_id: '', amount_htg: '', notes: '' });
   const [urgentUnavailable, setUrgentUnavailable] = useState({ medication_order_id: '', reason: '' });
-  const [period, setPeriod] = useState({ from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) });
+  const [period, setPeriod] = useState({ from: localDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1)), to: localDate(new Date()) });
   const [budget, setBudget] = useState({ monthly_budget_htg: '', alert_threshold_percent: 80 });
 
   const load = useCallback(async () => {
