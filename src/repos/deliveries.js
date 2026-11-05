@@ -109,7 +109,7 @@ async function assignDelivery({ orderId, employeeId, zoneId, scheduledFor, deliv
       reason: isUrgent ? String(urgentReason).trim() : 'Livraison planifiée pour vendredi.',
       idempotencyKey: 'delivery:' + id + ':assigned',
     });
-    return { outcome: 'ASSIGNED', id, employee: employees[0] };
+    return { outcome: 'ASSIGNED', id, employee: employees[0], scheduledFor, deliveryWindow, urgent: isUrgent };
   });
 }
 
