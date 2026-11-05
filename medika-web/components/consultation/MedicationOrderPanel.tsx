@@ -20,12 +20,14 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, Clock, Pill, RefreshCw, XCircle } from "lucide-react";
-import type { Consultation, DeliveryZone, MedicationOrder, MedicationQuoteItem } from "@/lib/api/types";
+import type { Consultation, DeliveryTracking, DeliveryZone, MedicationOrder, MedicationQuoteItem } from "@/lib/api/types";
 import {
   acceptMedicationQuote,
   cancelMedicationOrder,
   createMedicationOrder,
   declineMedicationQuote,
+  confirmDeliveryReceipt,
+  getDeliveryTracking,
   getDeliveryZones,
   getMedicationOrderByConsultation,
   getPrescriptionDocument,
@@ -631,6 +633,9 @@ export function MedicationOrderPanel({
             <p className="small">Votre paiement MonCash a été vérifié. L’équipe Medika peut maintenant préparer votre commande.</p>
           </section>
         )}
+        {order.status === "PAID" && (
+          <MedicationDeliveryTracking token={token} orderId={order.id} />
+        )}
       </div>
     );
   }
@@ -650,5 +655,130 @@ export function MedicationOrderPanel({
         onCreate={onCreate}
       />
     </div>
+  );
+}
+
+/**
+ * Patient delivery tracking (issue #82 §7) — shown once the order is PAID.
+ * Self-fetching: 404 (not yet assigned) renders an honest "being organized"
+ * state; otherwise the status, the scheduled date and the full status
+ * history are shown, with receipt confirmation available ONLY at the
+ * server's AWAITING_CONFIRMATION stage. French copy, no medical content.
+ */
+const DELIVERY_STATUS_FR: Record<string, string> = {
+  ASSIGNED: "Livraison affectée à un membre de l’équipe",
+  PHARMACY_PREPARING: "Préparation en cours à la pharmacie",
+  READY_FOR_PICKUP: "Prête au retrait par l’équipe Medika",
+  PICKED_UP: "Colis récupéré à la pharmacie",
+  OUT_FOR_DELIVERY: "En route vers votre adresse",
+  AWAITING_CONFIRMATION: "Livré — veuillez confirmer la réception",
+  DELIVERED: "Livraison terminée",
+  FAILED_ATTEMPT: "Tentative de livraison échouée — notre équipe vous contactera",
+  RETURNED_ESCALATED: "Retournée à notre équipe pour traitement",
+};
+const DELIVERY_EVENT_FR: Record<string, string> = {
+  ASSIGNED: "Livraison affectée",
+  PHARMACY_PREPARING: "Préparation en pharmacie",
+  READY_FOR_PICKUP: "Prête au retrait",
+  PICKED_UP: "Récupérée à la pharmacie",
+  OUT_FOR_DELIVERY: "En livraison",
+  AWAITING_CONFIRMATION: "Remise au patient — en attente de confirmation",
+  DELIVERED: "Livrée (confirmée par le patient)",
+  FAILED_ATTEMPT: "Tentative échouée",
+  RETURNED_ESCALATED: "Retournée / escaladée",
+};
+
+export function MedicationDeliveryTracking({ token, orderId }: { token?: string | null; orderId: string }) {
+  const [tracking, setTracking] = useState<DeliveryTracking | null>(null);
+  const [missing, setMissing] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!token) return;
+    try {
+      const t = await getDeliveryTracking(token, orderId);
+      setTracking(t);
+      setMissing(false);
+      setFailed(false);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        setMissing(true); // pas encore affectée — état honnête, pas une erreur
+      } else {
+        setFailed(true);
+      }
+    }
+  }, [token, orderId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const onConfirm = async () => {
+    if (!token || busy) return;
+    setBusy(true); setMessage(null);
+    try {
+      await confirmDeliveryReceipt(token, orderId);
+      setMessage("Merci ! Votre réception est confirmée.");
+      await load();
+    } catch (err) {
+      setMessage(err instanceof ApiError && err.status === 409
+        ? "La confirmation n’est pas encore disponible à ce stade de la livraison."
+        : "La confirmation a échoué. Réessayez.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="card" style={{ margin: 12 }} aria-label="Suivi de la livraison">
+      <h3 style={{ marginTop: 0, color: "var(--green-800)" }}>Suivi de la livraison</h3>
+      <p className="small" style={{ color: "var(--gray-700, #3f4f4b)" }}>
+        La livraison est offerte par Medika dans les zones desservies.
+      </p>
+      {missing && (
+        <p className="small" role="status">
+          Votre livraison est en cours d’organisation par notre équipe. Cette page sera mise à jour dès
+          qu’un livreur est affecté.
+        </p>
+      )}
+      {failed && (
+        <div>
+          <p className="small" role="alert">Impossible de charger le suivi pour le moment. Réessayez plus tard.</p>
+          <button type="button" className="btn btn-secondary" onClick={() => void load()}>Réessayer</button>
+        </div>
+      )}
+      {tracking && (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <strong>{DELIVERY_STATUS_FR[tracking.status] ?? tracking.status}</strong>
+            <span className="tiny">
+              Prévue le {new Date(tracking.scheduled_for).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+              {tracking.urgent ? " · livraison urgente" : ""}
+            </span>
+          </div>
+          <ol style={{ margin: "10px 0 0", paddingLeft: 18 }}>
+            {tracking.events.map((ev, i) => (
+              <li key={i} className="small">
+                {DELIVERY_EVENT_FR[ev.event_type] ?? ev.event_type}
+                {ev.created_at ? ` — ${new Date(ev.created_at).toLocaleString("fr-FR")}` : ""}
+              </li>
+            ))}
+          </ol>
+          {tracking.status === "AWAITING_CONFIRMATION" && (
+            <div style={{ marginTop: 10 }}>
+              <button type="button" className="btn btn-primary" onClick={onConfirm} disabled={busy}>
+                {busy ? "Confirmation…" : "Confirmer la réception"}
+              </button>
+              <p className="tiny" style={{ marginTop: 6, color: "var(--gray-700, #3f4f4b)" }}>
+                En confirmant, vous attestez avoir reçu vos médicaments.
+              </p>
+            </div>
+          )}
+          {message && <p className="small" role="status" style={{ marginTop: 8 }}>{message}</p>}
+        </div>
+      )}
+    </section>
   );
 }

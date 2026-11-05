@@ -8,7 +8,7 @@
  * established that convention (e.g. CreateConsultationRequest).
  */
 
-export type Role = "patient" | "doctor" | "admin";
+export type Role = "patient" | "doctor" | "admin" | "delivery";
 
 export type ConsultationStatus =
   | "RECHERCHE_MEDECIN"
@@ -390,6 +390,30 @@ export interface DeliveryZone {
   id: string;
   city: string;
   zone_name: string;
+}
+
+/** Delivery tracking as the patient sees it (minimum data, status history). */
+export interface DeliveryTrackingEvent {
+  event_type: string;
+  actor_role: string;
+  reason: string;
+  created_at: number | null;
+}
+
+export interface DeliveryTracking {
+  id: string;
+  medication_order_id: string;
+  reference: string;
+  delivery_address: string;
+  delivery_phone: string;
+  delivery_zone: string;
+  city: string;
+  scheduled_for: string;
+  urgent: boolean;
+  status: string;
+  created_at?: string | null;
+  delivered_at?: string | null;
+  events: DeliveryTrackingEvent[];
 }
 
 export interface CreateMedicationOrderRequest {

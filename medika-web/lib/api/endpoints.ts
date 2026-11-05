@@ -322,6 +322,26 @@ export function verifyMedicationPayment(token: string, orderId: string, signal?:
   );
 }
 
+// ─── Delivery tracking (issue #82 §7) ────────────────────────────────────────
+
+/** The patient's delivery tracking for this order (status history included).
+ *  404 when no delivery exists (not assigned yet). */
+export function getDeliveryTracking(token: string, orderId: string, signal?: AbortSignal) {
+  return apiFetch<import('./types').DeliveryTracking>(
+    `/api/medication-orders/${encodeURIComponent(orderId)}/delivery`,
+    { token, signal },
+  );
+}
+
+/** The patient confirms receipt — the ONLY way a delivery becomes DELIVERED
+ *  (a courier's button click is never proof). Server-enforced stages. */
+export function confirmDeliveryReceipt(token: string, orderId: string, signal?: AbortSignal) {
+  return apiFetch<{ success: boolean; status: string }>(
+    `/api/medication-orders/${encodeURIComponent(orderId)}/delivery/confirm`,
+    { method: 'POST', body: {}, token, signal },
+  );
+}
+
 // ─── Doctor availability ──────────────────────────────────────────────────────
 
 export function updateAvailability(token: string, isAvailable: boolean, signal?: AbortSignal) {
