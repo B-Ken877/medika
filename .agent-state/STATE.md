@@ -1,8 +1,10 @@
-Last updated: 2026-11-05T05:42:00Z (cron-202611051316)
+Last updated: 2026-11-05T06:06:00Z (cron-202611051403)
 
 ## Active issue
-- NONE. #83 IN REVIEW via PR #87, branch feat/issue-83-medication-orders
-  (from main ed02c26, commit b4776ec). Medication orders + manual pharmacy
+- #83 IN PROGRESS (review-feedback round, run cron-202611051403). Owner
+  posted «ChatGPT review — changes required before merge» on PR #87 at
+  06:04:19Z (comment 6651030852). Branch feat/issue-83-medication-orders
+  (from main ed02c26, head b4776ec). Medication orders + manual pharmacy
   quote operations: migration 010 (partner_pharmacies / medication_orders /
   pharmacy_quotes / medication_order_events — no pharmacy credentials or
   portal), repo src/repos/medication-orders.js (row-locked transitions,
@@ -14,9 +16,25 @@ Last updated: 2026-11-05T05:42:00Z (cron-202611051316)
   quote form, unreachable, history, directory CRUD); patient web
   MedicationOrderPanel (FR CTA, quote review, accept/decline/cancel,
   payment = honest next-step note for #84).
-  Tests (real): backend 497/497 (41 files, 23 new), web 538/538 (42 files,
-  17 new), typecheck/lint/build + admin build clean. Owner next: review +
-  merge PR #87. Do NOT close #83 or mark DONE until owner verifies/merges.
+  Tests (real, pre-review): backend 497/497 (41 files, 23 new), web 538/538
+  (42 files, 17 new), typecheck/lint/build + admin build clean.
+- REVIEW ITEMS to address (then push new commit to PR #87, re-label
+  IN REVIEW, comment with changes + real test results; owner re-reviews):
+  1. Delivery FREE to patient: src/repos/medication-orders.js accepts and
+     persists arbitrary delivery_fee_htg; remove patient-billable delivery
+     fees from quote model/API (edit unmerged migration 010 directly —
+     branch not merged yet) and keep internal delivery expenses OUT of the
+     quote; regression test: non-zero delivery charge cannot reach a
+     patient quote.
+  2. Patient UI (medika-web MedicationOrderPanel.tsx): remove delivery-fee
+     line item; FR copy that delivery is offered by Medika only where the
+     service is available; test: no delivery fee shown/included in total.
+  3. Coverage enforcement: require delivery contact name/phone + address;
+     interim gate (until #85 zone configuration): explicit supported
+     Port-au-Prince zones list, server rejects unsupported/missing zone or
+     address with FR fallback telling patient to download/print the
+     prescription (#82 document view) and buy independently; tests: missing
+     address rejected, unsupported zone rejected.
 
 ## Queue
 - #84 MonCash medication payments — depends on #83 merged (PR #87).
@@ -53,10 +71,13 @@ Last updated: 2026-11-05T05:42:00Z (cron-202611051316)
   config/secrets.
 
 ## Next action (next run)
-1. Check lock. If free: check PR #87 review state and whether #83 was
-   merged/closed; if review feedback exists, address it on the same branch.
-2. If #83 merged: verify labels, report; #84 becomes eligible (rebase from
-   latest main; MonCash payments for ACCEPTED medication orders).
-3. If nothing eligible: report QUEUE EMPTY (the 5-min cadence is for
-   checking, not starting new work).
+1. If STATE still says #83 IN PROGRESS (review round): continue on branch
+   feat/issue-83-medication-orders per the 3 review items above (check
+   `git log` for progress). If PR #87 has a NEW owner comment after our
+   fix commit, address it.
+2. When fixes pushed + tested: replace IN PROGRESS label with IN REVIEW
+   on #83, comment on PR #87 with changes + real test results, release
+   lock. Owner re-reviews before merge.
+3. If #83 merged: verify labels, report; #84 becomes eligible (rebase
+   from latest main; MonCash payments for ACCEPTED medication orders).
 4. One issue at a time. Never merge. Never duplicate branches/PRs.

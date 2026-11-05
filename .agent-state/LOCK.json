@@ -1,9 +1,9 @@
 {
-  "run_id": "cron-202611051316",
-  "started_at_utc": "2026-11-05T05:16:45Z",
-  "heartbeat_utc": "2026-11-05T05:42:00Z",
-  "active": false,
+  "run_id": "cron-202611051403",
+  "started_at_utc": "2026-11-05T06:05:00Z",
+  "heartbeat_utc": "2026-11-05T06:05:00Z",
+  "active": true,
   "owner": "medika-autonomous-agent",
-  "issue": null,
-  "note": "Run cron-202611051316 complete: #83 IN REVIEW via PR #87 (feat/issue-83-medication-orders, commit b4776ec, from main ed02c26). Medication orders + manual pharmacy quotes: migration 010, row-locked state machine, server-recomputed HTG totals, 30-min SLA from request timestamp + lazy/cron escalation sweeps, admin 'Medicaments et pharmacies' ops area with WhatsApp handoff (no patient data, no pharmacy credentials/portal), patient FR quote review with accept/decline/cancel and honest payment next-step (#84). Tests: backend 497/497 (41 files), web 538/538 (42 files), typecheck/lint/builds clean. Also: #82 PR #86 was merged by owner this run; stale IN REVIEW label removed from #82. No merge/deploy performed. Owner: review PR #87; then #84. Lock released."
+  "issue": 83,
+  "note": "Resuming #83 (PR #87 IN REVIEW): owner posted ChatGPT review at 06:04Z requiring changes before merge. (1) delivery must be free to patient (remove patient-billable delivery_fee_htg or enforce 0 server-side + regression test), (2) patient UI must not charge delivery (remove line item, FR copy, test), (3) coverage enforcement (required contact/address, interim P-au-P zone gate, outside-coverage fallback to self-purchase, tests). Addressing on same branch feat/issue-83-medication-orders. Never merge."
 }
