@@ -200,7 +200,6 @@ describe("OrdonnanceDocumentBody — legacy fallback (pre-#82 records)", () => {
       doc: null,
       legacyText: "Paracétamol 500 mg: 1 tablete 3 fwa pa jou pandan 5 jou",
       fallbackPatientName: "Jean Baptiste",
-      fallbackDoctorId: "d1",
     }),
   ));
 
@@ -212,6 +211,66 @@ describe("OrdonnanceDocumentBody — legacy fallback (pre-#82 records)", () => {
   it("invents NO reference or issue date for legacy records", () => {
     expect(html).not.toContain("Réf. :");
     expect(html).not.toContain("Délivrée le :");
+  });
+
+  it("invents NO prescriber identity for legacy records — no doctor id, no signature caption", () => {
+    // Legacy records carry no structured doctor data. The old code rendered
+    // the consultation doctor_id (here "d1") as the prescriber's name — it
+    // must never appear as rendered text content:
+    expect(html).toContain("Prescripteur");
+    expect(html).not.toContain(">d1<");
+  });
+});
+
+describe("OrdonnanceDocumentBody — prescriber identity is authoritative ONLY (owner review, PR #104)", () => {
+  // The owner-reported scenario: the consultation's internal doctor_id is an
+  // identifier, not a verified display name. It must NEVER appear on the
+  // document — not as the prescriber's name, not as the signature caption.
+  const RAW_DOCTOR_ID = "d1c0e9a8-77b2-4f9e-a1c3-9f2b5d6e8a10";
+
+  it("renders NO doctor id when the record has doctor.name = null — prescriber shows the empty marker only", () => {
+    const html = ssr(renderToString(
+      createElement(OrdonnanceDocumentBody, {
+        doc: structuredDoc({
+          doctor: { name: null, specialty: null, license_number: null, hospital: null, location: null },
+        }),
+        legacyText: "",
+      }),
+    ));
+    // No recorded name → no name is invented (and the fixture default never
+    // leaks in):
+    expect(html).not.toContain("Dr Test");
+    // The prescriber block shows the same empty-value marker as every other
+    // block — never an identifier:
+    expect(html).toContain("Prescripteur");
+    expect(html).toMatch(/>—</);
+  });
+
+  it("still renders the recorded doctor name verbatim (positive path unchanged)", () => {
+    const html = ssr(renderToString(
+      createElement(OrdonnanceDocumentBody, { doc: structuredDoc(), legacyText: "" }),
+    ));
+    expect(html).toContain("Dr Test");
+    expect(html).toContain("Medecine Generale");
+  });
+
+  it("a UUID-like doctor_id passed via the consultation never reaches the document (panel path)", () => {
+    const html = ssr(renderToString(
+      createElement(PrescriptionPanel, {
+        consultation: consultation({
+          prescription: "Texte historique",
+          doctor_id: RAW_DOCTOR_ID,
+        }),
+      }),
+    ));
+    expect(html).toContain("Texte historique");
+    expect(html).not.toContain(RAW_DOCTOR_ID);
+  });
+
+  it("source contract — the consultation doctor_id is never passed for display", () => {
+    const panel = read("../components/consultation/PrescriptionPanel.tsx");
+    expect(panel).not.toContain("fallbackDoctorId");
+    expect(panel).toContain("const doctorName = doc?.doctor?.name ?? null;");
   });
 });
 

@@ -19,6 +19,12 @@
  *   PrescriptionDocument payload carries NO patient birth date, NO doctor
  *   contact details and NO stored signature image — so none is rendered
  *   (schema gap documented in the PR; needs a separate migration review).
+ * - The prescriber identity is ONLY `doc.doctor.name` (authoritative record).
+ *   `consultation.doctor_id` is an internal identifier, NOT a display name —
+ *   it is never rendered anywhere on the document (owner review, PR #104).
+ *   When no recorded name exists the prescriber block shows the same
+ *   empty-value marker as every other block and the signature caption is
+ *   omitted entirely.
  * - No fabricated signature, registration number, credential or verification
  *   claim — the signature area is a designated empty space.
  *
@@ -171,17 +177,17 @@ export function OrdonnanceDocumentBody({
   doc,
   legacyText,
   fallbackPatientName,
-  fallbackDoctorId,
 }: {
   doc: PrescriptionDocument | null;
   legacyText: string;
   fallbackPatientName?: string | null;
-  fallbackDoctorId?: string | null;
 }) {
   const hasStructured = Boolean(doc);
   const reference = doc?.reference ?? null;
   const issueDate = formatIssueDate(doc?.issued_at);
-  const doctorName = doc?.doctor?.name ?? fallbackDoctorId ?? null;
+  // Authoritative prescriber identity ONLY — never the consultation's
+  // internal doctor_id (owner review correction, PR #104).
+  const doctorName = doc?.doctor?.name ?? null;
   return (
     <div
       className="ordonnance-doc"
@@ -588,7 +594,6 @@ export function PrescriptionPanel({
           doc={doc}
           legacyText={legacyText}
           fallbackPatientName={consultation.patient_name}
-          fallbackDoctorId={consultation.doctor_id}
         />
       </div>
 
