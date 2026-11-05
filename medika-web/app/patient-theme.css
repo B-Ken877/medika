@@ -1,0 +1,253 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Medika — Patient app "Premium Mint" visual system (issue #99).
+
+   Scope rules (issue #20 governance — see tests/brand-palette.test.ts):
+   - This file declares NO :root block and never redefines a global color
+     token. Every custom property it introduces is namespaced `--pt-*` and
+     declared on `.app-shell`, so the institutional palette in globals.css
+     stays the single rendered source of truth for auth/admin/doctor pages.
+   - Every rule is scoped under `.app-shell` (the authenticated app shell —
+     patient + doctor tabs). Login/registration, the landing page and the
+     admin panel are untouched.
+   - The primary action / brand color stays the existing Medika deep green
+     (var(--green-600) etc.); mint/emerald below is decorative surface work
+     only. Text colors are unchanged (WCAG AA preserved).
+
+   Layers (no external images, no new dependencies):
+   1. warm-white base wash on .app-shell;
+   2. fixed translucent gradient field (.app-shell::after): soft mint radials
+      + light emerald washes + large crisp translucent "flowing curve" discs;
+   3. translucent glass header / bottom nav (with @supports fallback);
+   4. white cards with fine mint borders and soft two-layer shadows;
+   5. Akèy-only hero (`.home-hero`, patient dashboard markup) with a CSS-only
+      doctor-artwork placeholder slot (`.hero-art`) sized to later accept a
+      transparent PNG without layout change.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ── 1. Scoped tokens (never on :root) ────────────────────────────────────── */
+
+.app-shell {
+  --pt-mint-100: #e9f6ef;
+  --pt-mint-150: #dff1e7;
+  --pt-mint-200: #cfeadb;
+  --pt-card-border: #d9ece0;
+  --pt-card-border-soft: #e4f1e9;
+  --pt-glass: rgba(253, 255, 254, 0.88);
+  --pt-glass-border: rgba(20, 91, 80, 0.10);
+  --pt-shadow-card:
+    0 1px 2px rgba(13, 58, 50, 0.05),
+    0 12px 32px -16px rgba(13, 58, 50, 0.14);
+  --pt-shadow-float:
+    0 1px 2px rgba(13, 58, 50, 0.06),
+    0 18px 44px -18px rgba(13, 58, 50, 0.20);
+  --pt-radius-lg: 20px;
+
+  /* Warm white → very light emerald vertical wash. Decorative layers below
+     are drawn by ::after; this base must stay subtle and fast to paint. */
+  background:
+    linear-gradient(180deg, #fdfffe 0%, #f7fbf9 46%, #f1f8f4 100%);
+  /* Contain the fixed decorative layer to this subtree's stacking context so
+     it can sit behind all content without any z-index on .app-main (which
+     would trap dialogs/menus inside a new stacking context). */
+  isolation: isolate;
+}
+
+/* Decorative field: mint/emerald washes + translucent curved discs.
+   z-index: -1 paints above .app-shell's own background but below every
+   child (content, header, bottom nav). pointer-events: none keeps taps and
+   scroll behavior identical. */
+.app-shell::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(56rem 34rem at 6% -8%, rgba(166, 240, 201, 0.30), transparent 62%),
+    radial-gradient(48rem 32rem at 106% 14%, rgba(111, 167, 154, 0.16), transparent 60%),
+    radial-gradient(40rem 28rem at -10% 88%, rgba(166, 240, 201, 0.22), transparent 58%),
+    radial-gradient(circle 300px at 94% 4%, rgba(207, 234, 219, 0.42) 0 99%, transparent 100%),
+    radial-gradient(circle 420px at -6% 104%, rgba(233, 246, 239, 0.85) 0 99%, transparent 100%),
+    radial-gradient(circle 180px at 78% 58%, rgba(228, 241, 233, 0.55) 0 99%, transparent 100%);
+}
+
+/* The chat room keeps the same calm field but with reduced curve density —
+   the focused conversation layout must stay quiet. */
+.app-shell.chat-mode::after {
+  background:
+    radial-gradient(56rem 34rem at 6% -8%, rgba(166, 240, 201, 0.16), transparent 62%),
+    radial-gradient(40rem 28rem at -10% 96%, rgba(233, 246, 239, 0.6) 0 99%, transparent 100%);
+}
+
+/* ── 2. Glass header + bottom navigation ──────────────────────────────────── */
+
+.app-shell .app-header {
+  background: var(--pt-glass);
+  border-bottom-color: var(--pt-glass-border);
+}
+
+.app-shell .bottom-nav {
+  background: var(--pt-glass);
+  border-top-color: var(--pt-glass-border);
+}
+
+@supports ((backdrop-filter: blur(14px) saturate(1.15)) or (-webkit-backdrop-filter: blur(14px) saturate(1.15))) {
+  .app-shell .app-header,
+  .app-shell .bottom-nav {
+    background: rgba(253, 255, 254, 0.72);
+    -webkit-backdrop-filter: blur(14px) saturate(1.15);
+    backdrop-filter: blur(14px) saturate(1.15);
+  }
+}
+
+/* ── 3. Card surfaces: white, fine mint borders, soft elevation ───────────── */
+
+.app-shell .card,
+.app-shell .panel,
+.app-shell .stat-card,
+.app-shell .tip-card,
+.app-shell .quick-link {
+  border-color: var(--pt-card-border);
+  box-shadow: var(--pt-shadow-card);
+}
+
+.app-shell .panel { border-radius: var(--pt-radius-lg); }
+.app-shell .stat-card,
+.app-shell .tip-card { border-radius: 16px; }
+
+.app-shell .panel-head {
+  background: linear-gradient(180deg, var(--pt-mint-100), transparent);
+}
+
+.app-shell .tip-card .tip-icon {
+  background: var(--pt-mint-150);
+  box-shadow: inset 0 0 0 1px var(--pt-card-border-soft);
+}
+
+.app-shell .quick-link {
+  border-radius: 14px;
+}
+.app-shell .quick-link .quick-icon {
+  background: var(--pt-mint-150);
+  box-shadow: inset 0 0 0 1px var(--pt-card-border-soft);
+}
+
+/* Stat dots get a mint halo so the metric strip reads as one product. */
+.app-shell .stat-card { position: relative; }
+.app-shell .stat-card .stat-value { color: var(--text-primary); }
+
+/* Interactive rows keep their affordance; the lift is motion-gated. */
+@media (prefers-reduced-motion: no-preference) {
+  .app-shell .card-hover,
+  .app-shell .quick-link,
+  .app-shell .tip-card {
+    transition:
+      box-shadow 0.18s ease,
+      transform 0.18s ease,
+      border-color 0.18s ease;
+  }
+  .app-shell .card-hover:hover,
+  .app-shell .quick-link:hover {
+    transform: translateY(-1px);
+    border-color: var(--pt-mint-200);
+    box-shadow: var(--pt-shadow-float);
+  }
+}
+
+/* ── 4. Controls: tabs + specialty chips on mint ──────────────────────────── */
+
+.app-shell .tabs button.active {
+  color: var(--green-700);
+  border-bottom-color: var(--green-600);
+}
+
+.app-shell .btn-secondary {
+  box-shadow: inset 0 0 0 1px var(--pt-card-border);
+}
+
+/* ── 5. Akèy hero (patient dashboard only — markup lives in
+       components/consultation/PatientDashboard.tsx) ───────────────────────── */
+
+.home-hero {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px;
+  border: 1px solid var(--pt-card-border);
+  border-radius: var(--pt-radius-lg);
+  background:
+    radial-gradient(26rem 16rem at 118% -30%, rgba(166, 240, 201, 0.5), transparent 64%),
+    radial-gradient(22rem 14rem at -14% 120%, rgba(111, 167, 154, 0.14), transparent 60%),
+    linear-gradient(180deg, #ffffff 0%, var(--pt-mint-100) 100%);
+  box-shadow: var(--pt-shadow-card);
+  overflow: hidden;
+}
+
+.home-hero .hero-copy { min-width: 0; }
+.home-hero .page-title { margin-top: 2px; }
+.home-hero .page-head-actions { margin-top: 14px; }
+
+/* Doctor-artwork placeholder — deliberately neutral, CSS-only, no image
+   dependency. Fixed aspect + radius so a transparent PNG can later drop in
+   via .hero-art img without any layout shift (the slot reserves the box). */
+.hero-art {
+  flex: 0 0 auto;
+  width: 148px;
+  align-self: center;
+  aspect-ratio: 4 / 5;
+  border-radius: 16px;
+  border: 1px solid var(--pt-card-border);
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(166, 240, 201, 0.42), transparent 70%),
+    linear-gradient(180deg, var(--pt-mint-100), var(--pt-mint-150));
+  display: grid;
+  place-items: end center;
+  overflow: hidden;
+}
+
+/* CSS silhouette: head + shoulders, translucent emerald — a neutral stand-in
+   for the future artwork. */
+.hero-art .hero-art-shape {
+  position: relative;
+  width: 74%;
+  height: 78%;
+  display: block;
+}
+.hero-art .hero-art-shape::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 6%;
+  transform: translateX(-50%);
+  width: 44%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: rgba(20, 91, 80, 0.20);
+}
+.hero-art .hero-art-shape::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 92%;
+  height: 52%;
+  border-radius: 46% 46% 12% 12% / 70% 70% 8% 8%;
+  background: rgba(20, 91, 80, 0.14);
+}
+
+@media (max-width: 560px) {
+  .home-hero { padding: 18px; gap: 14px; }
+  .hero-art { width: 104px; border-radius: 14px; }
+}
+
+@media (min-width: 900px) {
+  .home-hero { padding: 28px; }
+  .hero-art { width: 176px; }
+}
+
+/* ── 6. Small print ───────────────────────────────────────────────────────── */
+
+/* Status/semantic colors, focus rings and reduced-motion behavior stay owned
+   by globals.css / visual-polish.css — nothing redefined here. */
