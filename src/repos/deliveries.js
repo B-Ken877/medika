@@ -15,7 +15,9 @@ const EMPLOYEE_EVENTS = {
 function dateOnly(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return null;
   const d = new Date(String(value) + 'T12:00:00Z');
-  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== value ? null : d;
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== value) return null;
+  if (String(value) < new Date().toISOString().slice(0, 10)) return null;
+  return d;
 }
 
 function deliveryApi(row) {
@@ -157,7 +159,7 @@ async function transition({ deliveryId, employeeId, employeeName, eventType, rea
     if (prior[0]) return { outcome: 'DUPLICATE', status: delivery.status };
     const allowed = EMPLOYEE_EVENTS[delivery.status] || [];
     if (!allowed.includes(eventType)) return { outcome: 'INVALID_TRANSITION', status: delivery.status };
-    if (eventType === 'FAILED_ATTEMPT' && String(reason || '').trim().length < 5) {
+    if (['FAILED_ATTEMPT', 'RETURNED_ESCALATED'].includes(eventType) && String(reason || '').trim().length < 5) {
       return { outcome: 'FAILURE_REASON_REQUIRED' };
     }
     await client.query(
