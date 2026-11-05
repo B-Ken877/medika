@@ -355,18 +355,24 @@ export function MedicationOrderCta({
   deliveryAddress,
   deliveryPhone,
   deliveryZone,
+  deliveryCity,
+  serviceZones,
   onDeliveryAddressChange,
   onDeliveryPhoneChange,
   onDeliveryZoneChange,
+  onDeliveryCityChange,
   onCreate,
 }: {
   busy: boolean;
   deliveryAddress: string;
   deliveryPhone: string;
   deliveryZone: string;
+  deliveryCity: string;
+  serviceZones: { id: string; city: string; zone_name: string }[];
   onDeliveryAddressChange: (value: string) => void;
   onDeliveryPhoneChange: (value: string) => void;
   onDeliveryZoneChange: (value: string) => void;
+  onDeliveryCityChange: (value: string) => void;
   onCreate: () => void;
 }) {
   return (
@@ -412,27 +418,25 @@ export function MedicationOrderCta({
             style={{ marginTop: 4 }}
           />
         </label>
+        <label className="small" htmlFor="med-order-city" style={{ color: "var(--gray-700, #3f4f4b)" }}>
+          Ville (obligatoire)
+          <select id="med-order-city" className="input" required value={deliveryCity} onChange={(e) => onDeliveryCityChange(e.target.value)} disabled={busy} style={{ marginTop: 4 }}>
+            {[...new Set(serviceZones.map((z) => z.city))].map((city) => <option key={city} value={city}>{city}</option>)}
+          </select>
+        </label>
         <label className="small" htmlFor="med-order-zone" style={{ color: "var(--gray-700, #3f4f4b)" }}>
           Quartier ou zone de livraison (obligatoire)
-          <input
-            id="med-order-zone"
-            className="input"
-            type="text"
-            maxLength={80}
-            required
-            value={deliveryZone}
-            onChange={(e) => onDeliveryZoneChange(e.target.value)}
-            placeholder="Ex. : nom de votre quartier"
-            disabled={busy}
-            style={{ marginTop: 4 }}
-          />
+          <select id="med-order-zone" className="input" required value={deliveryZone} onChange={(e) => onDeliveryZoneChange(e.target.value)} disabled={busy || serviceZones.length === 0} style={{ marginTop: 4 }}>
+            {serviceZones.filter((z) => z.city === deliveryCity).map((z) => <option key={z.id} value={z.zone_name}>{z.zone_name}</option>)}
+          </select>
         </label>
       </div>
       <p className="tiny" style={{ marginTop: 8, color: "var(--gray-700, #3f4f4b)" }}>
         La disponibilité est vérifiée selon les zones actuellement desservies. Si votre adresse n’est pas
         couverte, vous pourrez toujours utiliser l’ordonnance pour acheter vos médicaments en pharmacie.
       </p>
-      <button type="button" className="btn btn-primary" style={{ marginTop: 10 }} onClick={onCreate} disabled={busy}>
+      {serviceZones.length === 0 && <p className="alert alert-info" role="status">Aucune zone de livraison n’est actuellement configurée. Vous pouvez télécharger l’ordonnance et acheter vos médicaments en pharmacie.</p>}
+      <button type="button" className="btn btn-primary" style={{ marginTop: 10 }} onClick={onCreate} disabled={busy || serviceZones.length === 0}>
         <Clock size={15} aria-hidden /> {busy ? "Envoi…" : "Demander le prix et la livraison avec Medika"}
       </button>
     </section>
@@ -460,6 +464,8 @@ export function MedicationOrderPanel({
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
   const [deliveryZone, setDeliveryZone] = useState("");
+  const [deliveryCity, setDeliveryCity] = useState("Port-au-Prince");
+  const [serviceZones, setServiceZones] = useState<{ id: string; city: string; zone_name: string }[]>([]);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [paymentMessage, setPaymentMessage] = useState<string | null>(null);
 
@@ -484,6 +490,17 @@ export function MedicationOrderPanel({
       if (!token) {
         setChecked(true);
         return;
+      }
+      try {
+        const zones = await apiFetch<{ id: string; city: string; zone_name: string }[]>("/api/delivery-zones", { token });
+        if (!alive) return;
+        setServiceZones(zones);
+        if (zones.length > 0) {
+          setDeliveryCity(zones[0].city);
+          setDeliveryZone(zones[0].zone_name);
+        }
+      } catch (zoneError) {
+        if (alive) setError(zoneError);
       }
       try {
         const o = await getMedicationOrderByConsultation(token, consultation.id);
@@ -534,6 +551,7 @@ export function MedicationOrderPanel({
         delivery_address: deliveryAddress.trim(),
         delivery_phone: deliveryPhone.trim(),
         delivery_zone: deliveryZone.trim(),
+        delivery_city: deliveryCity,
       });
       setOrder(created);
       setDeliveryAddress("");
@@ -649,9 +667,15 @@ export function MedicationOrderPanel({
         deliveryAddress={deliveryAddress}
         deliveryPhone={deliveryPhone}
         deliveryZone={deliveryZone}
+        deliveryCity={deliveryCity}
+        serviceZones={serviceZones}
         onDeliveryAddressChange={setDeliveryAddress}
         onDeliveryPhoneChange={setDeliveryPhone}
         onDeliveryZoneChange={setDeliveryZone}
+        onDeliveryCityChange={(city) => {
+          setDeliveryCity(city);
+          setDeliveryZone(serviceZones.find((z) => z.city === city)?.zone_name || "");
+        }}
         onCreate={onCreate}
       />
     </div>
