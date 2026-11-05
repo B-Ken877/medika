@@ -5,6 +5,18 @@ const { authenticate, requireRole } = require('../auth');
 const { simulationAllowed } = require('../config');
 const moncash = require('../moncash');
 const payments = require('../repos/medication-payments');
+const notifications = require('../notifications/emit');
+
+function emitPaidNotification(userId, orderId) {
+  notifications.emit({
+    userId,
+    eventType: 'medication:paid',
+    idempotencyKey: `medication-order:${orderId}:payment-verified`,
+    title: 'Medika',
+    body: 'Votre paiement a été confirmé. Votre commande est transmise à notre équipe.',
+    url: '/app/consultations',
+  });
+}
 
 const router = express.Router();
 
@@ -51,6 +63,7 @@ router.post('/medication-orders/:id/payment/verify', authenticate, requireRole('
     const row = await payments.findByOrderId(req.params.id);
     if (!row || row.patient_id !== req.user.id) return res.status(404).json({ error: 'Paiement introuvable.' });
     if (row.status === 'PAID') {
+      emitPaidNotification(req.user.id, row.medication_order_id);
       return res.json({ success: true, payment: payments.toApi(row) });
     }
     if (row.status !== 'PENDING') return res.status(409).json({ error: 'Ce paiement n’est plus vérifiable.', code: 'PAYMENT_NOT_PENDING' });
@@ -96,6 +109,7 @@ router.post('/medication-orders/:id/payment/verify', authenticate, requireRole('
       return res.status(409).json({ error: 'Cette transaction MonCash est déjà associée à un autre paiement.', code: 'DUPLICATE_TRANSACTION' });
     }
     if (saved.outcome !== 'PAID') return res.status(409).json({ error: 'Le paiement n’a pas pu être confirmé.', code: 'PAYMENT_NOT_CONFIRMED' });
+    emitPaidNotification(req.user.id, row.medication_order_id);
     return res.json({ success: true, payment: saved.payment });
   } catch (err) {
     if (String(err.message || '').startsWith('moncash_')) {
