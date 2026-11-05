@@ -18,7 +18,7 @@ export default function LivraisonsPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [employee, setEmployee] = useState({ name: '', username: '', password: '', phone: '' });
-  const [zone, setZone] = useState({ city: 'Port-au-Prince', zone_name: 'Port-au-Prince', active: true });
+  const [zone, setZone] = useState({ city: 'Port-au-Prince', zone_name: '', active: true });
   const [assignment, setAssignment] = useState({ medication_order_id: '', employee_id: '', zone_id: '', scheduled_for: nextFriday(), urgent: false, urgent_reason: '' });
   const [expense, setExpense] = useState({ delivery_id: '', amount_htg: '', notes: '' });
   const [period, setPeriod] = useState({ from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) });
