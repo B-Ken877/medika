@@ -8,7 +8,7 @@
  * established that convention (e.g. CreateConsultationRequest).
  */
 
-export type Role = "patient" | "doctor" | "admin";
+export type Role = "patient" | "doctor" | "admin" | "delivery";
 
 export type ConsultationStatus =
   | "RECHERCHE_MEDECIN"
@@ -363,12 +363,12 @@ export interface MedicationOrder {
   delivery_address?: string;
   delivery_phone?: string;
   delivery_zone?: string;
+  delivery_city?: string;
   requested_at?: number | null;
   /** 30-minute operations SLA target (epoch seconds, from the request). */
   sla_deadline_at?: number | null;
   sla_state?: "PENDING" | "ESCALATED" | string;
   quote?: MedicationQuote | null;
-  payment?: MedicationPayment | null;
   /** Server-derived next step — the client never guesses from raw status. */
   next_step?:
     | "WAITING_MEDIKA"
@@ -383,6 +383,7 @@ export interface CreateMedicationOrderRequest {
   delivery_address: string;
   delivery_phone: string;
   delivery_zone: string;
+  delivery_city: string;
 }
 
 export interface MedicationPayment {
@@ -390,10 +391,8 @@ export interface MedicationPayment {
   medication_order_id: string;
   payment_reference: string;
   amount_htg: number;
-  verified_amount_htg?: number | null;
-  quote_id?: string | null;
   currency: 'HTG';
-  status: 'PENDING' | 'PAID' | 'FAILED' | 'REVIEW';
+  status: 'PENDING' | 'PAID' | 'FAILED';
   transaction_id?: string | null;
   simulated: boolean;
   created_at?: number | null;
