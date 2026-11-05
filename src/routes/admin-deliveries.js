@@ -116,8 +116,8 @@ router.post('/deliveries/assign', async (req, res, next) => {
         idempotencyKey: 'delivery:' + result.id + ':assigned',
         title: 'Medika',
         body: req.body.urgent === true
-          ? 'Votre livraison prioritaire a été planifiée.'
-          : 'Votre livraison est planifiée pour vendredi.',
+          ? 'Votre livraison prioritaire est planifiée le ' + result.scheduledFor + ' (' + ({ MATIN: 'matin, 08 h à 12 h', APRES_MIDI: 'après-midi, 12 h à 17 h', SOIR: 'soir, 17 h à 20 h', JOURNEE: 'toute la journée' }[result.deliveryWindow] || 'toute la journée') + ').'
+          : 'Votre livraison est planifiée pour vendredi ' + ({ MATIN: 'matin, 08 h à 12 h', APRES_MIDI: 'après-midi, 12 h à 17 h', SOIR: 'soir, 17 h à 20 h', JOURNEE: 'toute la journée' }[result.deliveryWindow] || 'toute la journée') + '.',
         url: '/app/consultations',
       });
     }
