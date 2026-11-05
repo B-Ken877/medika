@@ -1,38 +1,47 @@
-Last updated: 2026-10-29T22:05:00Z (cron-202610300533)
+Last updated: 2026-11-05T05:05:00Z (cron-202611051242)
 
 ## Active issue
-- NONE. #79 IN REVIEW via PR #80 (run cron-202610300533), branch
-  fix/issue-79-consultation-after-simulated-payment (from main d9dcd09).
-  [bug] simulated payment succeeds but consultation not created. Audit: full
-  client-payload flow PROVEN working (9 new tests); two real defects fixed:
-  (1) server routeNewConsultation threw 500 AFTER insert+attach commit -> false
-  failure; now parks in waiting state or returns honest 201;
-  (2) web ErrorAlert discarded ApiError.detail (specific backend reason) ->
-  users saw unexplained "payment confirmed, could not send"; detail now
-  rendered. Tests: 456 backend + 499 web PASS; typecheck/lint/build clean.
-  Owner next: review PR #80. If symptoms persist: owner pulls Vercel function
-  logs for the failed POST (agent has no prod access). Do NOT mark DONE
-  unverified.
-
-## Recently completed
-- #77 CLOSED: owner merged PR #78 as main d9dcd09 (beta allowlist). Stale
-  IN REVIEW label removed this run.
-- #79 investigation + PR #80 (this run).
-- #72 (PR #76 -> a2fcdc1), #70 (PR #73), #68 (PR #69).
+- NONE. #82 IN REVIEW via PR #86, branch
+  feat/issue-82-structured-prescriptions (from main 58f0a17, commit 55fc4c5).
+  Structured, immutable prescription documents + French « Ordonnance
+  médicale ». Migration 009; repo src/repos/prescriptions.js; PUT extended
+  (legacy verbatim + structured allowlist, prices stripped), GET document;
+  atomic row-locked issuance, dup → 409 PRESCRIPTION_ALREADY_ISSUED (404
+  kept for wrong doctor / non-active per legacy contract). Web composer FR,
+  document FR, lazy html2canvas download, A4 print CSS.
+  Tests: backend 474/474 (40 files), web 521/521 (41 files), typecheck/lint/
+  build clean. Owner next: review + merge PR #86. Do NOT close #82 or mark
+  DONE until owner verifies/merges.
 
 ## Queue
-- EMPTY except #79 awaiting owner review of PR #80.
+- #83 medication orders + pharmacy quotes — DEPENDS ON #82 MERGED (rebase
+  from latest main; do not assume a fixed SHA).
+- #84 MonCash medication payments — depends on #83 merged.
+- #85 delivery ops + staff portal — depends on #83 + #84 merged.
+- All four (#82-#85) arrived 2026-11-05 unlabeled → treated as same default
+  priority, oldest first.
 
-## Infra notes
-- vercel.json git.deploymentEnabled["agent-state"]=false (expected).
-- Test env: npm ci at root + medika-web; embedded PostgreSQL auto-managed.
+## Infra notes (carried forward)
+- vercel.json git.deploymentEnabled["agent-state"]=false (safe to push state here).
+- Test env: npm ci at root + medika-web; embedded PostgreSQL auto-managed by
+  vitest global-setup.
 - Patching src modules in tests: use createRequire anchored at the src file
-  (native require cache) -- dynamic import() creates a separate SSR instance
-  (see media-assets-blob.test.js + issue-79 suite for the pattern).
+  (native require cache) — dynamic import() creates a separate SSR instance.
+- Issue #60 invariants bite in tests: ONE active consultation per patient
+  AND per doctor. Every issuance scenario needs a fresh patient fixture AND
+  any consultation left open must be closed (issue or reject) or the next
+  create 409s ("Doktè sa a okipe deja"). Pattern used in
+  tests/issue-82-prescription-documents.test.js (freshPatient() mints JWT
+  directly — the login endpoint throttles at ~5 attempts/min).
+- Read tests without routing side effects: h.createConsultationFixture()
+  (direct repo insert, no routed offer).
+- Temp PAT lives ONLY in the local sandbox at agent-state/.gh_token
+  (chmod 600, gitignored). NOT committed anywhere.
 
 ## Next action (next run)
-1. Check lock. If free: check owner feedback on PR #80; whether #79/PR #80
-   were merged/closed.
-2. If merged + #79 closed: remove stale IN REVIEW, verify deploy of new main,
-   report QUEUE EMPTY unless new issues.
-3. If feedback: address on the same branch. One issue at a time.
+1. Check lock. If free: check PR #86 review state and whether #82 was
+   merged/closed; if merged: remove stale IN REVIEW label if the issue is
+   still open, verify, report; then #83 becomes eligible (rebase from
+   latest main).
+2. If owner left review feedback on PR #86: address it on the same branch.
+3. One issue at a time. Never merge. Never duplicate branches/PRs.

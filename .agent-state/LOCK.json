@@ -1,1 +1,9 @@
-{"run_id":"cron-202610300533 complete: #79 IN REVIEW via PR #80","started_at_utc":"2026-10-29T21:34:00Z","heartbeat_utc":"2026-10-29T22:05:00Z","active":false,"owner":"medika-autonomous-agent","issue":null,"note":"Run cron-202610300533 complete: #79 IN REVIEW via PR #80 (failure-safe post-commit routing -> honest 201; ErrorAlert renders ApiError.detail). Exact-client-payload regression suite: 456 backend + 499 web tests pass; typecheck/lint/build clean. Also: PR #78 confirmed merged as d9dcd09, #77 closed + stale label removed. Owner: review PR #80; if symptoms persist pull Vercel function logs for the failed POST (agent has no prod access). No open PRs besides #80. Lock released."}
+{
+  "run_id": "cron-202611051242",
+  "started_at_utc": "2026-11-05T04:42:56Z",
+  "heartbeat_utc": "2026-11-05T05:05:00Z",
+  "active": false,
+  "owner": "medika-autonomous-agent",
+  "issue": null,
+  "note": "Run cron-202611051242 complete: #82 IN REVIEW via PR #86 (feat/issue-82-structured-prescriptions, commit 55fc4c5). Structured immutable prescription documents: migration 009, atomic row-locked issuance, allowlist price-stripping, legacy verbatim compat, GET doc endpoint, FR composer + Ordonnance m\u00e9dicale with lazy html2canvas download + A4 print. Tests: backend 474/474 (40 files), web 521/521 (41 files), typecheck/lint/build clean. No merge/deploy performed. Owner: review PR #86; then #83 (rebase from latest main). Lock released."
+}
