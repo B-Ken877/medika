@@ -916,7 +916,7 @@ describe('issue #85 — Medika-owned delivery operations', () => {
 
     const urgent = await r.post('/api/admin/deliveries/assign')
       .set('Authorization', 'Bearer ' + token.admin)
-      .send({ medication_order_id: orderId, employee_id: employee.id, zone_id: zone.rows[0].id, scheduled_for: nextMondayIso(), urgent: true, urgent_reason: 'Situation médicale nécessitant une livraison rapide.' });
+      .send({ medication_order_id: orderId, employee_id: employee.id, zone_id: zone.rows[0].id, scheduled_for: nextMondayIso(), delivery_window: 'SOIR', urgent: true, urgent_reason: 'Situation médicale nécessitant une livraison rapide.' });
     expect(urgent.status).toBe(201);
     const employeeList = await r.get('/api/delivery/my').set('Authorization', 'Bearer ' + employee.token);
     expect(employeeList.status).toBe(200);
@@ -924,6 +924,7 @@ describe('issue #85 — Medika-owned delivery operations', () => {
     expect(employeeList.body[0]).not.toHaveProperty('diagnosis');
     expect(employeeList.body[0]).not.toHaveProperty('prescription');
     expect(employeeList.body[0].urgent).toBe(true);
+    expect(employeeList.body[0].delivery_window).toBe('SOIR');
   });
 
   it('enforces employee assignment boundaries and patient-confirmed delivery chain of custody', async () => {
@@ -933,7 +934,7 @@ describe('issue #85 — Medika-owned delivery operations', () => {
     const zone = await db.query("SELECT id FROM delivery_zones WHERE city = 'Port-au-Prince' AND zone_name = 'Port-au-Prince' AND active = TRUE");
     const assigned = await r.post('/api/admin/deliveries/assign')
       .set('Authorization', 'Bearer ' + token.admin)
-      .send({ medication_order_id: orderId, employee_id: employee.id, zone_id: zone.rows[0].id, scheduled_for: nextFridayIso(), urgent: false });
+      .send({ medication_order_id: orderId, employee_id: employee.id, zone_id: zone.rows[0].id, scheduled_for: nextFridayIso(), delivery_window: 'APRES_MIDI', urgent: false });
     expect(assigned.status).toBe(201);
 
     const hidden = await r.get('/api/delivery/my').set('Authorization', 'Bearer ' + otherEmployee.token);
@@ -959,6 +960,7 @@ describe('issue #85 — Medika-owned delivery operations', () => {
       .set('Authorization', 'Bearer ' + patient.token);
     expect(tracking.status).toBe(200);
     expect(tracking.body.status).toBe('AWAITING_CONFIRMATION');
+    expect(tracking.body.delivery_window).toBe('APRES_MIDI');
     const confirmed = await r.post('/api/medication-orders/' + orderId + '/delivery/confirm')
       .set('Authorization', 'Bearer ' + patient.token).send({});
     expect(confirmed.status).toBe(200);
@@ -988,4 +990,27 @@ describe('issue #85 — Medika-owned delivery operations', () => {
     expect(unsupported.status).toBe(422);
     expect(unsupported.body.code).toBe('DELIVERY_ZONE_NOT_SUPPORTED');
   });
+});
+
+
+
+it('records and notifies when urgent delivery cannot be accommodated', async () => {
+  const { orderId, patient } = await paidMedicationOrderForDelivery();
+  const response = await r.post('/api/admin/deliveries/urgent-unavailable')
+    .set('Authorization', 'Bearer ' + token.admin)
+    .send({ medication_order_id: orderId, reason: 'Aucun livreur disponible pour cette demande urgente.' });
+  expect(response.status).toBe(200);
+  expect(response.body.success).toBe(true);
+
+  const duplicate = await r.post('/api/admin/deliveries/urgent-unavailable')
+    .set('Authorization', 'Bearer ' + token.admin)
+    .send({ medication_order_id: orderId, reason: 'Deuxième notification non nécessaire.' });
+  expect(duplicate.status).toBe(409);
+  expect(duplicate.body.code).toBe('ALREADY_NOTIFIED');
+
+  const { rows } = await db.query(
+    "SELECT event_type FROM medication_order_events WHERE order_id = $1 AND event_type = 'DELIVERY_URGENT_UNAVAILABLE'",
+    [orderId]
+  );
+  expect(rows).toHaveLength(1);
 });
