@@ -20,7 +20,6 @@
 
 const express = require('express');
 const ordersRepo = require('../repos/medication-orders');
-const medicationPayments = require('../repos/medication-payments');
 const { authenticate, requireRole } = require('../auth');
 const { query } = require('../db');
 
@@ -46,6 +45,7 @@ router.post('/consultations/:id/medication-order', authenticate, requireRole('pa
       deliveryAddress: typeof body.delivery_address === 'string' ? body.delivery_address.trim() : '',
       deliveryPhone: typeof body.delivery_phone === 'string' ? body.delivery_phone.trim() : '',
       deliveryZone: typeof body.delivery_zone === 'string' ? body.delivery_zone.trim() : '',
+      deliveryCity: typeof body.delivery_city === 'string' ? body.delivery_city.trim() : 'Port-au-Prince',
     });
 
     if (result.outcome === 'NOT_FOUND') return res.status(404).json({ error: 'Not found' });
@@ -94,7 +94,6 @@ router.get('/consultations/:id/medication-order', authenticate, requireRole('pat
     if (!rows[0]) return res.status(404).json({ error: 'Not found' });
     const order = await ordersRepo.getForPatient(rows[0].id, req.user.id);
     if (!order) return res.status(404).json({ error: 'Not found' });
-    order.payment = medicationPayments.toApi(await medicationPayments.findByOrderId(order.id));
     res.json(order);
   } catch (err) { next(err); }
 });
