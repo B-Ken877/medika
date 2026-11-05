@@ -1,9 +1,9 @@
 {
-  "run_id": "cron-202611051242",
-  "started_at_utc": "2026-11-05T04:42:56Z",
-  "heartbeat_utc": "2026-11-05T05:05:00Z",
-  "active": false,
+  "run_id": "cron-202611051316",
+  "started_at_utc": "2026-11-05T05:16:45Z",
+  "heartbeat_utc": "2026-11-05T05:16:45Z",
+  "active": true,
   "owner": "medika-autonomous-agent",
   "issue": null,
-  "note": "Run cron-202611051242 complete: #82 IN REVIEW via PR #86 (feat/issue-82-structured-prescriptions, commit 55fc4c5). Structured immutable prescription documents: migration 009, atomic row-locked issuance, allowlist price-stripping, legacy verbatim compat, GET doc endpoint, FR composer + Ordonnance m\u00e9dicale with lazy html2canvas download + A4 print. Tests: backend 474/474 (40 files), web 521/521 (41 files), typecheck/lint/build clean. No merge/deploy performed. Owner: review PR #86; then #83 (rebase from latest main). Lock released."
+  "note": "Run cron-202611051316 started. Checking PR #86 review state and issue #82 merge status before next action."
 }
