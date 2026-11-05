@@ -254,22 +254,22 @@ async function report({ from, to }) {
   const successful = row.delivered || 0;
   const rangeParams = [from, to];
   const { rows: weekly } = await query(
-    `SELECT date_trunc('week', d.created_at)::date AS period,
+    `SELECT date_trunc('week', d.created_at AT TIME ZONE 'America/Port-au-Prince')::date AS period,
             COUNT(DISTINCT d.id)::int AS deliveries,
             COUNT(DISTINCT d.id) FILTER (WHERE d.status = 'DELIVERED')::int AS delivered,
             COALESCE(SUM(e.amount_htg),0)::int AS expense_htg
        FROM medication_deliveries d LEFT JOIN medication_delivery_expenses e ON e.delivery_id = d.id
       WHERE d.created_at >= ($1::date::timestamp AT TIME ZONE 'America/Port-au-Prince') AND d.created_at < (($2::date + interval '1 day')::timestamp AT TIME ZONE 'America/Port-au-Prince')
-      GROUP BY date_trunc('week', d.created_at)::date ORDER BY period`, rangeParams
+      GROUP BY date_trunc('week', d.created_at AT TIME ZONE 'America/Port-au-Prince')::date ORDER BY period`, rangeParams
   );
   const { rows: monthly } = await query(
-    `SELECT date_trunc('month', d.created_at)::date AS period,
+    `SELECT date_trunc('month', d.created_at AT TIME ZONE 'America/Port-au-Prince')::date AS period,
             COUNT(DISTINCT d.id)::int AS deliveries,
             COUNT(DISTINCT d.id) FILTER (WHERE d.status = 'DELIVERED')::int AS delivered,
             COALESCE(SUM(e.amount_htg),0)::int AS expense_htg
        FROM medication_deliveries d LEFT JOIN medication_delivery_expenses e ON e.delivery_id = d.id
       WHERE d.created_at >= ($1::date::timestamp AT TIME ZONE 'America/Port-au-Prince') AND d.created_at < (($2::date + interval '1 day')::timestamp AT TIME ZONE 'America/Port-au-Prince')
-      GROUP BY date_trunc('month', d.created_at)::date ORDER BY period`, rangeParams
+      GROUP BY date_trunc('month', d.created_at AT TIME ZONE 'America/Port-au-Prince')::date ORDER BY period`, rangeParams
   );
   return {
     ...row,
