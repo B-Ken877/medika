@@ -537,9 +537,11 @@ export function MedicationOrderPanel({
           <section className="card" style={{ margin: 12 }} aria-label="Paiement MonCash">
             <h3 style={{ marginTop: 0, color: "var(--green-800)" }}>Paiement du devis</h3>
             <p className="small">Le montant est calculé à partir du devis confirmé. Aucun frais de livraison ne vous est facturé.</p>
-            <button type="button" className="btn btn-primary" onClick={onStartPayment} disabled={busy}>
-              Payer avec MonCash
-            </button>
+            {order.payment?.status !== "REVIEW" && (
+              <button type="button" className="btn btn-primary" onClick={onStartPayment} disabled={busy}>
+                {order.payment?.status === "FAILED" ? "Réessayer avec MonCash" : "Payer avec MonCash"}
+              </button>
+            )}
             {paymentUrl && (
               <p style={{ marginTop: 10 }}>
                 <a className="btn btn-secondary" href={paymentUrl} target="_blank" rel="noopener noreferrer">Ouvrir MonCash</a>
