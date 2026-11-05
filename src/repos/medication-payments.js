@@ -127,6 +127,7 @@ async function markVerified({ paymentId, patientId, transactionId, verifiedAmoun
         ? { outcome: 'PAID', payment: toApi(payment) }
         : { outcome: 'TRANSACTION_CONFLICT' };
     }
+    if (payment.status === 'REVIEW') return { outcome: 'REVIEW', payment: toApi(payment) };
     if (payment.status !== 'PENDING') return { outcome: 'INVALID_STATE' };
     if (!transactionId || !Number.isSafeInteger(Number(verifiedAmount)) ||
         Number(verifiedAmount) !== Number(payment.amount_htg)) {
@@ -137,11 +138,44 @@ async function markVerified({ paymentId, patientId, transactionId, verifiedAmoun
       );
       return { outcome: 'VERIFICATION_MISMATCH' };
     }
+    const { rows: orderRows } = await client.query(
+      'SELECT * FROM medication_orders WHERE id = $1 AND patient_id = $2 FOR UPDATE',
+      [payment.medication_order_id, patientId]
+    );
+    const order = orderRows[0];
+    if (!order || order.status !== 'ACCEPTED') return { outcome: 'INVALID_STATE' };
+    const { rows: quoteRows } = await client.query(
+      `SELECT * FROM pharmacy_quotes WHERE order_id = $1 AND superseded_at IS NULL
+       ORDER BY confirmed_at DESC LIMIT 1 FOR UPDATE`,
+      [payment.medication_order_id]
+    );
+    const quote = quoteRows[0];
+    const quoteStillValid = quote && quote.id === payment.quote_id &&
+      new Date(quote.expires_at).getTime() > Date.now() &&
+      Number(quote.total_htg) === Number(payment.amount_htg);
+
     const { rows: collision } = await client.query(
       'SELECT id FROM medication_payments WHERE transaction_id = $1 AND id <> $2',
       [transactionId, paymentId]
     );
     if (collision.length) return { outcome: 'DUPLICATE_TRANSACTION' };
+
+    if (!quoteStillValid) {
+      const { rows: reviewRows } = await client.query(
+        `UPDATE medication_payments SET status = 'REVIEW', transaction_id = $2,
+           verified_amount_htg = $3, provider_raw = $4::jsonb, simulated = $5,
+           verified_at = now(), updated_at = now() WHERE id = $1 RETURNING *`,
+        [paymentId, String(transactionId), Number(verifiedAmount), JSON.stringify(providerRaw || {}), Boolean(simulated)]
+      );
+      await client.query(
+        "INSERT INTO medication_order_events (order_id,event_type,actor_id,actor_name,actor_role,details) VALUES ($1,'PAYMENT_REVIEW',$2,'Système','system',$3::jsonb)",
+        [payment.medication_order_id, patientId, JSON.stringify({
+          reason: 'QUOTE_EXPIRED_OR_CHANGED_AFTER_PAYMENT', payment_id: paymentId,
+          transaction_id: transactionId, verified_amount_htg: verifiedAmount,
+        })]
+      );
+      return { outcome: 'REVIEW', payment: toApi(reviewRows[0]) };
+    }
 
     const { rows: updated } = await client.query(
       `UPDATE medication_payments
