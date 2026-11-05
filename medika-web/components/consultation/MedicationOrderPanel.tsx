@@ -28,6 +28,8 @@ import {
   declineMedicationQuote,
   getMedicationOrderByConsultation,
   getPrescriptionDocument,
+  createMedicationPayment,
+  verifyMedicationPayment,
 } from "@/lib/api/endpoints";
 import { ApiError } from "@/lib/api/client";
 import { ErrorAlert, Spinner } from "@/components/ui/primitives";
@@ -380,6 +382,8 @@ export function MedicationOrderPanel({
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
   const [deliveryZone, setDeliveryZone] = useState("");
+  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const [paymentMessage, setPaymentMessage] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!token) return null;
@@ -462,6 +466,33 @@ export function MedicationOrderPanel({
   const onAccept = () =>
     run(async () => {
       if (order) await acceptMedicationQuote(token ?? "", order.id);
+      setPaymentUrl(null);
+      setPaymentMessage(null);
+    });
+
+  const onStartPayment = () =>
+    run(async () => {
+      if (!order) return;
+      const result = await createMedicationPayment(token ?? "", order.id);
+      if (result.paid) {
+        setPaymentMessage("Votre paiement est déjà confirmé.");
+        setPaymentUrl(null);
+      } else if (result.redirectUrl) {
+        setPaymentUrl(result.redirectUrl);
+        setPaymentMessage("Après avoir terminé le paiement MonCash, revenez ici et vérifiez son statut.");
+      }
+    });
+
+  const onVerifyPayment = () =>
+    run(async () => {
+      if (!order) return;
+      const result = await verifyMedicationPayment(token ?? "", order.id);
+      if (result.success) {
+        setPaymentMessage("Paiement confirmé par MonCash. Votre demande est transmise à l’équipe de préparation.");
+        setPaymentUrl(null);
+      } else {
+        setPaymentMessage("Le paiement n’est pas encore confirmé. Si vous venez de payer, patientez quelques instants puis réessayez.");
+      }
     });
 
   const onDecline = () =>
@@ -502,6 +533,32 @@ export function MedicationOrderPanel({
           onCancel={onCancel}
           onNewRequest={onNewRequest}
         />
+        {order.status === "ACCEPTED" && (
+          <section className="card" style={{ margin: 12 }} aria-label="Paiement MonCash">
+            <h3 style={{ marginTop: 0, color: "var(--green-800)" }}>Paiement du devis</h3>
+            <p className="small">Le montant est calculé à partir du devis confirmé. Aucun frais de livraison ne vous est facturé.</p>
+            <button type="button" className="btn btn-primary" onClick={onStartPayment} disabled={busy}>
+              Payer avec MonCash
+            </button>
+            {paymentUrl && (
+              <p style={{ marginTop: 10 }}>
+                <a className="btn btn-secondary" href={paymentUrl} target="_blank" rel="noopener noreferrer">Ouvrir MonCash</a>
+              </p>
+            )}
+            {paymentUrl && (
+              <button type="button" className="btn btn-primary" onClick={onVerifyPayment} disabled={busy}>
+                Vérifier mon paiement
+              </button>
+            )}
+            {paymentMessage && <p className="small" role="status" style={{ marginTop: 8 }}>{paymentMessage}</p>}
+          </section>
+        )}
+        {order.status === "PAID" && (
+          <section className="card" style={{ margin: 12 }} role="status">
+            <strong style={{ color: "var(--green-800)" }}>Paiement confirmé</strong>
+            <p className="small">Votre paiement MonCash a été vérifié. L’équipe Medika peut maintenant préparer votre commande.</p>
+          </section>
+        )}
       </div>
     );
   }
