@@ -30,6 +30,7 @@
 const express = require('express');
 const lifecycle = require('../consultation-lifecycle');
 const walletRepo = require('../repos/wallet');
+const medicationOrdersRepo = require('../repos/medication-orders');
 const dispatch = require('../notifications/dispatch');
 const { authenticateAdmin } = require('../auth');
 
@@ -79,6 +80,23 @@ async function processDeadlines(req, res, next) {
 // Vercel cron jobs issue GET requests; POST is kept for manual/operator use.
 router.get('/crons/consultation-deadlines', authorizeCron, processDeadlines);
 router.post('/crons/consultation-deadlines', authorizeCron, processDeadlines);
+
+/**
+ * GET/POST /api/crons/medication-deadlines (issue #83) — persist the due
+ * time-driven medication-order transitions:
+ *   REQUESTED past the 30-minute operations SLA → ESCALATED;
+ *   QUOTED with an active quote past its expiry → EXPIRED.
+ * Fully idempotent and concurrency-safe. The same sweeps also run lazily on
+ * queue/detail reads, so correctness never depends on this endpoint.
+ */
+async function processMedicationDeadlines(req, res, next) {
+  try {
+    const transitioned = await medicationOrdersRepo.persistDueTransitions();
+    res.json({ ok: true, transitioned, ranAt: new Date().toISOString() });
+  } catch (err) { next(err); }
+}
+router.get('/crons/medication-deadlines', authorizeCron, processMedicationDeadlines);
+router.post('/crons/medication-deadlines', authorizeCron, processMedicationDeadlines);
 
 /**
  * GET/POST /api/crons/notification-dispatch (issue #36) — drain the due

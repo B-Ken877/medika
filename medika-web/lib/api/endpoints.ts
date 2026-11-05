@@ -11,10 +11,12 @@ import type {
   CallTokenResponse,
   Consultation,
   ConsultationNote,
+  CreateMedicationOrderRequest,
   DoctorWallet,
   IssuePrescriptionRequest,
   MedicalHistory,
   MedicalHistorySnapshot,
+  MedicationOrder,
   PrescriptionDocument,
   ReadReceiptResult,
   SaveConsultationNoteRequest,
@@ -233,6 +235,58 @@ export function getPrescriptionDocument(token: string, id: string, signal?: Abor
     token,
     signal,
   });
+}
+
+// ─── Medication orders + pharmacy quotes (issue #83) ─────────────────────────
+
+/** Ask Medika to source the medications of this consultation's issued
+ *  prescription (« Demander le prix et la livraison avec Medika »). 409
+ *  PRESCRIPTION_NOT_ISSUED for legacy free-text prescriptions; 409
+ *  MEDICATION_ORDER_ALREADY_EXISTS when one is already active. */
+export function createMedicationOrder(
+  token: string,
+  consultationId: string,
+  payload: CreateMedicationOrderRequest = {},
+  signal?: AbortSignal,
+) {
+  return apiFetch<MedicationOrder>(
+    `/api/consultations/${encodeURIComponent(consultationId)}/medication-order`,
+    { method: "POST", body: payload, token, signal },
+  );
+}
+
+/** The patient's medication order for this consultation (order + active
+ *  quote + derived next step). 404 when no order exists yet. */
+export function getMedicationOrderByConsultation(token: string, consultationId: string, signal?: AbortSignal) {
+  return apiFetch<MedicationOrder>(
+    `/api/consultations/${encodeURIComponent(consultationId)}/medication-order`,
+    { token, signal },
+  );
+}
+
+/** Accept the active, unexpired quote (patient only; 409 QUOTE_EXPIRED once
+ *  the validity passed — revalidated server-side at the transition). */
+export function acceptMedicationQuote(token: string, orderId: string, signal?: AbortSignal) {
+  return apiFetch<{ success: boolean; status: string }>(
+    `/api/medication-orders/${encodeURIComponent(orderId)}/accept`,
+    { method: "POST", token, signal },
+  );
+}
+
+/** Decline the quote (terminal; a new request can be created afterwards). */
+export function declineMedicationQuote(token: string, orderId: string, reason?: string, signal?: AbortSignal) {
+  return apiFetch<{ success: boolean; status: string }>(
+    `/api/medication-orders/${encodeURIComponent(orderId)}/decline`,
+    { method: "POST", body: { reason: reason ?? "" }, token, signal },
+  );
+}
+
+/** Cancel the request BEFORE any quote (REQUESTED / ESCALATED only). */
+export function cancelMedicationOrder(token: string, orderId: string, reason?: string, signal?: AbortSignal) {
+  return apiFetch<{ success: boolean; status: string }>(
+    `/api/medication-orders/${encodeURIComponent(orderId)}/cancel`,
+    { method: "POST", body: { reason: reason ?? "" }, token, signal },
+  );
 }
 
 // ─── Doctor availability ──────────────────────────────────────────────────────

@@ -28,6 +28,8 @@ async function resetDb() {
   const { query } = await importCjs('../src/db.js');
   await query(`TRUNCATE messages, ticket_messages, tickets, consultation_notes,
                prescription_documents,
+               medication_order_events, pharmacy_quotes, medication_orders,
+               partner_pharmacies,
                medical_histories, doctor_earnings, payouts, consultation_offers,
                verification_audit_log, notification_outbox, notifications,
                push_subscriptions, notification_preferences,
