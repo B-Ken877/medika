@@ -7,6 +7,12 @@ const { query } = require('../db');
 const deliveries = require('../repos/deliveries');
 const notifications = require('../notifications/emit');
 
+function haitiToday() {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Port-au-Prince', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  const part = (type) => parts.find((item) => item.type === type)?.value || '';
+  return part('year') + '-' + part('month') + '-' + part('day');
+}
+
 function validDateOnly(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return false;
   const date = new Date(String(value) + 'T12:00:00Z');
@@ -189,9 +195,9 @@ router.post('/deliveries/:id/expenses', async (req, res, next) => {
 
 router.get('/delivery-reports', async (req, res, next) => {
   try {
-    const now = new Date();
-    const from = String(req.query.from || new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10));
-    const to = String(req.query.to || now.toISOString().slice(0, 10));
+    const today = haitiToday();
+    const from = String(req.query.from || today.slice(0, 7) + '-01');
+    const to = String(req.query.to || today);
     if (!validDateOnly(from) || !validDateOnly(to) || from > to) {
       return res.status(400).json({ error: 'Période de rapport invalide.' });
     }
