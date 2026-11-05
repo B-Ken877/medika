@@ -7,6 +7,12 @@ const { query } = require('../db');
 const deliveries = require('../repos/deliveries');
 const notifications = require('../notifications/emit');
 
+function validDateOnly(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return false;
+  const date = new Date(String(value) + 'T12:00:00Z');
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 const router = express.Router();
 router.use(authenticateAdmin);
 
@@ -186,7 +192,7 @@ router.get('/delivery-reports', async (req, res, next) => {
     const now = new Date();
     const from = String(req.query.from || new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10));
     const to = String(req.query.to || now.toISOString().slice(0, 10));
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
+    if (!validDateOnly(from) || !validDateOnly(to) || from > to) {
       return res.status(400).json({ error: 'Période de rapport invalide.' });
     }
     res.json(await deliveries.report({ from, to }));
