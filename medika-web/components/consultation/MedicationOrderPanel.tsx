@@ -45,6 +45,10 @@ type DeliveryTrackingData = {
   city: string;
   events: { event_type: string; reason?: string; created_at: string }[];
 };
+function formatDeliveryDate(value: string) {
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+  return new Date(year, month - 1, day, 12).toLocaleDateString('fr-FR');
+}
 const DELIVERY_STATUS_FR: Record<string, string> = {
   ASSIGNED: "Livraison planifiée",
   PHARMACY_PREPARING: "La pharmacie prépare votre commande",
@@ -91,7 +95,7 @@ function MedicationDeliveryTracking({ orderId, token }: { orderId: string; token
       ) : (
         <>
           <p style={{ marginTop: 10 }}><strong>{DELIVERY_STATUS_FR[tracking.status] || tracking.status}</strong></p>
-          <p className="small">{tracking.urgent ? "Livraison prioritaire" : "Livraison régulière"} · {new Date(tracking.scheduled_for).toLocaleDateString("fr-FR")} · {{ MATIN: "Matin · 08 h–12 h", APRES_MIDI: "Après-midi · 12 h–17 h", SOIR: "Soir · 17 h–20 h", JOURNEE: "Toute la journée" }[tracking.delivery_window] || "Toute la journée"} · {tracking.delivery_zone}, {tracking.city}</p>
+          <p className="small">{tracking.urgent ? "Livraison prioritaire" : "Livraison régulière"} · {formatDeliveryDate(tracking.scheduled_for)} · {{ MATIN: "Matin · 08 h–12 h", APRES_MIDI: "Après-midi · 12 h–17 h", SOIR: "Soir · 17 h–20 h", JOURNEE: "Toute la journée" }[tracking.delivery_window] || "Toute la journée"} · {tracking.delivery_zone}, {tracking.city}</p>
           {tracking.status === "AWAITING_CONFIRMATION" && (
             <button type="button" className="btn btn-primary" onClick={() => void confirm()} disabled={busy}>
               {busy ? "Confirmation…" : "Confirmer la réception"}
