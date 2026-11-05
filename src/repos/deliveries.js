@@ -248,11 +248,31 @@ async function report({ from, to }) {
   );
   const budget = budgetRows[0] || null;
   const successful = row.delivered || 0;
+  const rangeParams = [from, to];
+  const { rows: weekly } = await query(
+    `SELECT date_trunc('week', d.created_at)::date AS period,
+            COUNT(DISTINCT d.id)::int AS deliveries,
+            COUNT(DISTINCT d.id) FILTER (WHERE d.status = 'DELIVERED')::int AS delivered,
+            COALESCE(SUM(e.amount_htg),0)::int AS expense_htg
+       FROM medication_deliveries d LEFT JOIN medication_delivery_expenses e ON e.delivery_id = d.id
+      WHERE d.created_at >= $1::date AND d.created_at < ($2::date + interval '1 day')
+      GROUP BY date_trunc('week', d.created_at)::date ORDER BY period`, rangeParams
+  );
+  const { rows: monthly } = await query(
+    `SELECT date_trunc('month', d.created_at)::date AS period,
+            COUNT(DISTINCT d.id)::int AS deliveries,
+            COUNT(DISTINCT d.id) FILTER (WHERE d.status = 'DELIVERED')::int AS delivered,
+            COALESCE(SUM(e.amount_htg),0)::int AS expense_htg
+       FROM medication_deliveries d LEFT JOIN medication_delivery_expenses e ON e.delivery_id = d.id
+      WHERE d.created_at >= $1::date AND d.created_at < ($2::date + interval '1 day')
+      GROUP BY date_trunc('month', d.created_at)::date ORDER BY period`, rangeParams
+  );
   return {
     ...row,
     cost_per_successful_delivery_htg: successful > 0 ? Math.round(row.expense_htg / successful) : null,
     budget,
     budget_alert: Boolean(budget && row.expense_htg >= Math.round(budget.monthly_budget_htg * budget.alert_threshold_percent / 100)),
+    weekly, monthly,
   };
 }
 
