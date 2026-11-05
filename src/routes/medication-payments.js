@@ -31,7 +31,7 @@ router.post('/medication-orders/:id/payment/create', authenticate, requireRole('
     if (error) return error;
     if (result.outcome === 'ALREADY_PAID') return res.json({ success: true, status: 'PAID', payment: result.payment });
     const payment = result.payment;
-    if (simulated) {
+    if (payment.simulated && simulated) {
       return res.json({
         success: true, simulated: true, status: payment.status,
         payment, redirectUrl: '/payment/simulated?medicationOrderId=' + encodeURIComponent(req.params.id),
