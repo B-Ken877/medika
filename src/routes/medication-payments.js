@@ -9,14 +9,20 @@ const notifications = require('../notifications/emit');
 const { query } = require('../db');
 
 function emitPaidNotification(userId, orderId) {
+  const key = `medication-order:${orderId}:payment-verified`;
   notifications.emit({
-    userId,
-    eventType: 'medication:paid',
-    idempotencyKey: `medication-order:${orderId}:payment-verified`,
+    userId, eventType: 'medication:paid', idempotencyKey: key + ':patient',
     title: 'Medika',
     body: 'Votre paiement a été confirmé. Votre commande est transmise à notre équipe.',
     url: '/app/consultations',
   });
+  query("SELECT id FROM users WHERE role = 'admin'")
+    .then(({ rows }) => rows.forEach((admin) => notifications.emit({
+      userId: admin.id, eventType: 'medication:paid', idempotencyKey: key + ':admin:' + admin.id,
+      title: 'Medika', body: 'Un paiement MonCash a été confirmé. Une demande de médicaments est prête pour la préparation.',
+      url: '/admin/medicaments',
+    })))
+    .catch(() => {});
 }
 
 const router = express.Router();
