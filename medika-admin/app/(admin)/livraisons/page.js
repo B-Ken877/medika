@@ -22,6 +22,7 @@ export default function LivraisonsPage() {
   const [assignment, setAssignment] = useState({ medication_order_id: '', employee_id: '', zone_id: '', scheduled_for: nextFriday(), urgent: false, urgent_reason: '' });
   const [expense, setExpense] = useState({ delivery_id: '', amount_htg: '', notes: '' });
   const [period, setPeriod] = useState({ from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) });
+  const [budget, setBudget] = useState({ monthly_budget_htg: '', alert_threshold_percent: 80 });
 
   const load = useCallback(async () => {
     try {
@@ -67,6 +68,12 @@ export default function LivraisonsPage() {
   const loadReport = () => submit(async () => {
     setReport(await apiFetch('/admin/delivery-reports?from=' + period.from + '&to=' + period.to));
   });
+  const saveBudget = () => submit(async () => {
+    await apiFetch('/admin/delivery-budget', { method: 'PUT', body: { monthly_budget_htg: Number(budget.monthly_budget_htg), alert_threshold_percent: Number(budget.alert_threshold_percent) } });
+  });
+  const toggleEmployee = (e) => submit(async () => {
+    await apiFetch('/admin/delivery-employees/' + encodeURIComponent(e.id) + '/availability', { method: 'PATCH', body: { is_available: !e.is_available } });
+  });
 
   const paidOrders = orders.filter((o) => o.status === 'PAID' && !deliveries.some((d) => d.medication_order_id === o.id));
   return (
@@ -88,7 +95,7 @@ export default function LivraisonsPage() {
         </div>
         <button className="btn btn-primary" style={{ marginTop: 10 }} disabled={busy} onClick={createEmployee}>Créer le compte</button>
         <div style={{ marginTop: 14 }}>
-          {employees.map((e) => <div key={e.id} className="small" style={{ padding: 6, borderBottom: '1px solid var(--mk-border)' }}>{e.name} · {e.username} · {e.is_available ? 'Disponible' : 'Indisponible'}</div>)}
+          {employees.map((e) => <div key={e.id} className="small" style={{ padding: 6, borderBottom: '1px solid var(--mk-border)', display: 'flex', justifyContent: 'space-between', gap: 8 }}>{e.name} · {e.username} · {e.is_available ? 'Disponible' : 'Indisponible'} <button className="btn btn-sm btn-secondary" onClick={() => toggleEmployee(e)} disabled={busy}>{e.is_available ? 'Désactiver' : 'Réactiver'}</button></div>)}
         </div>
       </section>
 
@@ -129,7 +136,7 @@ export default function LivraisonsPage() {
       <section className="card" style={{ padding: 18, marginBottom: 16 }}>
         <h2>Livraisons en cours et dépenses</h2>
         {deliveries.map((d) => <div key={d.id} style={{ padding: 10, borderBottom: '1px solid var(--mk-border)' }}>
-          <strong>{d.reference}</strong> · {d.patient_name} · {d.status} · {d.scheduled_for}
+          <strong>{d.reference}</strong> · {d.patient_name} · {{ ASSIGNED: 'Affectée', PHARMACY_PREPARING: 'Préparation en pharmacie', READY_FOR_PICKUP: 'Prête au retrait', PICKED_UP: 'Récupérée', OUT_FOR_DELIVERY: 'En livraison', AWAITING_CONFIRMATION: 'En attente de confirmation', DELIVERED: 'Livrée', FAILED_ATTEMPT: 'Tentative échouée', RETURNED_ESCALATED: 'Retournée / escaladée' }[d.status] || d.status} · {d.scheduled_for}
           <button className="btn btn-sm btn-secondary" style={{ marginLeft: 10 }} onClick={() => setExpense({ delivery_id: d.id, amount_htg: '', notes: '' })}>Saisir une dépense</button>
         </div>)}
         {expense.delivery_id && <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -154,6 +161,11 @@ export default function LivraisonsPage() {
           <div><strong>{report.cost_per_successful_delivery_htg == null ? '—' : formatCurrency(report.cost_per_successful_delivery_htg)}</strong><div className="small">Coût par livraison réussie</div></div>
           <div><strong>{report.budget_alert ? 'Seuil atteint' : 'Sous le seuil'}</strong><div className="small">Alerte budget</div></div>
         </div>}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }}>
+          <input className="form-input" type="number" min="0" placeholder="Budget mensuel HTG" value={budget.monthly_budget_htg} onChange={(e) => setBudget({ ...budget, monthly_budget_htg: e.target.value })} />
+          <input className="form-input" type="number" min="1" max="100" placeholder="Seuil %" value={budget.alert_threshold_percent} onChange={(e) => setBudget({ ...budget, alert_threshold_percent: e.target.value })} />
+          <button className="btn btn-primary" disabled={busy || budget.monthly_budget_htg === ''} onClick={saveBudget}>Enregistrer le budget</button>
+        </div>
       </section>
     </div>
   );
