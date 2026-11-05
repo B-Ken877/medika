@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const { query, withTransaction } = require('../db');
 
 function normalizeZone(value) {
-  return String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim().replace(/\\s+/g, ' ').toLocaleLowerCase('fr');
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('fr');
 }
 
 const EMPLOYEE_EVENTS = {
