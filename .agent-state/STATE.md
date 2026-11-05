@@ -1,4 +1,46 @@
-Last updated: 2026-11-05T19:45:00Z (cron-202611060132)
+Last updated: 2026-11-06T02:50:00Z (cron run, sandbox-recycle recovery + issue #109)
+
+## THIS RUN (visual fix requested by owner in chat + recycle recovery)
+- Sandbox was recycled: /home/z/my-project/.agent (instructions, gh_token,
+  state.json, lock) is GONE. No GitHub token available this run -> NO push,
+  NO issue/PR comments possible. API rate-limited (anon). HTML scrape worked.
+- Recreated repo clone from origin; restored state from agent-state branch.
+- Verified: #97 CLOSED (owner completed Vercel preset/build-command fixes).
+  PR #96/#82 already merged earlier? (main has 6b80b1c/#103 work) — #82/PR #96
+  status unchanged from last run's records. Open issues: #106 (IN PROGRESS,
+  owner), #109 (IN PROGRESS, agent). No open PRs seen via HTML.
+- OWNER MESSAGE (chat): my #103 dashboard implementation deviates from the
+  approved concept — proportions too big + missing the polymorphism green
+  background. Owner: "Make sure they match. Continue."
+
+## Issue #109 WORK DONE THIS RUN (branch feat/issue-109-doctor-hero-artwork,
+   commit 17dd22d, LOCAL ONLY — push blocked, no token)
+- Asset medika-web/public/img/dashboard-doctor-hero.png: cut from the approved
+  reference; bell/avatar/chevron + subtitle fragment removed via bilinear
+  fills; alpha edge-fades baked. Same person (exact crop) — issue #109 AC.
+- patient-theme.css: hero compacted to reference rhythm (band clamp(176px,
+  22vh, 236px), greeting clamp(30px,8.8vw,40px) 9ch wrap on mobile, cards
+  15px/26px values), rich green field: .app-shell.patient-shell top-right
+  emerald radial + stronger ambient waves; patient header glass 0.55.
+- PatientDashboard.tsx: real <img> artwork replaces .hero-art-shape (aria-
+  hidden, eager, high priority, intrinsic size = no layout shift).
+- Verified: web 563/563, tsc clean, lint clean, production build OK.
+- Evidence: docs/screenshots/issue-109-doctor-hero/ (README method+differences,
+  8 real-app screenshots 360/390/720/820/1440, seeded data mirroring concept).
+- Screenshots via single-command pipeline (scripts/visual_pipeline.sh outside
+  repo): boot embedded pg :5433 + server.js :3000 + web dev :4100 +
+  agent-browser login (kenley/Passw0rd!) + captures. NOTES: processes may
+  survive tool-call boundaries -> pkill -f medika-pg-data before rerun;
+  snapshot refs parse as 'ref=eN' (use @eN for click/fill).
+
+## Next action (next run)
+1. If token available: push feat/issue-109-doctor-hero-artwork (17dd22d) to
+   origin, open PR -> main linking #109, do NOT merge; verify Vercel preview.
+2. Check #109 + #106 for owner feedback; address on SAME branch.
+3. Restore /home/z/my-project/.agent/gh_token setup before any push.
+
+One issue at a time. Never merge. Never push main.
+
 
 ## MAJOR CONTEXT RESET (this run)
 Issue #82 was REPURPOSED by the owner (issue body rewritten ~17:31Z, directive

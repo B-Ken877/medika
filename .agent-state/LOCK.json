@@ -1,9 +1,9 @@
 {
-  "run_id": "cron-202611060132",
-  "started_at_utc": "2026-11-05T17:33:00Z",
-  "heartbeat_utc": "2026-11-05T19:45:00Z",
+  "run_id": "cron-issue109-visual-fix",
+  "started_at_utc": "2026-11-06T01:30:00Z",
+  "heartbeat_utc": "2026-11-06T02:50:00Z",
   "active": false,
   "owner": "medika-autonomous-agent",
-  "issue": 82,
-  "note": "Lock RELEASED: consolidated #82 delivered on PR #96 (IN REVIEW, evidence comment 6666024974). Owner/ChatGPT review pending. Next run: check PR #96 + #82 for review feedback; screenshots follow-up if asked."
+  "issue": 109,
+  "note": "Lock released. #109 work committed LOCALLY on feat/issue-109-doctor-hero-artwork (17dd22d); push blocked (no gh_token after sandbox recycle). Next run with token: push + PR, then label IN REVIEW."
 }
