@@ -81,6 +81,7 @@ router.post('/deliveries/assign', async (req, res, next) => {
       employeeId: req.body?.employee_id,
       zoneId: req.body?.zone_id,
       scheduledFor: req.body?.scheduled_for,
+      deliveryWindow: req.body?.delivery_window || 'JOURNEE',
       urgent: req.body?.urgent === true,
       urgentReason: req.body?.urgent_reason,
       admin: req.user,
@@ -93,11 +94,21 @@ router.post('/deliveries/assign', async (req, res, next) => {
       NO_ACTIVE_QUOTE: [409, 'Aucun devis confirmé pour cette commande.'],
       ALREADY_ASSIGNED: [409, 'Une livraison est déjà affectée à cette commande.'],
       INVALID_DATE: [400, 'Date de livraison invalide.'],
+      INVALID_WINDOW: [400, 'Créneau de livraison invalide.'],
       FRIDAY_ONLY: [400, 'Les livraisons régulières sont planifiées le vendredi. Utilisez l’exception urgente si nécessaire.'],
       URGENT_REASON_REQUIRED: [400, 'Une justification est obligatoire pour une livraison urgente.'],
     };
     if (errors[result.outcome]) return res.status(errors[result.outcome][0]).json({ error: errors[result.outcome][1], code: result.outcome });
     const { rows } = await query('SELECT patient_id FROM medication_orders WHERE id = $1', [req.body.medication_order_id]);
+    if (result.employee?.id) {
+      notifications.emit({
+        userId: result.employee.id,
+        eventType: 'medication:delivery-assigned',
+        idempotencyKey: 'delivery:' + result.id + ':assigned:employee:' + result.employee.id,
+        title: 'Medika', body: 'Une nouvelle livraison vous a été affectée. Consultez votre espace de livraison.',
+        url: '/livreur',
+      });
+    }
     if (rows[0]?.patient_id) {
       notifications.emit({
         userId: rows[0].patient_id,
@@ -111,6 +122,33 @@ router.post('/deliveries/assign', async (req, res, next) => {
       });
     }
     res.status(201).json({ success: true, delivery_id: result.id });
+  } catch (err) { next(err); }
+});
+
+router.post('/deliveries/urgent-unavailable', async (req, res, next) => {
+  try {
+    const result = await deliveries.recordUrgentUnavailable({
+      orderId: req.body?.medication_order_id,
+      reason: req.body?.reason,
+      admin: req.user,
+    });
+    const errors = {
+      NOT_FOUND: [404, 'Commande introuvable.'],
+      NOT_PAID: [409, 'La commande doit être payée avant une notification de livraison.'],
+      ALREADY_ASSIGNED: [409, 'Une livraison est déjà affectée à cette commande.'],
+      REASON_REQUIRED: [400, 'Une explication est obligatoire (8 caractères minimum).'],
+      ALREADY_NOTIFIED: [409, 'Le patient a déjà été informé pour cette commande.'],
+    };
+    if (errors[result.outcome]) return res.status(errors[result.outcome][0]).json({ error: errors[result.outcome][1], code: result.outcome });
+    if (result.patientId) notifications.emit({
+      userId: result.patientId,
+      eventType: 'medication:urgent-unavailable',
+      idempotencyKey: 'medication-order:' + req.body.medication_order_id + ':urgent-unavailable',
+      title: 'Medika',
+      body: 'Nous ne pouvons pas assurer une livraison urgente pour le moment. Vous pouvez télécharger ou imprimer votre ordonnance pour acheter vos médicaments en pharmacie. Notre équipe vous informera de la prochaine livraison régulière.',
+      url: '/app/consultations',
+    });
+    res.json({ success: true });
   } catch (err) { next(err); }
 });
 
