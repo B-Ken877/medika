@@ -1,9 +1,9 @@
 {
-  "run_id": "cron-202611051403",
-  "started_at_utc": "2026-11-05T06:05:00Z",
-  "heartbeat_utc": "2026-11-05T06:05:00Z",
+  "run_id": "cron-202611060132",
+  "started_at_utc": "2026-11-05T17:33:00Z",
+  "heartbeat_utc": "2026-11-05T17:33:00Z",
   "active": true,
   "owner": "medika-autonomous-agent",
-  "issue": 83,
-  "note": "Resuming #83 (PR #87 IN REVIEW): owner posted ChatGPT review at 06:04Z requiring changes before merge. (1) delivery must be free to patient (remove patient-billable delivery_fee_htg or enforce 0 server-side + regression test), (2) patient UI must not charge delivery (remove line item, FR copy, test), (3) coverage enforcement (required contact/address, interim P-au-P zone gate, outside-coverage fallback to self-purchase, tests). Addressing on same branch feat/issue-83-medication-orders. Never merge."
+  "issue": 82,
+  "note": "Consolidated rebuild: issue #82 is now THE single end-to-end medication journey task (owner directive 17:29Z: 'GLM — START THIS TASK'). Supersedes merged #83/#84/#85 work and closed PR #95 (reference only). One branch feat/issue-82-complete-medication-journey, one PR. Previous lock (cron-202611051403) stale 19h, heartbeat dead, taken over."
 }
