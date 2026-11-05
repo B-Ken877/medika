@@ -166,7 +166,8 @@ export default function LivraisonsPage() {
           <div><strong>{report.failed}</strong><div className="small">Échouées / retournées</div></div>
           <div><strong>{formatCurrency(report.expense_htg)}</strong><div className="small">Dépenses internes</div></div>
           <div><strong>{report.cost_per_successful_delivery_htg == null ? '—' : formatCurrency(report.cost_per_successful_delivery_htg)}</strong><div className="small">Coût par livraison réussie</div></div>
-          <div><strong>{report.budget_alert ? 'Seuil atteint' : 'Sous le seuil'}</strong><div className="small">Alerte budget</div></div>
+          <div><strong>{!report.budget ? 'Budget non configuré' : report.budget_alert ? 'Seuil atteint' : 'Sous le seuil'}</strong><div className="small">Alerte budget</div></div>
+          <div><strong>{formatCurrency(report.current_month_expense_htg || 0)}</strong><div className="small">Dépenses du mois en cours</div></div>
           <div><strong>{report.weekly?.length || 0}</strong><div className="small">Semaines dans la période</div></div>
           <div><strong>{report.monthly?.length || 0}</strong><div className="small">Mois dans la période</div></div>
         </div>}
