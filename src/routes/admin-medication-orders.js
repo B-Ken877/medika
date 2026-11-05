@@ -25,6 +25,7 @@
 
 const express = require('express');
 const ordersRepo = require('../repos/medication-orders');
+const medicationPaymentsRepo = require('../repos/medication-payments');
 const notifications = require('../notifications/emit');
 const { query } = require('../db');
 
@@ -144,7 +145,11 @@ router.get('/medication-orders/:id', async (req, res, next) => {
         });
       }
     }
-    res.json({ ...detail, whatsapp });
+    const { rows: paymentRows } = await query(
+      'SELECT * FROM medication_payments WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1',
+      [req.params.id]
+    );
+    res.json({ ...detail, payment: medicationPaymentsRepo.api(paymentRows[0]), whatsapp });
   } catch (err) { next(err); }
 });
 
