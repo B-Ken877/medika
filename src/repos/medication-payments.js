@@ -208,12 +208,19 @@ async function markVerified({ paymentId, patientId, transactionId, verifiedAmoun
 }
 
 async function markFailed(paymentId, providerRaw) {
-  const { rows } = await query(
-    `UPDATE medication_payments SET status = 'FAILED', provider_raw = $2::jsonb, updated_at = now()
-      WHERE id = $1 AND status = 'PENDING' RETURNING *`,
-    [paymentId, JSON.stringify(providerRaw || {})]
-  );
-  return rows[0] || null;
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      "UPDATE medication_payments SET status = 'FAILED', provider_raw = $2::jsonb, updated_at = now() WHERE id = $1 AND status = 'PENDING' RETURNING *",
+      [paymentId, JSON.stringify(providerRaw || {})]
+    );
+    const payment = rows[0];
+    if (!payment) return null;
+    await client.query(
+      "INSERT INTO medication_order_events (order_id,event_type,actor_name,actor_role,details) VALUES ($1,'PAYMENT_FAILED','Système','system',$2::jsonb)",
+      [payment.medication_order_id, JSON.stringify({ payment_id: payment.id, payment_reference: payment.payment_reference })]
+    );
+    return payment;
+  });
 }
 
 module.exports = { toApi, createIntent, claimProviderCreation, saveRedirectUrl, releaseProviderCreation, findByOrderId, markVerified, markFailed };
