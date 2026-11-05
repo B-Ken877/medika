@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS medication_orders (
                               'DECLINED', 'CANCELLED', 'EXPIRED')),
   requested_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
   sla_deadline_at          TIMESTAMPTZ NOT NULL,
-  -- Optional patient-provided delivery context for the manual quote call.
+  -- Required patient-provided delivery context; exact zone allowlist is server-validated.
   delivery_address         TEXT NOT NULL DEFAULT '',
   delivery_phone           TEXT NOT NULL DEFAULT '',
   delivery_zone            TEXT NOT NULL DEFAULT '',
