@@ -90,21 +90,31 @@ export default function PatientDashboard() {
 
   return (
     <div className="stack">
-      {/* Issue #99 → #103: Akèy hero rebuilt to the approved Premium Mint
-          reference (audit in issue #103): an OPEN, unboxed hero area — large
-          two-line greeting left, artwork stage anchored to the screen's
+      {/* Issue #99 → #103 → #109: Akèy hero rebuilt to the approved Premium
+          Mint reference (audit in issue #103): an OPEN, unboxed hero area —
+          large two-line greeting left, artwork stage anchored to the screen's
           right edge — with the primary action as a full-width single-line
-          pill placed BELOW the hero. The stage is a CSS-only abstract
-          placeholder (soft translucent forms — NO silhouette/avatar glyph,
-          no image generated or referenced) sized to accept a transparent
-          PNG later without layout change. */}
+          pill placed BELOW the hero. The reserved stage now holds the
+          generated Medika doctor artwork (issue #109, mint-matched feathered
+          edges so it melts into the wave field like the reference cut-out);
+          the stage keeps its fixed 4/5 aspect so the image cannot shift
+          layout while loading. */}
       <section className="home-hero" aria-label="Resime sante ou">
         <div className="hero-copy">
           <h1 className="page-title">Bonjou, {user?.name?.split(" ")[0] ?? ""}</h1>
           <p className="page-desc">Men yon ti rezime sou swen sante ou.</p>
         </div>
-        <div className="hero-art" role="img" aria-label="Espas rezève pou ilistrasyon doktè Medika a">
-          <span className="hero-art-shape" aria-hidden />
+        <div className="hero-art">
+          {/* eslint-disable-next-line @next/next/no-img-element -- static same-origin decorative asset with fixed intrinsic dimensions; plain <img> matches repo convention (see PrescriptionPanel) and keeps the stage layout-shift-free */}
+          <img
+            src="/patient-hero-doctor.png"
+            alt="Ilistrasyon doktè Medika a"
+            width={560}
+            height={700}
+            loading="eager"
+            decoding="async"
+            className="hero-art-img"
+          />
         </div>
       </section>
 
