@@ -20,6 +20,7 @@
 
 const express = require('express');
 const ordersRepo = require('../repos/medication-orders');
+const medicationPayments = require('../repos/medication-payments');
 const { authenticate, requireRole } = require('../auth');
 const { query } = require('../db');
 
@@ -93,6 +94,7 @@ router.get('/consultations/:id/medication-order', authenticate, requireRole('pat
     if (!rows[0]) return res.status(404).json({ error: 'Not found' });
     const order = await ordersRepo.getForPatient(rows[0].id, req.user.id);
     if (!order) return res.status(404).json({ error: 'Not found' });
+    order.payment = medicationPayments.toApi(await medicationPayments.findByOrderId(order.id));
     res.json(order);
   } catch (err) { next(err); }
 });
