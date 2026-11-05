@@ -39,7 +39,7 @@ const SLA_SECONDS = SLA_MINUTES * 60;
 
 /** Order statuses. */
 const ORDER_STATUSES = [
-  'REQUESTED', 'ESCALATED', 'QUOTED', 'ACCEPTED', 'DECLINED', 'CANCELLED', 'EXPIRED',
+  'REQUESTED', 'ESCALATED', 'QUOTED', 'ACCEPTED', 'PAID', 'DECLINED', 'CANCELLED', 'EXPIRED',
 ];
 /** Statuses that block a new request for the same prescription. */
 const ACTIVE_STATUSES = ['REQUESTED', 'ESCALATED', 'QUOTED', 'ACCEPTED', 'EXPIRED'];
@@ -71,7 +71,7 @@ const LIMITS = {
 /** Events that can land in the append-only audit history. */
 const EVENT_TYPES = [
   'REQUESTED', 'QUOTE_RECORDED', 'QUOTE_REVISED', 'PHARMACY_UNREACHABLE',
-  'ACCEPTED', 'DECLINED', 'CANCELLED', 'ESCALATED', 'QUOTE_EXPIRED',
+  'ACCEPTED', 'DECLINED', 'CANCELLED', 'ESCALATED', 'QUOTE_EXPIRED', 'PAYMENT_VERIFIED',
 ];
 
 // ─── Small helpers ───────────────────────────────────────────────────────────
@@ -142,6 +142,7 @@ const STATUS_LABELS_FR = {
   ESCALATED: 'En retard — relance requise',
   QUOTED: 'Devis à consulter',
   ACCEPTED: 'Devis accepté',
+  PAID: 'Paiement confirmé — préparation en attente',
   DECLINED: 'Devis refusé',
   CANCELLED: 'Demande annulée',
   EXPIRED: 'Devis expiré',
