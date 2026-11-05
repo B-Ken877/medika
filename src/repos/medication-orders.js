@@ -101,7 +101,7 @@ function configuredDeliveryZones() {
     .split(',').map(normalizeZone).filter(Boolean);
 }
 
-function validateDeliveryRequest({ deliveryAddress, deliveryPhone, deliveryZone }) {
+function validateDeliveryRequest({ deliveryAddress, deliveryPhone, deliveryZone }, allowedZones = configuredDeliveryZones()) {
   const address = typeof deliveryAddress === 'string' ? deliveryAddress.trim() : '';
   const phoneInput = typeof deliveryPhone === 'string' ? deliveryPhone.trim() : '';
   const zone = typeof deliveryZone === 'string' ? deliveryZone.trim() : '';
@@ -115,7 +115,7 @@ function validateDeliveryRequest({ deliveryAddress, deliveryPhone, deliveryZone 
   if (!/^(?:\+?509)?\d{8}$/.test(phone)) {
     return { outcome: 'INVALID_DELIVERY_DETAILS', error: 'Veuillez saisir un numéro haïtien valide à 8 chiffres, avec ou sans indicatif +509.' };
   }
-  const zones = configuredDeliveryZones();
+  const zones = (Array.isArray(allowedZones) ? allowedZones : []).map(normalizeZone).filter(Boolean);
   if (zones.length === 0) {
     return { outcome: 'SERVICE_UNAVAILABLE', error: 'La zone de livraison Medika n’est pas encore configurée. Vous pouvez télécharger votre ordonnance et acheter vos médicaments en pharmacie.' };
   }
@@ -362,7 +362,13 @@ async function createOrder({ consultationId, patient, deliveryAddress, deliveryP
 
     // Validate contact details and exact allowlisted zone only after confirming
     // consultation ownership and an issued prescription (no coverage oracle).
-    const delivery = validateDeliveryRequest({ deliveryAddress, deliveryPhone, deliveryZone });
+    const { rows: configuredZones } = await client.query(
+      `SELECT zone_name FROM delivery_zones WHERE city = 'Port-au-Prince' AND active = TRUE`,
+    );
+    const delivery = validateDeliveryRequest(
+      { deliveryAddress, deliveryPhone, deliveryZone },
+      configuredZones.map((zone) => zone.zone_name),
+    );
     if (!delivery.ok) return delivery;
 
     // The partial unique index backstops this check against concurrent races.
