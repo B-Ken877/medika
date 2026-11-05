@@ -31,7 +31,7 @@ router.post('/delivery/:id/events', authenticate, requireRole('delivery'), async
     if (result.outcome === 'INVALID_TRANSITION') return res.status(409).json({ error: 'Cette étape ne correspond pas au statut actuel.', status: result.status });
     if (result.outcome === 'DUPLICATE') return res.json({ success: true, duplicate: true, status: result.status });
 
-    if (eventType === 'AWAITING_CONFIRMATION' || eventType === 'FAILED_ATTEMPT' || eventType === 'RETURNED_ESCALATED') {
+    if (['PICKED_UP', 'OUT_FOR_DELIVERY', 'AWAITING_CONFIRMATION', 'FAILED_ATTEMPT', 'RETURNED_ESCALATED'].includes(eventType)) {
       const tracking = await deliveries.listForEmployee(req.user.id);
       const delivery = tracking.find((item) => item.id === req.params.id);
       // Patient notification is generic; no diagnosis or medication details.
@@ -43,9 +43,13 @@ router.post('/delivery/:id/events', authenticate, requireRole('delivery'), async
           eventType: 'medication:delivery-update',
           idempotencyKey: 'delivery:' + req.params.id + ':' + eventType + ':' + String(req.get('Idempotency-Key')),
           title: 'Medika',
-          body: eventType === 'AWAITING_CONFIRMATION'
-            ? 'Votre commande est arrivée. Confirmez sa réception dans Medika.'
-            : 'Un imprévu affecte votre livraison. Notre équipe vous contactera.',
+          body: ({
+            PICKED_UP: 'Votre commande a été récupérée à la pharmacie.',
+            OUT_FOR_DELIVERY: 'Votre commande est en route vers votre adresse.',
+            AWAITING_CONFIRMATION: 'Votre commande est arrivée. Confirmez sa réception dans Medika.',
+            FAILED_ATTEMPT: 'La tentative de livraison n’a pas abouti. Notre équipe vous contactera.',
+            RETURNED_ESCALATED: 'Votre commande est retournée à notre équipe pour traitement.',
+          })[eventType],
           url: '/app/consultations',
         });
       }
