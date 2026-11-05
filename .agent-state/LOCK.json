@@ -1,9 +1,9 @@
 {
   "run_id": "cron-202611060132",
   "started_at_utc": "2026-11-05T17:33:00Z",
-  "heartbeat_utc": "2026-11-05T17:33:00Z",
-  "active": true,
+  "heartbeat_utc": "2026-11-05T19:45:00Z",
+  "active": false,
   "owner": "medika-autonomous-agent",
   "issue": 82,
-  "note": "Consolidated rebuild: issue #82 is now THE single end-to-end medication journey task (owner directive 17:29Z: 'GLM — START THIS TASK'). Supersedes merged #83/#84/#85 work and closed PR #95 (reference only). One branch feat/issue-82-complete-medication-journey, one PR. Previous lock (cron-202611051403) stale 19h, heartbeat dead, taken over."
+  "note": "Lock RELEASED: consolidated #82 delivered on PR #96 (IN REVIEW, evidence comment 6666024974). Owner/ChatGPT review pending. Next run: check PR #96 + #82 for review feedback; screenshots follow-up if asked."
 }

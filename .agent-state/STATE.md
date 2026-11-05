@@ -1,4 +1,4 @@
-Last updated: 2026-11-05T19:25:00Z (cron-202611060132)
+Last updated: 2026-11-05T19:45:00Z (cron-202611060132)
 
 ## MAJOR CONTEXT RESET (this run)
 Issue #82 was REPURPOSED by the owner (issue body rewritten ~17:31Z, directive
@@ -112,19 +112,24 @@ issue body (18 acceptance criteria + 12 sections of spec).
   (list/detail/assign/zones/employees/reports+budget), patient delivery
   tracking + confirm, login redirect, admin nav, Role type.
 
+- P5 DONE: full verification sweep all green (backend 515/515 / 42 files,
+  web 543/543 + tsc + lint + build incl /livreur, admin build incl
+  /livraisons, clean-DB migration chain 001-013 proven each run).
+- **PR #96 OPEN** (feat/issue-82-complete-medication-journey -> main,
+  head b864aaa): full description with DoD mapping, migration order +
+  rollout, 7ac67aa replacement explanation, exact commands/counts,
+  walkthrough, security highlights, risks. #82 labels: enhancement +
+  IN REVIEW (evidence comment 6666024974). LOCK RELEASED.
+
 ## Next action (next run)
-1. Check lock + heartbeat; check for new owner comments on #82 / branch.
-2. P5 verification sweep (rerun everything fresh in one pass):
-   - backend `npx vitest run` (expect 515/515, 42 files)
-   - medika-web `npx vitest run` (543/543), `tsc --noEmit`, `npm run lint`,
-     `npm run build`
-   - medika-admin `npm run build`
-   - migration chain test from a CLEAN db (drop+recreate embedded db or
-     fresh DATABASE_URL; scripts/migrate.js) + note exact order 001-013.
-3. PR: open ONE PR feat/issue-82-complete-medication-journey -> main,
-   reference issue #82, fill exact commands/counts, migration order +
-   rollout notes, walkthrough, risks, head SHA. Label #82 IN REVIEW +
-   evidence comment (do NOT close issue, do NOT merge).
-4. Optional if budget: browser screenshot of ordonnance screen (desktop +
-   mobile) for the PR; medication-order admin page zone display polish.
+1. No active issue: #82 is IN REVIEW on PR #96 (owner + ChatGPT review).
+2. Check PR #96 reviews/comments and #82 comments each run. If the owner
+   posts changes: address on the SAME branch, re-verify, re-label IN
+   REVIEW. Never merge.
+3. If owner asks for screenshots: boot embedded postgres (persistent) +
+   server.js + medika-web dev, agent-browser screenshot of the ordonnance
+   (desktop + mobile), attach to #82/PR #96.
+4. No other open issues exist. If #82 is closed/merged by the owner:
+   verify labels (remove IN REVIEW), report DONE. Otherwise QUEUE EMPTY
+   for new work while IN REVIEW stands.
 One issue at a time. Never merge. Never push main.
