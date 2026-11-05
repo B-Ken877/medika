@@ -10,6 +10,11 @@ const notifications = require('../notifications/emit');
 const router = express.Router();
 router.use(authenticateAdmin);
 
+function haitiDate(date) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Port-au-Prince', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  return parts.find((p) => p.type === 'year').value + '-' + parts.find((p) => p.type === 'month').value + '-' + parts.find((p) => p.type === 'day').value;
+}
+
 router.get('/delivery-employees', async (req, res, next) => {
   try {
     const { rows } = await query(
@@ -130,8 +135,9 @@ router.post('/deliveries/:id/expenses', async (req, res, next) => {
 router.get('/delivery-reports', async (req, res, next) => {
   try {
     const now = new Date();
-    const from = String(req.query.from || new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10));
-    const to = String(req.query.to || now.toISOString().slice(0, 10));
+    const today = haitiDate(now);
+    const from = String(req.query.from || today.slice(0, 7) + '-01');
+    const to = String(req.query.to || today);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
       return res.status(400).json({ error: 'Période de rapport invalide.' });
     }
