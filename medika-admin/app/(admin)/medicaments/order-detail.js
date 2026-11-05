@@ -270,6 +270,9 @@ export default function OrderDetailModal({ orderId, pharmacies, onClose, onSaved
               {/* ── Order summary ── */}
               <div style={{ fontSize: 13, marginBottom: 14, display: 'grid', gap: 4 }}>
                 <div><strong>Patient :</strong> {detail.patient_name || '—'}</div>
+                <div><strong>Adresse de livraison :</strong> {detail.delivery_address || '—'}</div>
+                <div><strong>Téléphone :</strong> {detail.delivery_phone || '—'}</div>
+                <div><strong>Quartier / zone :</strong> {detail.delivery_zone || '—'}</div>
                 <div><strong>Statut :</strong> {detail.status_label_fr || detail.status}</div>
                 <div><strong>Demande créée :</strong> {formatDate(detail.requested_at)}</div>
                 <div>
