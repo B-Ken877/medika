@@ -12,8 +12,10 @@ import type {
   Consultation,
   ConsultationNote,
   DoctorWallet,
+  IssuePrescriptionRequest,
   MedicalHistory,
   MedicalHistorySnapshot,
+  PrescriptionDocument,
   ReadReceiptResult,
   SaveConsultationNoteRequest,
   ServerMessage,
@@ -203,6 +205,31 @@ export function writePrescription(token: string, id: string, prescription: strin
   return apiFetch<Consultation>(`/api/consultations/${encodeURIComponent(id)}/prescription`, {
     method: "PUT",
     body: { prescription },
+    token,
+    signal,
+  });
+}
+
+// ─── Prescription document (issue #82) ───────────────────────────────────────
+
+/** Structured, immutable prescription issuance (replaces the free-text-only
+ *  composer). The server validates, allowlist-filters the item fields and
+ *  completes the consultation atomically; a duplicate submit answers 409
+ *  PRESCRIPTION_ALREADY_ISSUED. */
+export function issuePrescription(token: string, id: string, payload: IssuePrescriptionRequest, signal?: AbortSignal) {
+  return apiFetch<Consultation>(`/api/consultations/${encodeURIComponent(id)}/prescription`, {
+    method: "PUT",
+    body: payload,
+    token,
+    signal,
+  });
+}
+
+/** The active prescription document (patient owner, issuing doctor, admin).
+ *  404 when the consultation has none — legacy free-text prescriptions stay
+ *  readable through Consultation.prescription. */
+export function getPrescriptionDocument(token: string, id: string, signal?: AbortSignal) {
+  return apiFetch<PrescriptionDocument>(`/api/consultations/${encodeURIComponent(id)}/prescription`, {
     token,
     signal,
   });

@@ -1021,8 +1021,9 @@ export default function ConsultationChatPage() {
         </div>
       )}
 
-      {/* Prescription (patient view, when finished) */}
-      {finished && consultation.prescription && !isDoctor && <PrescriptionPanel consultation={consultation} />}
+      {/* Prescription document (issue #82 — patient AND issuing doctor, when
+          finished; the panel itself falls back to legacy free-text records). */}
+      {finished && <PrescriptionPanel consultation={consultation} token={token} />}
 
       {/* Chat log */}
       <div className="chat-log" ref={logRef} role="log" aria-label="Mesaj konsiltasyon an" aria-live="polite">
