@@ -242,6 +242,59 @@ export interface SaveConsultationNoteRequest {
   flagAllergy: boolean;
 }
 
+// ─── Prescription document (issue #82) ───────────────────────────────────────
+// Structured, doctor-issued prescription. The document is the authoritative
+// clinical record; consultations.prescription stays a plain-text projection
+// for older clients. No price/financial field exists BY DESIGN (allowlist on
+// the server) — do not add one here.
+
+/** One structured medication instruction. Only `name` is required; the rest
+ *  are free-text fields exactly as dictated by the doctor — the server never
+ *  invents clinical values. */
+export interface PrescriptionDocItem {
+  name: string;
+  strength?: string | null;
+  form?: string | null;
+  dose?: string | null;
+  route?: string | null;
+  frequency?: string | null;
+  duration?: string | null;
+  quantity?: string | null;
+  refills?: string | null;
+  instructions?: string | null;
+}
+
+export interface PrescriptionDocument {
+  id: string;
+  consultation_id: string;
+  /** Stable human-readable reference, e.g. "ORD-2026-1A2B3C4D5E". */
+  reference: string;
+  status: "ISSUED" | "SUPERSEDED" | string;
+  version: number;
+  items: PrescriptionDocItem[];
+  general_instructions: string;
+  /** Server-derived epoch seconds (never client-supplied). */
+  issued_at?: number | null;
+  /** Identity/credentials from the records — shown only when present. */
+  doctor: {
+    name: string | null;
+    specialty?: string | null;
+    license_number?: string | null;
+    hospital?: string | null;
+    location?: string | null;
+  };
+  patient: {
+    name: string | null;
+    age?: number | string | null;
+  };
+}
+
+/** Doctor composer payload — structured issuance (PUT /prescription). */
+export interface IssuePrescriptionRequest {
+  items: PrescriptionDocItem[];
+  general_instructions?: string;
+}
+
 export interface AllergyItem {
   name: string;
   severity: string;

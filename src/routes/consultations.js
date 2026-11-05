@@ -24,6 +24,7 @@ const usersRepo = require('../repos/users');
 const paymentsRepo = require('../repos/payments');
 const specialtiesRepo = require('../repos/specialties');
 const notesRepo = require('../repos/notes');
+const prescriptionsRepo = require('../repos/prescriptions');
 const walletRepo = require('../repos/wallet');
 const lifecycle = require('../consultation-lifecycle');
 const notifications = require('../notifications/emit');
@@ -823,12 +824,78 @@ router.put('/consultations/:id/reject', authenticate, requireRole('doctor'), asy
   } catch (err) { next(err); }
 });
 
+/**
+ * PUT /api/consultations/:id/prescription (issue #82 — structured, immutable
+ * prescription documents; backwards compatible with the legacy free-text API).
+ *
+ * Two accepted bodies, exactly one issuance per consultation:
+ *  - LEGACY (older Android clients): { prescription: "free text" } — stored
+ *    verbatim as both the document's general instructions and the plain-text
+ *    projection, so historical clients keep seeing what the doctor typed;
+ *  - STRUCTURED (web composer): { items: [{name, strength?, form?, dose?,
+ *    route?, frequency?, duration?, quantity?, refills?, instructions?}],
+ *    general_instructions? } — item fields are ALLOWLIST-filtered; no price
+ *    or financial key can ever be persisted (issue #82).
+ *
+ * Server-side enforcement (never client-supplied identity):
+ *  - only the ASSIGNED doctor may issue (others get the historical 404);
+ *  - only while the consultation is EN_COURS; a consultation can be completed
+ *    once, so a second submit answers 409 PRESCRIPTION_ALREADY_ISSUED when a
+ *    document already exists (row-locked, atomic with the completion).
+ */
 router.put('/consultations/:id/prescription', authenticate, requireRole('doctor'), async (req, res, next) => {
   try {
-    const { prescription } = req.body || {};
-    if (!prescription) return res.status(400).json({ error: 'Prescription required' });
-    const c = await consultationsRepo.prescribe(req.params.id, req.user.id, String(prescription));
-    if (!c) return res.status(404).json({ error: 'Not found' });
+    const body = req.body || {};
+    const legacyText = typeof body.prescription === 'string' ? body.prescription.trim() : '';
+    const structuredProvided = Object.prototype.hasOwnProperty.call(body, 'items');
+    const generalInstructions = typeof body.general_instructions === 'string'
+      ? body.general_instructions.trim()
+      : '';
+
+    if (!legacyText && !structuredProvided) {
+      return res.status(400).json({ error: 'L’ordonnance est requise : ajoutez au moins un médicament ou du texte libre.' });
+    }
+    if (legacyText && structuredProvided) {
+      return res.status(400).json({ error: 'Envoyez soit le texte libre, soit la liste structurée, mais pas les deux.' });
+    }
+    if (legacyText && legacyText.length > prescriptionsRepo.LIMITS.legacyText) {
+      return res.status(400).json({ error: `Le texte de l’ordonnance ne peut pas dépasser ${prescriptionsRepo.LIMITS.legacyText} caractères.` });
+    }
+    if (generalInstructions.length > prescriptionsRepo.LIMITS.generalInstructions) {
+      return res.status(400).json({ error: `Les instructions générales ne peuvent pas dépasser ${prescriptionsRepo.LIMITS.generalInstructions} caractères.` });
+    }
+
+    let items = [];
+    if (structuredProvided) {
+      const sanitized = prescriptionsRepo.sanitizeItems(body.items);
+      if (!sanitized.ok) return res.status(400).json({ error: sanitized.error });
+      items = sanitized.items;
+    }
+
+    const result = await prescriptionsRepo.issuePrescription({
+      consultationId: req.params.id,
+      doctor: req.user,
+      items,
+      generalInstructions,
+      legacyText,
+    });
+
+    if (result.outcome === 'NOT_FOUND') return res.status(404).json({ error: 'Not found' });
+    // Legacy-compatible codes: a non-assigned doctor and a non-active
+    // consultation keep the historical 404 (the old repo-level guard answered
+    // 404 for every non-issuable state — Android clients may branch on it).
+    // Only the genuinely-new duplicate-issuance case gets the typed 409.
+    if (result.outcome === 'FORBIDDEN') return res.status(404).json({ error: 'Not found' });
+    if (result.outcome === 'NOT_ACTIVE') return res.status(404).json({ error: 'Not found' });
+    if (result.outcome === 'ALREADY_ISSUED') {
+      return res.status(409).json({
+        error: 'Une ordonnance a déjà été établie pour cette consultation.',
+        code: 'PRESCRIPTION_ALREADY_ISSUED',
+        reference: result.document.reference,
+      });
+    }
+
+    const c = result.consultation;
     await consultationsRepo.createMessage({
       consultation_id: req.params.id,
       sender_id: 'system',
@@ -853,6 +920,34 @@ router.put('/consultations/:id/prescription', authenticate, requireRole('doctor'
       });
     }
     res.json(consultationsRepo.consToApi(c));
+  } catch (err) { next(err); }
+});
+
+/**
+ * GET /api/consultations/:id/prescription (issue #82) — the active structured
+ * prescription document, enriched with server-derived doctor/patient identity.
+ *
+ * Access: the patient of the consultation, the issuing doctor, or an admin
+ * (existing authorization convention — identity comes from the authenticated
+ * user and the consultation row, never from client input). A user with no
+ * relation to the consultation gets 404 (no existence leak). Consultations
+ * without an issued document answer 404 — historical free-text prescriptions
+ * remain readable through the legacy consultations.prescription field.
+ *
+ * The payload contains no diagnosis/notes and no price fields by construction
+ * (see the repository allowlist).
+ */
+router.get('/consultations/:id/prescription', authenticate, async (req, res, next) => {
+  try {
+    const c = await consultationsRepo.findById(req.params.id);
+    if (!c) return res.status(404).json({ error: 'Not found' });
+    const isParticipant = c.patient_id === req.user.id || c.doctor_id === req.user.id;
+    if (!isParticipant && req.user.role !== 'admin') {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    const document = await prescriptionsRepo.getActiveForConsultation(req.params.id);
+    if (!document) return res.status(404).json({ error: 'Not found' });
+    res.json(document);
   } catch (err) { next(err); }
 });
 
