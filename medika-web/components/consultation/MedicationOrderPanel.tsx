@@ -510,8 +510,22 @@ export function MedicationOrderPanel({
   const onPay = () =>
     run(async () => {
       if (!order) return;
-      const result = await createMedicationPayment(token ?? "", order.id);
-      if (result.redirectUrl) window.location.assign(result.redirectUrl);
+      // Open a tab synchronously in the click gesture so mobile popup blockers
+      // do not swallow the MonCash redirect after the network request.
+      const paymentWindow = window.open("about:blank", "_blank");
+      if (paymentWindow) paymentWindow.opener = null;
+      try {
+        const result = await createMedicationPayment(token ?? "", order.id);
+        if (result.redirectUrl) {
+          if (paymentWindow) paymentWindow.location.href = new URL(result.redirectUrl, window.location.origin).href;
+          else window.location.assign(result.redirectUrl);
+        } else if (paymentWindow) {
+          paymentWindow.close();
+        }
+      } catch (err) {
+        if (paymentWindow) paymentWindow.close();
+        throw err;
+      }
     });
 
   const onVerifyPayment = () =>
