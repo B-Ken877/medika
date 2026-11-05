@@ -166,7 +166,7 @@ export default function LivraisonsPage() {
       <section className="card" style={{ padding: 18, marginBottom: 16 }}>
         <h2>Livraisons en cours et dépenses</h2>
         {deliveries.map((d) => <div key={d.id} style={{ padding: 10, borderBottom: '1px solid var(--mk-border)' }}>
-          <strong>{d.reference}</strong> · {d.patient_name} · {{ ASSIGNED: 'Affectée', PHARMACY_PREPARING: 'Préparation en pharmacie', READY_FOR_PICKUP: 'Prête au retrait', PICKED_UP: 'Récupérée', OUT_FOR_DELIVERY: 'En livraison', AWAITING_CONFIRMATION: 'En attente de confirmation', DELIVERED: 'Livrée', FAILED_ATTEMPT: 'Tentative échouée', RETURNED_ESCALATED: 'Retournée / escaladée' }[d.status] || d.status} · {d.scheduled_for}
+          <strong>{d.reference}</strong> · {d.patient_name} · {{ ASSIGNED: 'Affectée', PHARMACY_PREPARING: 'Préparation en pharmacie', READY_FOR_PICKUP: 'Prête au retrait', PICKED_UP: 'Récupérée', OUT_FOR_DELIVERY: 'En livraison', AWAITING_CONFIRMATION: 'En attente de confirmation', DELIVERED: 'Livrée', FAILED_ATTEMPT: 'Tentative échouée', RETURNED_ESCALATED: 'Retournée / escaladée' }[d.status] || d.status} · {d.scheduled_for} · {{ MATIN: 'Matin', APRES_MIDI: 'Après-midi', SOIR: 'Soir', JOURNEE: 'Toute la journée' }[d.delivery_window] || 'Toute la journée'}
           <button className="btn btn-sm btn-secondary" style={{ marginLeft: 10 }} onClick={() => setExpense({ delivery_id: d.id, amount_htg: '', notes: '' })}>Saisir une dépense</button>
         </div>)}
         {expense.delivery_id && <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
