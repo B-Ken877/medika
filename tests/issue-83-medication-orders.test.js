@@ -709,19 +709,17 @@ describe('issue #83 — delivery coverage, contact validation, and free delivery
 
   it('fails closed for an unconfigured zone list and rejects zones not explicitly allowlisted', async () => {
     const { consId, patient } = await consultationWithPrescription();
-    const configured = process.env.MEDIKA_MEDICATION_DELIVERY_ZONES;
     try {
-      delete process.env.MEDIKA_MEDICATION_DELIVERY_ZONES;
+      await db.query("UPDATE delivery_zones SET active = FALSE WHERE city = 'Port-au-Prince'");
       const notConfigured = await createOrder(patient, consId);
       expect(notConfigured.status).toBe(503);
       expect(notConfigured.body.code).toBe('MEDIKA_DELIVERY_NOT_CONFIGURED');
-
-      process.env.MEDIKA_MEDICATION_DELIVERY_ZONES = 'Port-au-Prince';
+      await db.query("UPDATE delivery_zones SET active = TRUE WHERE city = 'Port-au-Prince'");
       const unsupported = await createOrder(patient, consId, { delivery_zone: 'Delmas' });
       expect(unsupported.status).toBe(422);
       expect(unsupported.body.code).toBe('DELIVERY_ZONE_NOT_SUPPORTED');
     } finally {
-      process.env.MEDIKA_MEDICATION_DELIVERY_ZONES = configured;
+      await db.query("UPDATE delivery_zones SET active = TRUE WHERE city = 'Port-au-Prince'");
     }
   });
 
@@ -907,4 +905,144 @@ it('holds a completed payment for manual review if the quote expires during chec
   expect(order.body.status).toBe('ACCEPTED');
   expect(order.body.payment.status).toBe('REVIEW');
   vi.restoreAllMocks();
+});
+
+
+async function paidMedicationOrderForDelivery() {
+  const { consId, patient } = await consultationWithPrescription();
+  const created = await createOrder(patient, consId);
+  expect(created.status).toBe(201);
+  const pharmacy = await createPharmacy();
+  const quote = await r.post('/api/admin/medication-orders/' + created.body.id + '/quotes')
+    .set('Authorization', 'Bearer ' + token.admin).send(quotePayload(pharmacy.id));
+  expect(quote.status).toBe(201);
+  const accepted = await r.post('/api/medication-orders/' + created.body.id + '/accept')
+    .set('Authorization', 'Bearer ' + patient.token);
+  expect(accepted.status).toBe(200);
+  const moncash = await import('../src/moncash.js').then((m) => m.default ?? m);
+  vi.spyOn(moncash, 'createPayment').mockResolvedValue({ redirectUrl: 'https://moncash.example/checkout' });
+  const start = await r.post('/api/medication-orders/' + created.body.id + '/payment/create')
+    .set('Authorization', 'Bearer ' + patient.token).send({});
+  const ref = start.body.payment.payment_reference;
+  vi.spyOn(moncash, 'retrieveByOrderId').mockResolvedValue({
+    reference: ref, transactionId: 'TX_DELIVERY_' + Math.random().toString(36).slice(2),
+    amount: 675, status: 'completed', raw: { status: 'successful', cost: 675 },
+  });
+  const verified = await r.post('/api/medication-orders/' + created.body.id + '/payment/verify')
+    .set('Authorization', 'Bearer ' + patient.token).send({});
+  expect(verified.body.success).toBe(true);
+  vi.restoreAllMocks();
+  return { orderId: created.body.id, patient };
+}
+
+async function createDeliveryEmployeeFixture() {
+  const created = await r.post('/api/admin/delivery-employees')
+    .set('Authorization', 'Bearer ' + token.admin)
+    .send({ name: 'Livreur Test', username: 'livreur.test.' + Math.random().toString(36).slice(2, 8), password: 'LivraisonSecurisee2026!', phone: '+50937142536' });
+  expect(created.status).toBe(201);
+  const auth = await import('../src/auth.js').then((m) => m.default ?? m);
+  return { ...created.body, token: auth.issueToken({ id: created.body.id, role: 'delivery', username: created.body.username, name: created.body.name }) };
+}
+
+function nextFridayIso() {
+  const d = new Date();
+  const delta = ((5 - d.getDay() + 7) % 7) || 7;
+  d.setDate(d.getDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+function nextMondayIso() {
+  const d = new Date();
+  const delta = ((1 - d.getDay() + 7) % 7) || 7;
+  d.setDate(d.getDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+describe('issue #85 — Medika-owned delivery operations', () => {
+  it('assigns only verified-paid orders and enforces Friday unless an admin records an urgent exception', async () => {
+    const { orderId } = await paidMedicationOrderForDelivery();
+    const employee = await createDeliveryEmployeeFixture();
+    const zone = await db.query("SELECT id FROM delivery_zones WHERE city = 'Port-au-Prince' AND zone_name = 'Port-au-Prince' AND active = TRUE");
+    expect(zone.rows).toHaveLength(1);
+
+    const invalidDate = await r.post('/api/admin/deliveries/assign')
+      .set('Authorization', 'Bearer ' + token.admin)
+      .send({ medication_order_id: orderId, employee_id: employee.id, zone_id: zone.rows[0].id, scheduled_for: nextMondayIso(), urgent: false });
+    expect(invalidDate.status).toBe(400);
+    expect(invalidDate.body.code).toBe('FRIDAY_ONLY');
+
+    const urgent = await r.post('/api/admin/deliveries/assign')
+      .set('Authorization', 'Bearer ' + token.admin)
+      .send({ medication_order_id: orderId, employee_id: employee.id, zone_id: zone.rows[0].id, scheduled_for: nextMondayIso(), urgent: true, urgent_reason: 'Situation médicale nécessitant une livraison rapide.' });
+    expect(urgent.status).toBe(201);
+    const employeeList = await r.get('/api/delivery/my').set('Authorization', 'Bearer ' + employee.token);
+    expect(employeeList.status).toBe(200);
+    expect(employeeList.body).toHaveLength(1);
+    expect(employeeList.body[0]).not.toHaveProperty('diagnosis');
+    expect(employeeList.body[0]).not.toHaveProperty('prescription');
+    expect(employeeList.body[0].urgent).toBe(true);
+  });
+
+  it('enforces employee assignment boundaries and patient-confirmed delivery chain of custody', async () => {
+    const { orderId, patient } = await paidMedicationOrderForDelivery();
+    const employee = await createDeliveryEmployeeFixture();
+    const otherEmployee = await createDeliveryEmployeeFixture();
+    const zone = await db.query("SELECT id FROM delivery_zones WHERE city = 'Port-au-Prince' AND zone_name = 'Port-au-Prince' AND active = TRUE");
+    const assigned = await r.post('/api/admin/deliveries/assign')
+      .set('Authorization', 'Bearer ' + token.admin)
+      .send({ medication_order_id: orderId, employee_id: employee.id, zone_id: zone.rows[0].id, scheduled_for: nextFridayIso(), urgent: false });
+    expect(assigned.status).toBe(201);
+
+    const hidden = await r.get('/api/delivery/my').set('Authorization', 'Bearer ' + otherEmployee.token);
+    expect(hidden.status).toBe(200);
+    expect(hidden.body).toHaveLength(0);
+
+    const steps = ['PHARMACY_PREPARING', 'READY_FOR_PICKUP', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'AWAITING_CONFIRMATION'];
+    for (const [index, eventType] of steps.entries()) {
+      const response = await r.post('/api/delivery/' + assigned.body.delivery_id + '/events')
+        .set('Authorization', 'Bearer ' + employee.token)
+        .set('Idempotency-Key', 'delivery-step-key-' + index + '-' + orderId)
+        .send({ event_type: eventType });
+      expect(response.status).toBe(200);
+    }
+
+    const duplicateEvent = await r.post('/api/delivery/' + assigned.body.delivery_id + '/events')
+      .set('Authorization', 'Bearer ' + employee.token)
+      .set('Idempotency-Key', 'delivery-step-key-0-' + orderId)
+      .send({ event_type: 'PHARMACY_PREPARING' });
+    expect(duplicateEvent.status).toBe(200);
+    expect(duplicateEvent.body.duplicate).toBe(true);
+    const tracking = await r.get('/api/medication-orders/' + orderId + '/delivery')
+      .set('Authorization', 'Bearer ' + patient.token);
+    expect(tracking.status).toBe(200);
+    expect(tracking.body.status).toBe('AWAITING_CONFIRMATION');
+    const confirmed = await r.post('/api/medication-orders/' + orderId + '/delivery/confirm')
+      .set('Authorization', 'Bearer ' + patient.token).send({});
+    expect(confirmed.status).toBe(200);
+    const completed = await r.get('/api/medication-orders/' + orderId + '/delivery')
+      .set('Authorization', 'Bearer ' + patient.token);
+    expect(completed.body.status).toBe('DELIVERED');
+
+    const expense = await r.post('/api/admin/deliveries/' + assigned.body.delivery_id + '/expenses')
+      .set('Authorization', 'Bearer ' + token.admin).send({ amount_htg: 85, category: 'TRANSPORT', notes: 'Trajet aller-retour' });
+    expect(expense.status).toBe(201);
+
+    const budget = await r.put('/api/admin/delivery-budget').set('Authorization', 'Bearer ' + token.admin)
+      .send({ monthly_budget_htg: 100, alert_threshold_percent: 80 });
+    expect(budget.status).toBe(200);
+    const today = new Date().toISOString().slice(0, 10);
+    const report = await r.get('/api/admin/delivery-reports?from=' + today + '&to=' + today)
+      .set('Authorization', 'Bearer ' + token.admin);
+    expect(report.status).toBe(200);
+    expect(report.body.delivered).toBeGreaterThanOrEqual(1);
+    expect(report.body.expense_htg).toBeGreaterThanOrEqual(85);
+    expect(report.body.budget_alert).toBe(true);
+  });
+
+  it('rejects patient orders in a zone that has not been explicitly activated', async () => {
+    const { consId, patient } = await consultationWithPrescription();
+    const unsupported = await createOrder(patient, consId, { delivery_zone: 'Zone non configurée' });
+    expect(unsupported.status).toBe(422);
+    expect(unsupported.body.code).toBe('DELIVERY_ZONE_NOT_SUPPORTED');
+  });
 });
