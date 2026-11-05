@@ -140,6 +140,7 @@ beforeAll(async () => {
   token.doctor2 = await h.loginToken(r, 't.doctor2');
   token.admin = await h.loginToken(r, 't.admin');
   db = await import('../src/db.js').then((m) => m.default ?? m);
+  await db.query("UPDATE delivery_zones SET active = TRUE WHERE city = 'Port-au-Prince' AND zone_name = 'Port-au-Prince'");
 });
 
 afterAll(async () => {
