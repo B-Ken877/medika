@@ -1,4 +1,4 @@
-Last updated: 2026-11-05T17:33:00Z (cron-202611060132)
+Last updated: 2026-11-05T18:05:00Z (cron-202611060132)
 
 ## MAJOR CONTEXT RESET (this run)
 Issue #82 was REPURPOSED by the owner (issue body rewritten ~17:31Z, directive
@@ -82,8 +82,31 @@ issue body (18 acceptance criteria + 12 sections of spec).
 - KNOWN: Vercel PREVIEW deploys fail (rate limit) — environmental, not code;
   verify locally, do not re-investigate.
 
+## Progress this run (cron-202611060132)
+- P0 DONE: claim (label+comment 6664899528), lock, branch
+  feat/issue-82-complete-medication-journey @ 446d322 (pushed), design note
+  docs/ISSUE_82_MEDICATION_JOURNEY.md (audit + migration reconciliation +
+  7ac67aa replacement contract).
+- P1 DONE (commit 446d322, PUSHED): migration 013 (zones/employees/custody/
+  expenses/budget; seed INACTIVE fail-closed), medication_orders.delivery_city
+  + delivery_zone_id FK, repo zone-record validation (503/422/400 semantics),
+  GET /api/delivery-zones, web zone SELECT + fully-required typed payload
+  (real 7ac67aa replacement), FR coverage-closed state. ALSO FIXED the
+  merged-but-never-run issue-84 MonCash tests (spies on wrong module
+  instance -> createRequire anchored at src/routes/medication-payments.js).
+- Verified real: backend 506/506 (41 files), web 540/540 (42 files),
+  tsc --noEmit clean.
+
 ## Next action (next run)
-1. Check lock + whether a fix commit already landed on the feature branch.
-2. Continue P0→P1 per phase plan; commit+push per phase; keep LOCK heartbeat
-   fresh each run. If PR created later, watch for owner review comments.
-3. One issue at a time. Never merge. Never push main.
+1. Check lock + LOCK heartbeat; verify no new owner review comment on #82.
+2. P2: patient ordonnance rebuild — PrescriptionPanel: dedicated document
+   view (white doc surface, header/footer, Medika green accents), 404-only
+   legacy fallback (currently ALL errors swallowed — spec violation),
+   retryable error state, html2canvas PNG + A4 print kept; web tests.
+3. P3: delivery repo/routes (from PR #95, audited): assignment (PAID-only,
+   Friday, reasoned urgent), employee isolation, custody transitions,
+   patient confirm, expenses/reports; admin livraisons + livreur portal.
+4. P4: admin zones/employees CRUD + swap admin queue to zone records.
+5. P5: full verification (backend/web/admin suites, typecheck, lint,
+   builds) -> open ONE PR -> IN REVIEW.
+One issue at a time. Never merge. Never push main.
