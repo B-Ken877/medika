@@ -83,15 +83,18 @@ const quoteItems = [
   },
 ];
 
-describe("MedicationOrderCta — « Demander le prix et la livraison avec Medika » (issue #83)", () => {
+describe("MedicationOrderCta — « Demander le prix et la livraison avec Medika » (issue #83, zones issue #82)", () => {
   const html = ssr(renderToString(
     createElement(MedicationOrderCta, {
       busy: false,
       deliveryAddress: "",
       deliveryPhone: "",
-      deliveryZone: "Port-au-Prince",
+      deliveryCity: "Port-au-Prince",
+      deliveryZone: "Centre-ville",
+      zones: [{ id: "ZONE_1", city: "Port-au-Prince", zone_name: "Centre-ville" }],
       onDeliveryAddressChange: noop,
       onDeliveryPhoneChange: noop,
+      onDeliveryCityChange: noop,
       onDeliveryZoneChange: noop,
       onCreate: noop,
     }),
@@ -103,10 +106,40 @@ describe("MedicationOrderCta — « Demander le prix et la livraison avec Medika
     expect(html).toContain("Vous restez libre d’acheter vos médicaments vous-même");
   });
 
-  it("requires delivery address, Haitian phone, and delivery zone", () => {
+  it("requires delivery address, Haitian phone, city, and delivery zone", () => {
     expect(html).toContain("Adresse de livraison (obligatoire)");
     expect(html).toContain("Téléphone pour la livraison (obligatoire)");
+    expect(html).toContain("Ville de livraison (obligatoire)");
     expect(html).toContain("Quartier ou zone de livraison (obligatoire)");
+  });
+
+  it("offers ONLY the admin-activated zones as select options (no free text)", () => {
+    expect(html).toContain("Centre-ville");
+    expect(html).not.toContain("Ex. : nom de votre quartier");
+  });
+});
+
+describe("MedicationOrderCta — no active zone configured fails closed (issue #82 §7)", () => {
+  const html = ssr(renderToString(
+    createElement(MedicationOrderCta, {
+      busy: false,
+      deliveryAddress: "",
+      deliveryPhone: "",
+      deliveryCity: "",
+      deliveryZone: "",
+      zones: [],
+      onDeliveryAddressChange: noop,
+      onDeliveryPhoneChange: noop,
+      onDeliveryCityChange: noop,
+      onDeliveryZoneChange: noop,
+      onCreate: noop,
+    }),
+  ));
+
+  it("hides the form and shows the French independent-purchase alternative", () => {
+    expect(html).toContain("La livraison Medika n’est pas encore disponible dans votre région");
+    expect(html).toContain("acheter vos médicaments en pharmacie");
+    expect(html).not.toContain("Demander le prix et la livraison avec Medika");
   });
 });
 

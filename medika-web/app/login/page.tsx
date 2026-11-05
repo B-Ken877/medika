@@ -32,10 +32,11 @@ function BrandMark({ size = 36 }: { size?: number }) {
 }
 
 function LoginForm() {
-  const { login, status } = useAuth();
+  const { login, status, user } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") || "/app";
+  const nextParam = params.get("next");
+  const next = nextParam || "/app";
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -44,8 +45,15 @@ function LoginForm() {
   const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
-    if (status === "authenticated") router.replace(next);
-  }, [status, router, next]);
+    if (status !== "authenticated") return;
+    // Delivery employees land on their dedicated portal unless a specific
+    // destination was requested (issue #82 — delivery scope).
+    if (!nextParam && user?.role === "delivery") {
+      router.replace("/livreur");
+      return;
+    }
+    router.replace(next);
+  }, [status, router, next, nextParam, user?.role]);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();

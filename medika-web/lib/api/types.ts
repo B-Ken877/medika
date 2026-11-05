@@ -8,7 +8,7 @@
  * established that convention (e.g. CreateConsultationRequest).
  */
 
-export type Role = "patient" | "doctor" | "admin";
+export type Role = "patient" | "doctor" | "admin" | "delivery";
 
 export type ConsultationStatus =
   | "RECHERCHE_MEDECIN"
@@ -307,9 +307,49 @@ export type MedicationOrderStatus =
   | "ESCALATED"
   | "QUOTED"
   | "ACCEPTED"
+  | "PAID"
   | "DECLINED"
   | "CANCELLED"
   | "EXPIRED";
+
+/** Admin-activated service zone (issue #82 delivery scope). Only ACTIVE rows
+ *  are offered to patients; the server fails closed on anything else. */
+export interface DeliveryZone {
+  id: string;
+  city: string;
+  zone_name: string;
+}
+
+/** Patient-facing delivery tracking (minimum fulfilment data — never any
+ *  clinical content). */
+export interface MedicationDeliveryTracking {
+  id: string;
+  medication_order_id: string;
+  reference: string;
+  patient_name?: string;
+  delivery_address?: string;
+  delivery_phone?: string;
+  delivery_zone?: string;
+  city?: string;
+  pickup_pharmacy_name?: string;
+  pickup_reference?: string;
+  scheduled_for: string;
+  urgent: boolean;
+  status:
+    | "ASSIGNED"
+    | "PHARMACY_PREPARING"
+    | "READY_FOR_PICKUP"
+    | "PICKED_UP"
+    | "OUT_FOR_DELIVERY"
+    | "AWAITING_CONFIRMATION"
+    | "DELIVERED"
+    | "FAILED_ATTEMPT"
+    | "RETURNED_ESCALATED"
+    | string;
+  created_at?: number | string | null;
+  delivered_at?: number | string | null;
+  events?: { event_type: string; actor_role?: string; reason?: string; created_at?: number | string }[];
+}
 
 /** Item-level stock availability as confirmed by the pharmacy. */
 export type QuoteItemAvailability = "AVAILABLE" | "PARTIAL" | "UNAVAILABLE";
@@ -363,6 +403,7 @@ export interface MedicationOrder {
   delivery_address?: string;
   delivery_phone?: string;
   delivery_zone?: string;
+  delivery_city?: string;
   requested_at?: number | null;
   /** 30-minute operations SLA target (epoch seconds, from the request). */
   sla_deadline_at?: number | null;
@@ -382,6 +423,7 @@ export interface MedicationOrder {
 export interface CreateMedicationOrderRequest {
   delivery_address: string;
   delivery_phone: string;
+  delivery_city: string;
   delivery_zone: string;
 }
 
