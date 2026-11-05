@@ -68,7 +68,7 @@ async function assignDelivery({ orderId, employeeId, zoneId, scheduledFor, urgen
     if (order.status !== 'PAID') return { outcome: 'NOT_PAID', status: order.status };
 
     const { rows: employees } = await client.query(
-      `SELECT id, name FROM users WHERE id = $1 AND role = 'delivery'`, [employeeId]
+      `SELECT id, name FROM users WHERE id = $1 AND role = 'delivery' AND is_available = TRUE`, [employeeId]
     );
     if (!employees[0]) return { outcome: 'INVALID_EMPLOYEE' };
     const { rows: zones } = await client.query(
