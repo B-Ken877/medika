@@ -20,12 +20,13 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, Clock, Pill, RefreshCw, XCircle } from "lucide-react";
-import type { Consultation, MedicationOrder, MedicationQuoteItem } from "@/lib/api/types";
+import type { Consultation, DeliveryZone, MedicationOrder, MedicationQuoteItem } from "@/lib/api/types";
 import {
   acceptMedicationQuote,
   cancelMedicationOrder,
   createMedicationOrder,
   declineMedicationQuote,
+  getDeliveryZones,
   getMedicationOrderByConsultation,
   getPrescriptionDocument,
   createMedicationPayment,
@@ -271,12 +272,19 @@ export function MedicationOrderView({
 }
 
 /** The call-to-action shown when no order exists yet (structured prescription
- *  only — legacy free-text prescriptions cannot be sourced). */
+ *  only — legacy free-text prescriptions cannot be sourced).
+ *
+ *  Coverage is record-based (issue #82 §7): the patient picks an exact zone
+ *  from GET /api/delivery-zones; with no active zone the form stays closed
+ *  and only the independent-purchase alternative is offered. Delivery is
+ *  FREE for the patient — no delivery fee line ever appears anywhere. */
 export function MedicationOrderCta({
   busy,
   deliveryAddress,
   deliveryPhone,
-  deliveryZone,
+  deliveryZoneId,
+  zones,
+  zonesLoading,
   onDeliveryAddressChange,
   onDeliveryPhoneChange,
   onDeliveryZoneChange,
@@ -285,12 +293,16 @@ export function MedicationOrderCta({
   busy: boolean;
   deliveryAddress: string;
   deliveryPhone: string;
-  deliveryZone: string;
+  deliveryZoneId: string;
+  zones: DeliveryZone[];
+  zonesLoading: boolean;
   onDeliveryAddressChange: (value: string) => void;
   onDeliveryPhoneChange: (value: string) => void;
-  onDeliveryZoneChange: (value: string) => void;
+  onDeliveryZoneChange: (zoneId: string) => void;
   onCreate: () => void;
 }) {
+  const selectedZone = zones.find((z) => z.id === deliveryZoneId) ?? null;
+  const coverageClosed = !zonesLoading && zones.length === 0;
   return (
     <section className="card" style={{ margin: 12 }} aria-label="Demander un devis de médicaments">
       <h3 style={{ margin: 0, marginBottom: 6, fontSize: "1.05rem", color: "var(--green-800)", display: "flex", alignItems: "center", gap: 8 }}>
@@ -303,58 +315,76 @@ export function MedicationOrderCta({
         dans les zones desservies. Vous restez libre d’acheter vos médicaments vous-même : téléchargez ou
         imprimez simplement l’ordonnance ci-dessus.
       </p>
-      <div style={{ display: "grid", gap: 8 }}>
-        <label className="small" htmlFor="med-order-address" style={{ color: "var(--gray-700, #3f4f4b)" }}>
-          Adresse de livraison (obligatoire)
-          <input
-            id="med-order-address"
-            className="input"
-            type="text"
-            maxLength={500}
-            required
-            value={deliveryAddress}
-            onChange={(e) => onDeliveryAddressChange(e.target.value)}
-            placeholder="Ex. : 12, rue Ka o, Port-au-Prince"
-            disabled={busy}
-            style={{ marginTop: 4 }}
-          />
-        </label>
-        <label className="small" htmlFor="med-order-phone" style={{ color: "var(--gray-700, #3f4f4b)" }}>
-          Téléphone pour la livraison (obligatoire)
-          <input
-            id="med-order-phone"
-            className="input"
-            type="tel"
-            maxLength={20}
-            required
-            value={deliveryPhone}
-            onChange={(e) => onDeliveryPhoneChange(e.target.value)}
-            placeholder="+509 …"
-            disabled={busy}
-            style={{ marginTop: 4 }}
-          />
-        </label>
-        <label className="small" htmlFor="med-order-zone" style={{ color: "var(--gray-700, #3f4f4b)" }}>
-          Quartier ou zone de livraison (obligatoire)
-          <input
-            id="med-order-zone"
-            className="input"
-            type="text"
-            maxLength={80}
-            required
-            value={deliveryZone}
-            onChange={(e) => onDeliveryZoneChange(e.target.value)}
-            placeholder="Ex. : nom de votre quartier"
-            disabled={busy}
-            style={{ marginTop: 4 }}
-          />
-        </label>
-      </div>
+      {coverageClosed ? (
+        <p className="small" style={{ margin: "4px 0 10px", color: "var(--gray-700, #3f4f4b)", fontWeight: 600 }}>
+          La livraison Medika n’est pas encore disponible dans votre zone. Vous pouvez télécharger votre
+          ordonnance ci-dessus et acheter vos médicaments en pharmacie.
+        </p>
+      ) : (
+        <div style={{ display: "grid", gap: 8 }}>
+          <label className="small" htmlFor="med-order-address" style={{ color: "var(--gray-700, #3f4f4b)" }}>
+            Adresse de livraison (obligatoire)
+            <input
+              id="med-order-address"
+              className="input"
+              type="text"
+              maxLength={500}
+              required
+              value={deliveryAddress}
+              onChange={(e) => onDeliveryAddressChange(e.target.value)}
+              placeholder="Ex. : 12, rue Ka o, Port-au-Prince"
+              disabled={busy}
+              style={{ marginTop: 4 }}
+            />
+          </label>
+          <label className="small" htmlFor="med-order-zone" style={{ color: "var(--gray-700, #3f4f4b)" }}>
+            Zone de livraison Medika (obligatoire)
+            <select
+              id="med-order-zone"
+              className="input"
+              required
+              value={deliveryZoneId}
+              onChange={(e) => onDeliveryZoneChange(e.target.value)}
+              disabled={busy || zonesLoading}
+              style={{ marginTop: 4 }}
+            >
+              <option value="">{zonesLoading ? "Chargement des zones desservies…" : "— Sélectionnez votre zone —"}</option>
+              {zones.map((z) => (
+                <option key={z.id} value={z.id}>
+                  {z.zone_name} — {z.city}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="small" htmlFor="med-order-phone" style={{ color: "var(--gray-700, #3f4f4b)" }}>
+            Téléphone pour la livraison (obligatoire)
+            <input
+              id="med-order-phone"
+              className="input"
+              type="tel"
+              maxLength={20}
+              required
+              value={deliveryPhone}
+              onChange={(e) => onDeliveryPhoneChange(e.target.value)}
+              placeholder="+509 …"
+              disabled={busy}
+              style={{ marginTop: 4 }}
+            />
+          </label>
+        </div>
+      )}
       <p className="tiny" style={{ marginTop: 8, color: "var(--gray-700, #3f4f4b)" }}>
-        La disponibilité est vérifiée selon les zones actuellement desservies. Si votre adresse n’est pas
-        couverte, vous pourrez toujours utiliser l’ordonnance pour acheter vos médicaments en pharmacie.
+        {selectedZone
+          ? `Zone sélectionnée : ${selectedZone.zone_name} (${selectedZone.city}). La disponibilité est vérifiée au moment de la demande.`
+          : "La disponibilité est vérifiée selon les zones actuellement desservies. Si votre adresse n’est pas couverte, vous pourrez toujours utiliser l’ordonnance pour acheter vos médicaments en pharmacie."}
       </p>
-      <button type="button" className="btn btn-primary" style={{ marginTop: 10 }} onClick={onCreate} disabled={busy}>
+      <button
+        type="button"
+        className="btn btn-primary"
+        style={{ marginTop: 10 }}
+        onClick={onCreate}
+        disabled={busy || coverageClosed || !deliveryZoneId}
+      >
         <Clock size={15} aria-hidden /> {busy ? "Envoi…" : "Demander le prix et la livraison avec Medika"}
       </button>
     </section>
@@ -381,7 +411,9 @@ export function MedicationOrderPanel({
   const [error, setError] = useState<unknown>(null);
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
-  const [deliveryZone, setDeliveryZone] = useState("");
+  const [deliveryZoneId, setDeliveryZoneId] = useState("");
+  const [zones, setZones] = useState<DeliveryZone[]>([]);
+  const [zonesLoading, setZonesLoading] = useState(true);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [paymentMessage, setPaymentMessage] = useState<string | null>(null);
 
@@ -436,6 +468,29 @@ export function MedicationOrderPanel({
     };
   }, [token, consultation.id]);
 
+  useEffect(() => {
+    let alive = true;
+    // Active coverage zones for the order form (issue #82 §7 — explicit
+    // records, fail closed when none is configured).
+    if (token) {
+      getDeliveryZones(token)
+        .then((r) => {
+          if (alive) setZones(r.zones ?? []);
+        })
+        .catch(() => {
+          if (alive) setZones([]);
+        })
+        .finally(() => {
+          if (alive) setZonesLoading(false);
+        });
+    } else if (alive) {
+      setZonesLoading(false);
+    }
+    return () => {
+      alive = false;
+    };
+  }, [token]);
+
   const run = async (action: () => Promise<void>) => {
     if (busy) return; // anti double-submit
     setBusy(true);
@@ -452,15 +507,21 @@ export function MedicationOrderPanel({
 
   const onCreate = () =>
     run(async () => {
+      const zone = zones.find((z) => z.id === deliveryZoneId);
+      if (!zone) {
+        // Fail closed client-side too: no zone record selected → no request.
+        throw new ApiError("network", 0, "Veuillez sélectionner une zone de livraison Medika dans la liste.");
+      }
       const created = await createMedicationOrder(token ?? "", consultation.id, {
         delivery_address: deliveryAddress.trim(),
+        delivery_city: zone.city,
         delivery_phone: deliveryPhone.trim(),
-        delivery_zone: deliveryZone.trim(),
+        delivery_zone_id: zone.id,
       });
       setOrder(created);
       setDeliveryAddress("");
       setDeliveryPhone("");
-      setDeliveryZone("");
+      setDeliveryZoneId("");
     });
 
   const onAccept = () =>
@@ -580,10 +641,12 @@ export function MedicationOrderPanel({
         busy={busy}
         deliveryAddress={deliveryAddress}
         deliveryPhone={deliveryPhone}
-        deliveryZone={deliveryZone}
+        deliveryZoneId={deliveryZoneId}
+        zones={zones}
+        zonesLoading={zonesLoading}
         onDeliveryAddressChange={setDeliveryAddress}
         onDeliveryPhoneChange={setDeliveryPhone}
-        onDeliveryZoneChange={setDeliveryZone}
+        onDeliveryZoneChange={setDeliveryZoneId}
         onCreate={onCreate}
       />
     </div>

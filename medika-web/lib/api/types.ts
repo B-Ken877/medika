@@ -362,7 +362,12 @@ export interface MedicationOrder {
   status_label_fr?: string;
   delivery_address?: string;
   delivery_phone?: string;
+  /** Legacy free-text snapshot of the zone name (historical rows). */
   delivery_zone?: string;
+  /** City recorded on the order (from the validated zone record). */
+  delivery_city?: string;
+  /** The exact coverage zone record the order was validated against. */
+  delivery_zone_id?: string | null;
   requested_at?: number | null;
   /** 30-minute operations SLA target (epoch seconds, from the request). */
   sla_deadline_at?: number | null;
@@ -379,10 +384,23 @@ export interface MedicationOrder {
     | string;
 }
 
+/** An ACTIVE Medika delivery coverage zone record (issue #82 §7).
+ *  The server exposes only activated zones; anything else fails closed. */
+export interface DeliveryZone {
+  id: string;
+  city: string;
+  zone_name: string;
+}
+
 export interface CreateMedicationOrderRequest {
   delivery_address: string;
+  /** Authoritative city comes from the selected zone record; the value
+   *  sent here is cross-checked server-side (never trusted). */
+  delivery_city: string;
   delivery_phone: string;
-  delivery_zone: string;
+  /** id of the selected delivery_zones RECORD (from GET /api/delivery-zones).
+   *  No free-text zone is accepted. */
+  delivery_zone_id: string;
 }
 
 export interface MedicationPayment {
