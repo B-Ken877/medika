@@ -836,7 +836,7 @@ describe('issue #84 — medication MonCash payments', () => {
     });
     const pending = await r.post('/api/medication-orders/' + created.body.id + '/payment/verify')
       .set('Authorization', 'Bearer ' + patient.token).send({});
-    expect(pending.status).toBe(200);
+    expect(pending.status).toBe(202);
     expect(pending.body.success).toBe(false);
 
     vi.spyOn(moncash, 'retrieveByOrderId').mockResolvedValueOnce({
