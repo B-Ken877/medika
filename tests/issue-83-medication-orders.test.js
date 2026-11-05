@@ -707,19 +707,18 @@ describe('issue #83 — delivery coverage, contact validation, and free delivery
 
   it('fails closed for an unconfigured zone list and rejects zones not explicitly allowlisted', async () => {
     const { consId, patient } = await consultationWithPrescription();
-    const configured = process.env.MEDIKA_MEDICATION_DELIVERY_ZONES;
     try {
-      delete process.env.MEDIKA_MEDICATION_DELIVERY_ZONES;
+      await db.query("UPDATE delivery_zones SET active = FALSE WHERE city = 'Port-au-Prince'");
       const notConfigured = await createOrder(patient, consId);
       expect(notConfigured.status).toBe(503);
       expect(notConfigured.body.code).toBe('MEDIKA_DELIVERY_NOT_CONFIGURED');
 
-      process.env.MEDIKA_MEDICATION_DELIVERY_ZONES = 'Port-au-Prince';
+      await db.query("UPDATE delivery_zones SET active = TRUE WHERE city = 'Port-au-Prince'");
       const unsupported = await createOrder(patient, consId, { delivery_zone: 'Delmas' });
       expect(unsupported.status).toBe(422);
       expect(unsupported.body.code).toBe('DELIVERY_ZONE_NOT_SUPPORTED');
     } finally {
-      process.env.MEDIKA_MEDICATION_DELIVERY_ZONES = configured;
+      await db.query("UPDATE delivery_zones SET active = TRUE WHERE city = 'Port-au-Prince'");
     }
   });
 
