@@ -9,7 +9,7 @@
  *    ordering is never required);
  *  - live status (waiting / escalated / quoted / accepted / declined /
  *    cancelled / expired) with the pharmacy quote: itemized availability and
- *    prices in integer HTG, total, delivery fee when recorded, quote expiry;
+ *    prices in integer HTG, medication total only, and quote expiry;
  *  - decision path: accept the quote, decline it, or cancel the request
  *    before any quote. The payment step is the dependent MonCash issue —
  *    shown as an explicit next step, never faked here.
@@ -143,12 +143,9 @@ export function MedicationQuoteView({
           <span>Total des médicaments</span>
           <strong>{formatHtg(quote.total_htg)}</strong>
         </div>
-        {quote.delivery_fee_htg != null && quote.delivery_fee_htg > 0 && (
-          <div style={{ display: "flex", justifyContent: "space-between", color: "var(--gray-700, #3f4f4b)" }}>
-            <span>Frais de livraison{quote.delivery_notes ? ` — ${quote.delivery_notes}` : ""}</span>
-            <span>{formatHtg(quote.delivery_fee_htg)}</span>
-          </div>
-        )}
+        <p className="tiny" style={{ marginTop: 6, color: "var(--gray-700, #3f4f4b)" }}>
+          Livraison offerte par Medika dans les zones desservies.
+        </p>
       </div>
 
       {expiry && (
@@ -277,15 +274,19 @@ export function MedicationOrderCta({
   busy,
   deliveryAddress,
   deliveryPhone,
+  deliveryZone,
   onDeliveryAddressChange,
   onDeliveryPhoneChange,
+  onDeliveryZoneChange,
   onCreate,
 }: {
   busy: boolean;
   deliveryAddress: string;
   deliveryPhone: string;
+  deliveryZone: string;
   onDeliveryAddressChange: (value: string) => void;
   onDeliveryPhoneChange: (value: string) => void;
+  onDeliveryZoneChange: (value: string) => void;
   onCreate: () => void;
 }) {
   return (
@@ -296,17 +297,19 @@ export function MedicationOrderCta({
       </h3>
       <p className="small" style={{ margin: "4px 0 10px", color: "var(--gray-700, #3f4f4b)" }}>
         Notre équipe contacte une pharmacie partenaire, confirme les prix et la disponibilité de chaque
-        médicament, puis vous envoie un devis à accepter ou refuser. Vous restez libre d’acheter vos
-        médicaments vous-même : téléchargez ou imprimez simplement l’ordonnance ci-dessus.
+        médicament, puis vous envoie un devis à accepter ou refuser. La livraison est offerte par Medika
+        dans les zones desservies. Vous restez libre d’acheter vos médicaments vous-même : téléchargez ou
+        imprimez simplement l’ordonnance ci-dessus.
       </p>
       <div style={{ display: "grid", gap: 8 }}>
         <label className="small" htmlFor="med-order-address" style={{ color: "var(--gray-700, #3f4f4b)" }}>
-          Adresse de livraison (optionnelle)
+          Adresse de livraison (obligatoire)
           <input
             id="med-order-address"
             className="input"
             type="text"
             maxLength={500}
+            required
             value={deliveryAddress}
             onChange={(e) => onDeliveryAddressChange(e.target.value)}
             placeholder="Ex. : 12, rue Ka o, Port-au-Prince"
@@ -315,12 +318,13 @@ export function MedicationOrderCta({
           />
         </label>
         <label className="small" htmlFor="med-order-phone" style={{ color: "var(--gray-700, #3f4f4b)" }}>
-          Téléphone pour la livraison (optionnel)
+          Téléphone pour la livraison (obligatoire)
           <input
             id="med-order-phone"
             className="input"
             type="tel"
-            maxLength={40}
+            maxLength={20}
+            required
             value={deliveryPhone}
             onChange={(e) => onDeliveryPhoneChange(e.target.value)}
             placeholder="+509 …"
@@ -328,7 +332,26 @@ export function MedicationOrderCta({
             style={{ marginTop: 4 }}
           />
         </label>
+        <label className="small" htmlFor="med-order-zone" style={{ color: "var(--gray-700, #3f4f4b)" }}>
+          Quartier ou zone de livraison (obligatoire)
+          <input
+            id="med-order-zone"
+            className="input"
+            type="text"
+            maxLength={80}
+            required
+            value={deliveryZone}
+            onChange={(e) => onDeliveryZoneChange(e.target.value)}
+            placeholder="Ex. : nom de votre quartier"
+            disabled={busy}
+            style={{ marginTop: 4 }}
+          />
+        </label>
       </div>
+      <p className="tiny" style={{ marginTop: 8, color: "var(--gray-700, #3f4f4b)" }}>
+        La disponibilité est vérifiée selon les zones actuellement desservies. Si votre adresse n’est pas
+        couverte, vous pourrez toujours utiliser l’ordonnance pour acheter vos médicaments en pharmacie.
+      </p>
       <button type="button" className="btn btn-primary" style={{ marginTop: 10 }} onClick={onCreate} disabled={busy}>
         <Clock size={15} aria-hidden /> {busy ? "Envoi…" : "Demander le prix et la livraison avec Medika"}
       </button>
@@ -356,6 +379,7 @@ export function MedicationOrderPanel({
   const [error, setError] = useState<unknown>(null);
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
+  const [deliveryZone, setDeliveryZone] = useState("");
 
   const refresh = useCallback(async () => {
     if (!token) return null;
@@ -427,10 +451,12 @@ export function MedicationOrderPanel({
       const created = await createMedicationOrder(token ?? "", consultation.id, {
         delivery_address: deliveryAddress.trim() || undefined,
         delivery_phone: deliveryPhone.trim() || undefined,
+        delivery_zone: deliveryZone.trim() || undefined,
       });
       setOrder(created);
       setDeliveryAddress("");
       setDeliveryPhone("");
+      setDeliveryZone("");
     });
 
   const onAccept = () =>
@@ -486,8 +512,10 @@ export function MedicationOrderPanel({
         busy={busy}
         deliveryAddress={deliveryAddress}
         deliveryPhone={deliveryPhone}
+        deliveryZone={deliveryZone}
         onDeliveryAddressChange={setDeliveryAddress}
         onDeliveryPhoneChange={setDeliveryPhone}
+        onDeliveryZoneChange={setDeliveryZone}
         onCreate={onCreate}
       />
     </div>
