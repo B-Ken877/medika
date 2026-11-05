@@ -19,7 +19,7 @@ export default function LivraisonsPage() {
   const [busy, setBusy] = useState(false);
   const [employee, setEmployee] = useState({ name: '', username: '', password: '', phone: '' });
   const [zone, setZone] = useState({ city: 'Port-au-Prince', zone_name: 'Port-au-Prince', active: true });
-  const [assignment, setAssignment] = useState({ medication_order_id: '', employee_id: '', zone_id: '', scheduled_for: nextFriday(), urgent: false, urgent_reason: '' });
+  const [assignment, setAssignment] = useState({ medication_order_id: '', employee_id: '', zone_id: '', scheduled_for: nextFriday(), delivery_window: 'MATIN', urgent: false, urgent_reason: '' });
   const [expense, setExpense] = useState({ delivery_id: '', amount_htg: '', notes: '' });
   const [period, setPeriod] = useState({ from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) });
   const [budget, setBudget] = useState({ monthly_budget_htg: '', alert_threshold_percent: 80 });
@@ -130,6 +130,12 @@ export default function LivraisonsPage() {
             {zones.filter((z) => z.active).map((z) => <option key={z.id} value={z.id}>{z.zone_name}, {z.city}</option>)}
           </select>
           <input className="form-input" type="date" value={assignment.scheduled_for} onChange={(e) => setAssignment({ ...assignment, scheduled_for: e.target.value })} />
+          <select className="form-input" value={assignment.delivery_window} onChange={(e) => setAssignment({ ...assignment, delivery_window: e.target.value })}>
+            <option value="MATIN">Matin · 08 h – 12 h</option>
+            <option value="APRES_MIDI">Après-midi · 12 h – 17 h</option>
+            <option value="SOIR">Soir · 17 h – 20 h</option>
+            <option value="JOURNEE">Toute la journée</option>
+          </select>
         </div>
         <label className="small" style={{ display: 'block', marginTop: 10 }}><input type="checkbox" checked={assignment.urgent} onChange={(e) => setAssignment({ ...assignment, urgent: e.target.checked })} /> Exception urgente</label>
         {assignment.urgent && <textarea className="form-input" style={{ marginTop: 8 }} placeholder="Justification de l’urgence" value={assignment.urgent_reason} onChange={(e) => setAssignment({ ...assignment, urgent_reason: e.target.value })} />}
