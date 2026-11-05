@@ -102,7 +102,7 @@ function configuredDeliveryZones() {
     .split(',').map(normalizeZone).filter(Boolean);
 }
 
-function validateDeliveryRequest({ deliveryAddress, deliveryPhone, deliveryZone }) {
+function validateDeliveryRequest({ deliveryAddress, deliveryPhone, deliveryZone }, allowedZones = configuredDeliveryZones()) {
   const address = typeof deliveryAddress === 'string' ? deliveryAddress.trim() : '';
   const phoneInput = typeof deliveryPhone === 'string' ? deliveryPhone.trim() : '';
   const zone = typeof deliveryZone === 'string' ? deliveryZone.trim() : '';
@@ -116,7 +116,7 @@ function validateDeliveryRequest({ deliveryAddress, deliveryPhone, deliveryZone 
   if (!/^(?:\+?509)?\d{8}$/.test(phone)) {
     return { outcome: 'INVALID_DELIVERY_DETAILS', error: 'Veuillez saisir un numéro haïtien valide à 8 chiffres, avec ou sans indicatif +509.' };
   }
-  const zones = configuredDeliveryZones();
+  const zones = (Array.isArray(allowedZones) ? allowedZones : []).map(normalizeZone).filter(Boolean);
   if (zones.length === 0) {
     return { outcome: 'SERVICE_UNAVAILABLE', error: 'La zone de livraison Medika n’est pas encore configurée. Vous pouvez télécharger votre ordonnance et acheter vos médicaments en pharmacie.' };
   }
@@ -300,6 +300,7 @@ function orderRowToApi(row, { withSla = true } = {}) {
     delivery_address: row.delivery_address ?? '',
     delivery_phone: row.delivery_phone ?? '',
     delivery_zone: row.delivery_zone ?? '',
+    delivery_city: row.delivery_city ?? 'Port-au-Prince',
     requested_at: toEpoch(row.requested_at),
   };
   if (withSla) {
@@ -343,7 +344,7 @@ async function insertEvent(client, { orderId, type, actor, details = {} }) {
  *   ALREADY_EXISTS         — an active order already exists for it (409)
  *   CREATED                — success; { order }
  */
-async function createOrder({ consultationId, patient, deliveryAddress, deliveryPhone, deliveryZone }) {
+async function createOrder({ consultationId, patient, deliveryAddress, deliveryPhone, deliveryZone, deliveryCity = 'Port-au-Prince' }) {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
       `SELECT * FROM consultations WHERE id = $1 FOR UPDATE`,
@@ -363,7 +364,13 @@ async function createOrder({ consultationId, patient, deliveryAddress, deliveryP
 
     // Validate contact details and exact allowlisted zone only after confirming
     // consultation ownership and an issued prescription (no coverage oracle).
-    const delivery = validateDeliveryRequest({ deliveryAddress, deliveryPhone, deliveryZone });
+    const city = clampText(deliveryCity, 100);
+    const { rows: configuredZones } = await client.query(
+      `SELECT zone_name FROM delivery_zones WHERE city = $1 AND active = TRUE`, [city]
+    );
+    const delivery = validateDeliveryRequest(
+      { deliveryAddress, deliveryPhone, deliveryZone }, configuredZones.map((zone) => zone.zone_name)
+    );
     if (!delivery.ok) return delivery;
 
     // The partial unique index backstops this check against concurrent races.
@@ -381,8 +388,8 @@ async function createOrder({ consultationId, patient, deliveryAddress, deliveryP
       `INSERT INTO medication_orders
          (id, reference, prescription_document_id, consultation_id,
           patient_id, patient_name, prescription_reference,
-          status, requested_at, sla_deadline_at, delivery_address, delivery_phone, delivery_zone)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'REQUESTED',now(),now() + interval '${SLA_MINUTES} minutes',$8,$9,$10)
+          status, requested_at, sla_deadline_at, delivery_address, delivery_phone, delivery_zone, delivery_city)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'REQUESTED',now(),now() + interval '${SLA_MINUTES} minutes',$8,$9,$10,$11)
        RETURNING *`,
       [
         orderId,
@@ -395,6 +402,7 @@ async function createOrder({ consultationId, patient, deliveryAddress, deliveryP
         delivery.address,
         delivery.phone,
         delivery.zone,
+        city,
       ]
     );
     const order = inserted[0];
