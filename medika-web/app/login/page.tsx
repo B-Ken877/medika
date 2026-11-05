@@ -44,8 +44,8 @@ function LoginForm() {
   const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
-    if (status === "authenticated") router.replace(next);
-  }, [status, router, next]);
+    if (status === "authenticated") router.replace(!params.get("next") && user?.role === "delivery" ? "/livreur" : next);
+  }, [status, router, next, params, user?.role]);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
