@@ -384,6 +384,19 @@ export interface CreateMedicationOrderRequest {
   delivery_zone: string;
 }
 
+export interface MedicationPayment {
+  id: string;
+  medication_order_id: string;
+  payment_reference: string;
+  amount_htg: number;
+  currency: 'HTG';
+  status: 'PENDING' | 'PAID' | 'FAILED';
+  transaction_id?: string | null;
+  simulated: boolean;
+  created_at?: number | null;
+  verified_at?: number | null;
+}
+
 export interface AllergyItem {
   name: string;
   severity: string;
