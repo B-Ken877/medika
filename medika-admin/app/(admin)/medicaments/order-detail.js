@@ -112,8 +112,6 @@ export default function OrderDetailModal({ orderId, pharmacies, onClose, onSaved
   const [pharmacyId, setPharmacyId] = useState('');
   const [rows, setRows] = useState({});
   const [expiresAt, setExpiresAt] = useState(defaultExpiryLocalValue);
-  const [deliveryFee, setDeliveryFee] = useState('');
-  const [deliveryNotes, setDeliveryNotes] = useState('');
   const [notes, setNotes] = useState('');
 
   const showToast = (msg, type = 'success') => {
@@ -188,8 +186,6 @@ export default function OrderDetailModal({ orderId, pharmacies, onClose, onSaved
       items,
       expires_at: expiresAt ? new Date(expiresAt).toISOString() : undefined,
     };
-    if (deliveryFee !== '') payload.delivery_fee_htg = Number.parseInt(deliveryFee, 10);
-    if (deliveryNotes.trim()) payload.delivery_notes = deliveryNotes.trim();
     if (notes.trim()) payload.notes = notes.trim();
     return payload;
   };
@@ -380,30 +376,6 @@ export default function OrderDetailModal({ orderId, pharmacies, onClose, onSaved
                     style={{ display: 'block', marginTop: 2 }}
                   />
                 </label>
-                <label style={{ fontSize: 12 }}>
-                  Frais de livraison (HTG, optionnel)
-                  <input
-                    className="form-input"
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={deliveryFee}
-                    onChange={(e) => setDeliveryFee(e.target.value)}
-                    style={{ width: 140, display: 'block', marginTop: 2 }}
-                  />
-                </label>
-                <label style={{ fontSize: 12, flex: 1, minWidth: 200 }}>
-                  Note de livraison (optionnelle)
-                  <input
-                    className="form-input"
-                    type="text"
-                    maxLength={500}
-                    value={deliveryNotes}
-                    onChange={(e) => setDeliveryNotes(e.target.value)}
-                    placeholder="ex. : zone métropolitaine"
-                    style={{ display: 'block', marginTop: 2 }}
-                  />
-                </label>
               </div>
               <label style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
                 Notes internes (optionnelles)
@@ -433,7 +405,6 @@ export default function OrderDetailModal({ orderId, pharmacies, onClose, onSaved
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--mk-text-secondary)', marginTop: 2 }}>
                         Enregistré par {q.agent_name || '—'} le {formatDate(q.confirmed_at)} · valable jusqu&apos;au {formatDate(q.expires_at)}
-                        {q.delivery_fee_htg != null ? ` · livraison : ${formatCurrency(q.delivery_fee_htg)}` : ''}
                       </div>
                     </div>
                   ))}
