@@ -7,6 +7,23 @@ ALTER TABLE users ADD CONSTRAINT users_role_check
 
 ALTER TABLE medication_orders ADD COLUMN IF NOT EXISTS delivery_city TEXT NOT NULL DEFAULT 'Port-au-Prince';
 
+-- A regular delivery is booked into a concrete time window; the patient sees
+-- the same window in tracking and the employee sees it in their route list.
+ALTER TABLE medication_deliveries
+  ADD COLUMN IF NOT EXISTS delivery_window TEXT NOT NULL DEFAULT 'JOURNEE'
+  CHECK (delivery_window IN ('MATIN','APRES_MIDI','SOIR','JOURNEE'));
+
+-- Preserve payment audit event types introduced by migration 012 and add the
+-- auditable urgent-unavailable notification event.
+ALTER TABLE medication_order_events DROP CONSTRAINT IF EXISTS medication_order_events_event_type_check;
+ALTER TABLE medication_order_events ADD CONSTRAINT medication_order_events_event_type_check
+  CHECK (event_type IN (
+    'REQUESTED','QUOTE_RECORDED','QUOTE_REVISED','PHARMACY_UNREACHABLE',
+    'ACCEPTED','DECLINED','CANCELLED','ESCALATED','QUOTE_EXPIRED',
+    'PAYMENT_PENDING','PAYMENT_FAILED','PAYMENT_VERIFIED','PAYMENT_REVIEW',
+    'DELIVERY_URGENT_UNAVAILABLE'
+  ));
+
 CREATE TABLE IF NOT EXISTS delivery_zones (
   id TEXT PRIMARY KEY,
   city TEXT NOT NULL,
