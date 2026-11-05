@@ -92,8 +92,8 @@ function clampText(value, max) {
 }
 
 function normalizeZone(value) {
-  return String(value ?? '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
-    .trim().replace(/\\s+/g, ' ').toLocaleLowerCase('fr');
+  return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .trim().replace(/\s+/g, ' ').toLocaleLowerCase('fr');
 }
 
 function configuredDeliveryZones() {
@@ -111,8 +111,8 @@ function validateDeliveryRequest({ deliveryAddress, deliveryPhone, deliveryZone 
   if (!zone || zone.length > 80) {
     return { outcome: 'INVALID_DELIVERY_DETAILS', error: 'Veuillez indiquer votre quartier ou zone de livraison (80 caractères maximum).' };
   }
-  const phone = phoneInput.replace(/[\\s().-]/g, '');
-  if (!/^(?:\\+?509)?\\d{8}$/.test(phone)) {
+  const phone = phoneInput.replace(/[\s().-]/g, '');
+  if (!/^(?:\+?509)?\d{8}$/.test(phone)) {
     return { outcome: 'INVALID_DELIVERY_DETAILS', error: 'Veuillez saisir un numéro haïtien valide à 8 chiffres, avec ou sans indicatif +509.' };
   }
   const zones = configuredDeliveryZones();
@@ -122,7 +122,7 @@ function validateDeliveryRequest({ deliveryAddress, deliveryPhone, deliveryZone 
   if (!zones.includes(normalizeZone(zone))) {
     return { outcome: 'OUT_OF_COVERAGE', error: 'La livraison Medika n’est pas encore disponible dans cette zone. Vous pouvez télécharger votre ordonnance et acheter vos médicaments en pharmacie.' };
   }
-  const digits = phone.replace(/\\D/g, '');
+  const digits = phone.replace(/\D/g, '');
   return { ok: true, address, phone: '+509' + digits.slice(-8), zone: clampText(zone, 80) };
 }
 
