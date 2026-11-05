@@ -44,6 +44,8 @@ const CATEGORY_FOR_EVENT = {
   // under the 'consultations' category (the DB CHECK in migration 007 has no
   // 'orders' category; the deep link opens the consultation's document view).
   'medication:quoted': 'consultations',
+  'medication:paid': 'consultations',
+  'medication:payment-review': 'consultations',
 };
 
 const CATEGORIES = ['consultations', 'messages', 'calls', 'wallet'];
