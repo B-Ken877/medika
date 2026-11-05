@@ -4,6 +4,7 @@ const express = require('express');
 const { authenticate, requireRole } = require('../auth');
 const deliveries = require('../repos/deliveries');
 const notifications = require('../notifications/emit');
+const { query } = require('../db');
 
 const router = express.Router();
 
@@ -79,6 +80,20 @@ router.post('/medication-orders/:id/delivery/confirm', authenticate, requireRole
     const result = await deliveries.confirmByPatient({ orderId: req.params.id, patientId: req.user.id });
     if (result.outcome === 'NOT_FOUND') return res.status(404).json({ error: 'Suivi de livraison introuvable.' });
     if (result.outcome === 'INVALID_TRANSITION') return res.status(409).json({ error: 'La réception ne peut pas encore être confirmée.', status: result.status });
+    if (result.outcome === 'DELIVERED') {
+      const key = 'delivery:' + req.params.id + ':patient-confirmed';
+      notifications.emit({
+        userId: req.user.id, eventType: 'medication:delivery-delivered', idempotencyKey: key + ':patient',
+        title: 'Medika', body: 'Vous avez confirmé la réception de votre commande. Merci de faire confiance à Medika.',
+        url: '/app/consultations',
+      });
+      const { rows } = await query('SELECT id FROM users WHERE role = $1', ['admin']);
+      for (const admin of rows) notifications.emit({
+        userId: admin.id, eventType: 'medication:delivery-delivered', idempotencyKey: key + ':admin:' + admin.id,
+        title: 'Medika', body: 'Un patient a confirmé la réception de sa livraison.',
+        url: '/admin/livraisons',
+      });
+    }
     res.json({ success: true, status: 'DELIVERED' });
   } catch (err) { next(err); }
 });
