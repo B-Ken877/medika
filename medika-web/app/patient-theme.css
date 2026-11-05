@@ -342,3 +342,50 @@
 
 /* Status/semantic colors, focus rings and reduced-motion behavior stay owned
    by globals.css / visual-polish.css — nothing redefined here. */
+
+/* ── Detached floating patient navigation island (issue #103) ─────────────
+   Keep the mobile navigation independent from the viewport edge. This
+   override is patient-only; doctor/admin navigation retains the shared bar. */
+.app-shell.patient-shell .bottom-nav {
+  position: fixed;
+  left: 50%;
+  right: auto;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+  transform: translateX(-50%);
+  width: min(440px, calc(100% - 32px));
+  height: 68px;
+  padding: 5px 8px;
+  border: 1px solid rgba(30, 91, 70, 0.12);
+  border-radius: 999px;
+  background: rgba(253, 255, 254, 0.94);
+  box-shadow:
+    0 12px 32px rgba(21, 65, 48, 0.13),
+    0 2px 8px rgba(21, 65, 48, 0.06);
+  overflow: visible;
+}
+
+.app-shell.patient-shell .bottom-nav a {
+  border-radius: 999px;
+  gap: 3px;
+  padding: 5px 2px;
+  min-height: 54px;
+  font-size: 10px;
+}
+
+.app-shell.patient-shell .bottom-nav a.active {
+  color: var(--green-700, var(--green-500));
+  background: rgba(218, 244, 230, 0.56);
+}
+
+.app-shell.patient-shell .bottom-nav a.active::after {
+  display: none;
+}
+
+.app-shell.patient-shell .app-main {
+  padding-bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom, 0px) + 64px);
+}
+
+@media (min-width: 900px) {
+  .app-shell.patient-shell .bottom-nav { display: none; }
+  .app-shell.patient-shell .app-main { padding-bottom: 48px; }
+}
