@@ -39,11 +39,28 @@ router.post('/medication-orders/:id/payment/create', authenticate, requireRole('
         payment, redirectUrl: '/payment/simulated?medicationOrderId=' + encodeURIComponent(req.params.id),
       });
     }
+    if (result.redirectUrl) {
+      return res.json({ success: true, simulated: false, status: payment.status, payment, redirectUrl: result.redirectUrl });
+    }
     if (!moncash.moncashConfigured()) {
       return res.status(503).json({ success: false, error: 'Le service MonCash est momentanément indisponible. Réessayez plus tard.' });
     }
-    const { redirectUrl } = await moncash.createPayment({ amount: payment.amount_htg, orderId: payment.reference });
-    return res.json({ success: true, simulated: false, status: payment.status, payment, redirectUrl });
+    const claimed = await paymentsRepo.claimProviderCreation(req.params.id, req.user.id);
+    if (!claimed) {
+      const current = await paymentsRepo.getIntentForPatient(req.params.id, req.user.id);
+      if (current && current.status === 'PENDING' && current.redirect_url) {
+        return res.json({ success: true, simulated: false, status: current.status, payment: current, redirectUrl: current.redirect_url });
+      }
+      return res.status(202).json({ success: false, status: 'PENDING', error: 'La création du paiement est déjà en cours. Réessayez dans quelques instants.' });
+    }
+    try {
+      const created = await moncash.createPayment({ amount: payment.amount_htg, orderId: payment.reference });
+      await paymentsRepo.saveRedirectUrl(req.params.id, req.user.id, created.redirectUrl);
+      return res.json({ success: true, simulated: false, status: payment.status, payment, redirectUrl: created.redirectUrl });
+    } catch (err) {
+      await paymentsRepo.releaseProviderCreation(req.params.id, req.user.id);
+      throw err;
+    }
   } catch (err) {
     if (String(err.message || '').startsWith('moncash_')) {
       return res.status(502).json({ success: false, error: 'Impossible de joindre MonCash pour le moment. Votre demande reste en attente; réessayez.' });
