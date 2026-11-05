@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS delivery_zones (
 -- The only initial configured service area is Port-au-Prince itself. No
 -- neighborhood/commune is silently enabled; admins must add exact zones.
 INSERT INTO delivery_zones (id, city, zone_name, active)
-VALUES ('ZONE_PAP', 'Port-au-Prince', 'Port-au-Prince', TRUE)
+VALUES ('ZONE_PAP', 'Port-au-Prince', 'Port-au-Prince', FALSE)
 ON CONFLICT (city, zone_name) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS medication_deliveries (
