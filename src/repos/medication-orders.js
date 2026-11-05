@@ -97,34 +97,41 @@ function normalizeZone(value) {
     .trim().replace(/\s+/g, ' ').toLocaleLowerCase('fr');
 }
 
-function configuredDeliveryZones() {
-  return String(process.env.MEDIKA_MEDICATION_DELIVERY_ZONES || '')
-    .split(',').map(normalizeZone).filter(Boolean);
-}
-
-function validateDeliveryRequest({ deliveryAddress, deliveryPhone, deliveryZone }) {
+/**
+ * Coverage is EXPLICIT and database-driven (issue #82 §7): the caller passes
+ * the ACTIVE delivery_zones rows for the patient-selected city; anything else
+ * fails closed. No env-var allowlist and no free-text matching can enable
+ * delivery.
+ */
+function validateDeliveryRequest({ deliveryAddress, deliveryPhone, deliveryZone, deliveryCity }, allowedZones = []) {
   const address = typeof deliveryAddress === 'string' ? deliveryAddress.trim() : '';
   const phoneInput = typeof deliveryPhone === 'string' ? deliveryPhone.trim() : '';
   const zone = typeof deliveryZone === 'string' ? deliveryZone.trim() : '';
+  const city = typeof deliveryCity === 'string' ? deliveryCity.trim() : '';
   if (!address || address.length < 8 || address.length > LIMITS.deliveryAddress) {
     return { outcome: 'INVALID_DELIVERY_DETAILS', error: 'Veuillez saisir une adresse de livraison complète (8 à 500 caractères).' };
   }
+  if (!city || city.length > 100) {
+    return { outcome: 'INVALID_DELIVERY_DETAILS', error: 'Veuillez sélectionner votre ville de livraison.' };
+  }
   if (!zone || zone.length > 80) {
-    return { outcome: 'INVALID_DELIVERY_DETAILS', error: 'Veuillez indiquer votre quartier ou zone de livraison (80 caractères maximum).' };
+    return { outcome: 'INVALID_DELIVERY_DETAILS', error: 'Veuillez sélectionner votre quartier ou zone de livraison (80 caractères maximum).' };
   }
   const phone = phoneInput.replace(/[\s().-]/g, '');
   if (!/^(?:\+?509)?\d{8}$/.test(phone)) {
     return { outcome: 'INVALID_DELIVERY_DETAILS', error: 'Veuillez saisir un numéro haïtien valide à 8 chiffres, avec ou sans indicatif +509.' };
   }
-  const zones = configuredDeliveryZones();
+  const zones = (Array.isArray(allowedZones) ? allowedZones : [])
+    .map((z) => String(z ?? '').trim()).filter(Boolean);
   if (zones.length === 0) {
-    return { outcome: 'SERVICE_UNAVAILABLE', error: 'La zone de livraison Medika n’est pas encore configurée. Vous pouvez télécharger votre ordonnance et acheter vos médicaments en pharmacie.' };
+    return { outcome: 'SERVICE_UNAVAILABLE', error: 'La livraison Medika n’est pas encore disponible dans cette ville. Vous pouvez télécharger votre ordonnance et acheter vos médicaments en pharmacie.' };
   }
-  if (!zones.includes(normalizeZone(zone))) {
+  const matched = zones.find((z) => normalizeZone(z) === normalizeZone(zone));
+  if (!matched) {
     return { outcome: 'OUT_OF_COVERAGE', error: 'La livraison Medika n’est pas encore disponible dans cette zone. Vous pouvez télécharger votre ordonnance et acheter vos médicaments en pharmacie.' };
   }
   const digits = phone.replace(/\D/g, '');
-  return { ok: true, address, phone: '+509' + digits.slice(-8), zone: clampText(zone, 80) };
+  return { ok: true, address: clampText(address, LIMITS.deliveryAddress), phone: '+509' + digits.slice(-8), zone: clampText(matched, 80), city: clampText(city, 100) };
 }
 
 /**
@@ -300,6 +307,7 @@ function orderRowToApi(row, { withSla = true } = {}) {
     delivery_address: row.delivery_address ?? '',
     delivery_phone: row.delivery_phone ?? '',
     delivery_zone: row.delivery_zone ?? '',
+    delivery_city: row.delivery_city ?? '',
     requested_at: toEpoch(row.requested_at),
   };
   if (withSla) {
@@ -343,7 +351,7 @@ async function insertEvent(client, { orderId, type, actor, details = {} }) {
  *   ALREADY_EXISTS         — an active order already exists for it (409)
  *   CREATED                — success; { order }
  */
-async function createOrder({ consultationId, patient, deliveryAddress, deliveryPhone, deliveryZone }) {
+async function createOrder({ consultationId, patient, deliveryAddress, deliveryPhone, deliveryZone, deliveryCity }) {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
       `SELECT * FROM consultations WHERE id = $1 FOR UPDATE`,
@@ -361,9 +369,19 @@ async function createOrder({ consultationId, patient, deliveryAddress, deliveryP
     const document = docs[0];
     if (!document) return { outcome: 'NO_PRESCRIPTION' };
 
-    // Validate contact details and exact allowlisted zone only after confirming
-    // consultation ownership and an issued prescription (no coverage oracle).
-    const delivery = validateDeliveryRequest({ deliveryAddress, deliveryPhone, deliveryZone });
+    // Validate contact details and the EXACT admin-activated zone record for
+    // the selected city, only after confirming consultation ownership and an
+    // issued prescription (no coverage oracle). Fail closed when the city has
+    // no active zone.
+    const city = typeof deliveryCity === 'string' ? deliveryCity.trim() : '';
+    const { rows: configuredZones } = await client.query(
+      'SELECT zone_name FROM delivery_zones WHERE active = TRUE AND city = $1',
+      [city]
+    );
+    const delivery = validateDeliveryRequest(
+      { deliveryAddress, deliveryPhone, deliveryZone, deliveryCity: city },
+      configuredZones.map((z) => z.zone_name)
+    );
     if (!delivery.ok) return delivery;
 
     // The partial unique index backstops this check against concurrent races.
@@ -381,8 +399,9 @@ async function createOrder({ consultationId, patient, deliveryAddress, deliveryP
       `INSERT INTO medication_orders
          (id, reference, prescription_document_id, consultation_id,
           patient_id, patient_name, prescription_reference,
-          status, requested_at, sla_deadline_at, delivery_address, delivery_phone, delivery_zone)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'REQUESTED',now(),now() + interval '${SLA_MINUTES} minutes',$8,$9,$10)
+          status, requested_at, sla_deadline_at,
+          delivery_address, delivery_phone, delivery_zone, delivery_city)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'REQUESTED',now(),now() + interval '${SLA_MINUTES} minutes',$8,$9,$10,$11)
        RETURNING *`,
       [
         orderId,
@@ -395,6 +414,7 @@ async function createOrder({ consultationId, patient, deliveryAddress, deliveryP
         delivery.address,
         delivery.phone,
         delivery.zone,
+        delivery.city,
       ]
     );
     const order = inserted[0];
@@ -988,7 +1008,6 @@ module.exports = {
   buildReference,
   normalizeWhatsapp,
   normalizeZone,
-  configuredDeliveryZones,
   validateDeliveryRequest,
   sanitizeQuoteLines,
   createOrder,

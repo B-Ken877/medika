@@ -15,15 +15,16 @@
  */
 'use strict';
 
-// The integration suite uses one explicitly configured test zone. Production
-// must set MEDIKA_MEDICATION_DELIVERY_ZONES to its approved exact allowlist.
-process.env.MEDIKA_MEDICATION_DELIVERY_ZONES = 'Port-au-Prince';
+// Coverage is DATABASE-driven (issue #82 §7): the order flow validates the
+// patient-selected city/zone against ACTIVE delivery_zones rows — the setup
+// below activates the exact test zone; no env allowlist exists anymore.
 
 process.env.REQUIRE_PAYMENT = 'false';
 process.env.MONCASH_CLIENT_ID = 'test-medika-client';
 process.env.MONCASH_CLIENT_SECRET = 'test-medika-secret';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { createRequire } from 'module';
 const h = await import('./helpers');
 
 let r, users, token = {};
@@ -86,6 +87,7 @@ async function createOrder(patient, consId, extra = {}) {
     .send({
       delivery_address: '12, rue Ka o, Port-au-Prince',
       delivery_phone: '+50937142536',
+      delivery_city: 'Port-au-Prince',
       delivery_zone: 'Port-au-Prince',
       ...extra,
     });
@@ -140,6 +142,13 @@ beforeAll(async () => {
   token.doctor2 = await h.loginToken(r, 't.doctor2');
   token.admin = await h.loginToken(r, 't.admin');
   db = await import('../src/db.js').then((m) => m.default ?? m);
+  // Activate the exact test coverage zone (issue #82 §7: DB-driven, admin-
+  // activated zones — the seeded Port-au-Prince zone ships inactive).
+  await db.query(
+    `INSERT INTO delivery_zones (id, city, zone_name, active)
+     VALUES ('ZONE_TEST_PAP', 'Port-au-Prince', 'Port-au-Prince', TRUE)
+     ON CONFLICT (city, zone_name) DO UPDATE SET active = TRUE`
+  );
 });
 
 afterAll(async () => {
@@ -707,21 +716,31 @@ describe('issue #83 — delivery coverage, contact validation, and free delivery
     expect(overlongZone.status).toBe(400);
   });
 
-  it('fails closed for an unconfigured zone list and rejects zones not explicitly allowlisted', async () => {
+  it('fails closed when the city has no active zone and rejects zones not explicitly activated', async () => {
     const { consId, patient } = await consultationWithPrescription();
-    const configured = process.env.MEDIKA_MEDICATION_DELIVERY_ZONES;
     try {
-      delete process.env.MEDIKA_MEDICATION_DELIVERY_ZONES;
+      // Deactivate every zone — unconfigured deployment must fail closed.
+      await db.query('UPDATE delivery_zones SET active = FALSE');
       const notConfigured = await createOrder(patient, consId);
       expect(notConfigured.status).toBe(503);
       expect(notConfigured.body.code).toBe('MEDIKA_DELIVERY_NOT_CONFIGURED');
 
-      process.env.MEDIKA_MEDICATION_DELIVERY_ZONES = 'Port-au-Prince';
+      // Re-activate Port-au-Prince only — an inactive/unknown zone is refused.
+      await db.query(
+        `UPDATE delivery_zones SET active = TRUE WHERE city = 'Port-au-Prince' AND zone_name = 'Port-au-Prince'`
+      );
       const unsupported = await createOrder(patient, consId, { delivery_zone: 'Delmas' });
       expect(unsupported.status).toBe(422);
       expect(unsupported.body.code).toBe('DELIVERY_ZONE_NOT_SUPPORTED');
+
+      // A city with no zone rows at all is equally refused (no coverage oracle).
+      const unknownCity = await createOrder(patient, consId, { delivery_city: 'Cap-Haïtien', delivery_zone: 'Centre-ville' });
+      expect(unknownCity.status).toBe(503);
+      expect(unknownCity.body.code).toBe('MEDIKA_DELIVERY_NOT_CONFIGURED');
     } finally {
-      process.env.MEDIKA_MEDICATION_DELIVERY_ZONES = configured;
+      await db.query(
+        `UPDATE delivery_zones SET active = TRUE WHERE city = 'Port-au-Prince' AND zone_name = 'Port-au-Prince'`
+      );
     }
   });
 
@@ -745,6 +764,10 @@ describe('issue #83 — delivery coverage, contact validation, and free delivery
 });
 
 
+// Mocking note: the app resolves `moncash` through Node's CJS require
+// cache. Patching the module obtained via `await import()` would create a
+// parallel vite-node instance and the routes would call the REAL provider.
+// Always grab mockable src modules with createRequire (same registry).
 describe('issue #84 — medication MonCash payments', () => {
   it('prices from the accepted quote, verifies MonCash server-side, and marks the order PAID', async () => {
     const { consId, patient } = await consultationWithPrescription();
@@ -759,7 +782,7 @@ describe('issue #84 — medication MonCash payments', () => {
       .set('Authorization', 'Bearer ' + patient.token);
     expect(accepted.status).toBe(200);
 
-    const moncash = await import('../src/moncash.js').then((m) => m.default ?? m);
+    const moncash = createRequire(import.meta.url)('../src/moncash.js'); // app instance (Node CJS cache) — see helper note below
     const createSpy = vi.spyOn(moncash, 'createPayment').mockResolvedValue({
       redirectUrl: 'https://moncash.example/checkout',
     });
@@ -806,7 +829,7 @@ describe('issue #84 — medication MonCash payments', () => {
       .send(quotePayload(pharmacy.id));
     await r.post('/api/medication-orders/' + created.body.id + '/accept')
       .set('Authorization', 'Bearer ' + patient.token);
-    const moncash = await import('../src/moncash.js').then((m) => m.default ?? m);
+    const moncash = createRequire(import.meta.url)('../src/moncash.js'); // app instance (Node CJS cache) — see helper note below
     vi.spyOn(moncash, 'createPayment').mockResolvedValue({ redirectUrl: 'https://moncash.example/checkout' });
     const other = await freshPatient();
     const response = await r.post('/api/medication-orders/' + created.body.id + '/payment/create')
@@ -826,7 +849,7 @@ describe('issue #84 — medication MonCash payments', () => {
     await r.post('/api/medication-orders/' + created.body.id + '/accept')
       .set('Authorization', 'Bearer ' + patient.token);
 
-    const moncash = await import('../src/moncash.js').then((m) => m.default ?? m);
+    const moncash = createRequire(import.meta.url)('../src/moncash.js'); // app instance (Node CJS cache) — see helper note below
     vi.spyOn(moncash, 'createPayment').mockResolvedValue({ redirectUrl: 'https://moncash.example/checkout' });
     const start = await r.post('/api/medication-orders/' + created.body.id + '/payment/create')
       .set('Authorization', 'Bearer ' + patient.token).send({});
@@ -863,7 +886,7 @@ it('reuses the same MonCash redirect for repeated create requests', async () => 
     .set('Authorization', 'Bearer ' + token.admin).send(quotePayload(pharmacy.id));
   await r.post('/api/medication-orders/' + created.body.id + '/accept')
     .set('Authorization', 'Bearer ' + patient.token);
-  const moncash = await import('../src/moncash.js').then((m) => m.default ?? m);
+  const moncash = createRequire(import.meta.url)('../src/moncash.js'); // app instance (Node CJS cache)
   const createSpy = vi.spyOn(moncash, 'createPayment').mockResolvedValue({
     redirectUrl: 'https://moncash.example/idempotent-checkout',
   });
@@ -886,7 +909,7 @@ it('holds a completed payment for manual review if the quote expires during chec
     .set('Authorization', 'Bearer ' + token.admin).send(quotePayload(pharmacy.id));
   await r.post('/api/medication-orders/' + created.body.id + '/accept')
     .set('Authorization', 'Bearer ' + patient.token);
-  const moncash = await import('../src/moncash.js').then((m) => m.default ?? m);
+  const moncash = createRequire(import.meta.url)('../src/moncash.js'); // app instance (Node CJS cache)
   vi.spyOn(moncash, 'createPayment').mockResolvedValue({ redirectUrl: 'https://moncash.example/review-checkout' });
   const start = await r.post('/api/medication-orders/' + created.body.id + '/payment/create')
     .set('Authorization', 'Bearer ' + patient.token).send({});
