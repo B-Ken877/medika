@@ -48,6 +48,7 @@ import { uploadConsultationAttachment } from "@/lib/api/endpoints";
 import { Avatar, ErrorAlert, Spinner } from "@/components/ui/primitives";
 import { PrescriptionModal } from "@/components/consultation/PrescriptionModal";
 import { PrescriptionPanel } from "@/components/consultation/PrescriptionPanel";
+import { MedicationOrderPanel } from "@/components/consultation/MedicationOrderPanel";
 import { SecureMedia } from "@/components/consultation/SecureMedia";
 import { ReceiptTick } from "@/components/consultation/ReceiptTick";
 import { AttachmentMenu } from "@/components/consultation/AttachmentMenu";
@@ -756,6 +757,9 @@ export default function ConsultationChatPage() {
   const refused = consultation.status === "REFUSE";
   const finished = consultation.status === "TERMINE";
   const expired = consultation.status === "EXPIRE";
+  // Issue #83: the medication-order flow (quote request/review) is offered to
+  // the PATIENT viewer only; doctors keep the clinical document view.
+  const isPatientViewer = user?.role !== "doctor" && user?.id === consultation.patient_id;
 
   const subtitle = canChat
     ? partnerTyping
@@ -1024,6 +1028,13 @@ export default function ConsultationChatPage() {
       {/* Prescription document (issue #82 — patient AND issuing doctor, when
           finished; the panel itself falls back to legacy free-text records). */}
       {finished && <PrescriptionPanel consultation={consultation} token={token} />}
+
+      {/* Medication order + pharmacy quote (issue #83 — PATIENT viewer only;
+          doctors keep the clinical document view without the ordering flow).
+          The panel hides itself for legacy free-text prescriptions. */}
+      {finished && isPatientViewer && (
+        <MedicationOrderPanel consultation={consultation} token={token} />
+      )}
 
       {/* Chat log */}
       <div className="chat-log" ref={logRef} role="log" aria-label="Mesaj konsiltasyon an" aria-live="polite">

@@ -40,6 +40,10 @@ const CATEGORY_FOR_EVENT = {
   'call:incoming': 'calls',
   'wallet:earnings': 'wallet',
   'payout:paid': 'wallet',
+  // Issue #83: medication-order quote ready for the patient's review. Grouped
+  // under the 'consultations' category (the DB CHECK in migration 007 has no
+  // 'orders' category; the deep link opens the consultation's document view).
+  'medication:quoted': 'consultations',
 };
 
 const CATEGORIES = ['consultations', 'messages', 'calls', 'wallet'];

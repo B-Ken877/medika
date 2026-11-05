@@ -295,6 +295,95 @@ export interface IssuePrescriptionRequest {
   general_instructions?: string;
 }
 
+// ─── Medication orders + pharmacy quotes (issue #83) ─────────────────────────
+// A patient can ask Medika to source the medications of an ISSUED
+// prescription. Medika ops contacts a partner pharmacy manually (WhatsApp)
+// and records the confirmed quote; the patient reviews and decides. The
+// clinical prescription is NEVER touched by this flow — prices live only in
+// the order/quote payload below, never in PrescriptionDocument.
+
+export type MedicationOrderStatus =
+  | "REQUESTED"
+  | "ESCALATED"
+  | "QUOTED"
+  | "ACCEPTED"
+  | "DECLINED"
+  | "CANCELLED"
+  | "EXPIRED";
+
+/** Item-level stock availability as confirmed by the pharmacy. */
+export type QuoteItemAvailability = "AVAILABLE" | "PARTIAL" | "UNAVAILABLE";
+
+/** One quoted line — always mapped 1:1 to a prescription item index (no
+ *  substitution is representable; UNAVAILABLE lines carry no prices). */
+export interface MedicationQuoteItem {
+  prescription_index: number;
+  name: string;
+  strength?: string | null;
+  form?: string | null;
+  dose?: string | null;
+  frequency?: string | null;
+  duration?: string | null;
+  quantity_prescribed?: string | null;
+  availability: QuoteItemAvailability | string;
+  offered_quantity?: string | null;
+  unit_price_htg?: number | null;
+  quantity?: number | null;
+  subtotal_htg?: number | null;
+}
+
+export interface MedicationQuote {
+  id: string;
+  order_id: string;
+  pharmacy: { id: string | null; name: string; whatsapp_number?: string };
+  items: MedicationQuoteItem[];
+  /** Integer gourdes — recomputed server-side, never client-supplied. */
+  total_htg: number;
+  delivery_fee_htg?: number | null;
+  delivery_notes?: string;
+  agent_name?: string;
+  confirmation_source?: string;
+  confirmed_at?: number | null;
+  expires_at: number | null;
+  notes?: string;
+  superseded_at?: number | null;
+  /** Server-derived: the quote validity has passed. */
+  expired?: boolean;
+}
+
+export interface MedicationOrder {
+  id: string;
+  reference: string;
+  consultation_id: string;
+  prescription_document_id: string;
+  prescription_reference?: string;
+  patient_id?: string | null;
+  patient_name?: string;
+  status: MedicationOrderStatus | string;
+  /** Server-provided French status label. */
+  status_label_fr?: string;
+  delivery_address?: string;
+  delivery_phone?: string;
+  requested_at?: number | null;
+  /** 30-minute operations SLA target (epoch seconds, from the request). */
+  sla_deadline_at?: number | null;
+  sla_state?: "PENDING" | "ESCALATED" | string;
+  quote?: MedicationQuote | null;
+  /** Server-derived next step — the client never guesses from raw status. */
+  next_step?:
+    | "WAITING_MEDIKA"
+    | "REVIEW_QUOTE"
+    | "PAYMENT"
+    | "QUOTE_EXPIRED"
+    | "CLOSED"
+    | string;
+}
+
+export interface CreateMedicationOrderRequest {
+  delivery_address?: string;
+  delivery_phone?: string;
+}
+
 export interface AllergyItem {
   name: string;
   severity: string;
