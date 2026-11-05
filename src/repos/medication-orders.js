@@ -59,7 +59,6 @@ const LIMITS = {
   offeredQuantity: 120,
   itemNotes: 500,
   quoteNotes: 1000,
-  deliveryNotes: 500,
   declineReason: 500,
   unreachableNotes: 500,
   pharmacyName: 120,
@@ -90,6 +89,41 @@ function toEpoch(ts) {
 function clampText(value, max) {
   const v = String(value ?? '').trim();
   return v.length > max ? v.slice(0, max) : v;
+}
+
+function normalizeZone(value) {
+  return String(value ?? '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
+    .trim().replace(/\\s+/g, ' ').toLocaleLowerCase('fr');
+}
+
+function configuredDeliveryZones() {
+  return String(process.env.MEDIKA_MEDICATION_DELIVERY_ZONES || '')
+    .split(',').map(normalizeZone).filter(Boolean);
+}
+
+function validateDeliveryRequest({ deliveryAddress, deliveryPhone, deliveryZone }) {
+  const address = typeof deliveryAddress === 'string' ? deliveryAddress.trim() : '';
+  const phoneInput = typeof deliveryPhone === 'string' ? deliveryPhone.trim() : '';
+  const zone = typeof deliveryZone === 'string' ? deliveryZone.trim() : '';
+  if (!address || address.length < 8 || address.length > LIMITS.deliveryAddress) {
+    return { outcome: 'INVALID_DELIVERY_DETAILS', error: 'Veuillez saisir une adresse de livraison complète (8 à 500 caractères).' };
+  }
+  if (!zone || zone.length > 80) {
+    return { outcome: 'INVALID_DELIVERY_DETAILS', error: 'Veuillez indiquer votre quartier ou zone de livraison (80 caractères maximum).' };
+  }
+  const phone = phoneInput.replace(/[\\s().-]/g, '');
+  if (!/^(?:\\+?509)?\\d{8}$/.test(phone)) {
+    return { outcome: 'INVALID_DELIVERY_DETAILS', error: 'Veuillez saisir un numéro haïtien valide à 8 chiffres, avec ou sans indicatif +509.' };
+  }
+  const zones = configuredDeliveryZones();
+  if (zones.length === 0) {
+    return { outcome: 'SERVICE_UNAVAILABLE', error: 'La zone de livraison Medika n’est pas encore configurée. Vous pouvez télécharger votre ordonnance et acheter vos médicaments en pharmacie.' };
+  }
+  if (!zones.includes(normalizeZone(zone))) {
+    return { outcome: 'OUT_OF_COVERAGE', error: 'La livraison Medika n’est pas encore disponible dans cette zone. Vous pouvez télécharger votre ordonnance et acheter vos médicaments en pharmacie.' };
+  }
+  const digits = phone.replace(/\\D/g, '');
+  return { ok: true, address, phone: '+509' + digits.slice(-8), zone: clampText(zone, 80) };
 }
 
 /**
@@ -230,8 +264,6 @@ function quoteRowToApi(row) {
     },
     items: row.items || [],
     total_htg: row.total_htg,
-    delivery_fee_htg: row.delivery_fee_htg ?? null,
-    delivery_notes: row.delivery_notes ?? '',
     agent_name: row.agent_name ?? '',
     confirmation_source: row.confirmation_source ?? 'WHATSAPP',
     confirmed_at: toEpoch(row.confirmed_at),
@@ -265,6 +297,7 @@ function orderRowToApi(row, { withSla = true } = {}) {
     status_label_fr: STATUS_LABELS_FR[row.status] ?? row.status,
     delivery_address: row.delivery_address ?? '',
     delivery_phone: row.delivery_phone ?? '',
+    delivery_zone: row.delivery_zone ?? '',
     requested_at: toEpoch(row.requested_at),
   };
   if (withSla) {
@@ -308,7 +341,9 @@ async function insertEvent(client, { orderId, type, actor, details = {} }) {
  *   ALREADY_EXISTS         — an active order already exists for it (409)
  *   CREATED                — success; { order }
  */
-async function createOrder({ consultationId, patient, deliveryAddress, deliveryPhone }) {
+async function createOrder({ consultationId, patient, deliveryAddress, deliveryPhone, deliveryZone }) {
+  const delivery = validateDeliveryRequest({ deliveryAddress, deliveryPhone, deliveryZone });
+  if (!delivery.ok) return delivery;
   return withTransaction(async (client) => {
     const { rows } = await client.query(
       `SELECT * FROM consultations WHERE id = $1 FOR UPDATE`,
@@ -341,8 +376,8 @@ async function createOrder({ consultationId, patient, deliveryAddress, deliveryP
       `INSERT INTO medication_orders
          (id, reference, prescription_document_id, consultation_id,
           patient_id, patient_name, prescription_reference,
-          status, requested_at, sla_deadline_at, delivery_address, delivery_phone)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'REQUESTED',now(),now() + interval '${SLA_MINUTES} minutes',$8,$9)
+          status, requested_at, sla_deadline_at, delivery_address, delivery_phone, delivery_zone)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'REQUESTED',now(),now() + interval '${SLA_MINUTES} minutes',$8,$9,$10)
        RETURNING *`,
       [
         orderId,
@@ -352,8 +387,9 @@ async function createOrder({ consultationId, patient, deliveryAddress, deliveryP
         patient.id,
         consultation.patient_name ?? patient.name ?? '',
         document.reference,
-        clampText(deliveryAddress, LIMITS.deliveryAddress),
-        clampText(deliveryPhone, LIMITS.deliveryPhone),
+        delivery.address,
+        delivery.phone,
+        delivery.zone,
       ]
     );
     const order = inserted[0];
@@ -736,14 +772,6 @@ async function recordQuote({ orderId, admin, payload }) {
       return { outcome: 'INVALID_PAYLOAD', error: `L’expiration du devis ne peut pas dépasser ${QUOTE_EXPIRY_MAX_DAYS} jours.` };
     }
 
-    let deliveryFee = null;
-    if (payload.delivery_fee_htg !== undefined && payload.delivery_fee_htg !== null && payload.delivery_fee_htg !== '') {
-      if (!Number.isInteger(payload.delivery_fee_htg) || payload.delivery_fee_htg < 0) {
-        return { outcome: 'INVALID_PAYLOAD', error: 'Les frais de livraison doivent être un entier positif (HTG).' };
-      }
-      deliveryFee = payload.delivery_fee_htg;
-    }
-
     const previous = await activeQuote(orderId, client);
     const quoteId = `PQ_${crypto.randomUUID()}`;
 
@@ -757,9 +785,9 @@ async function recordQuote({ orderId, admin, payload }) {
     await client.query(
       `INSERT INTO pharmacy_quotes
          (id, order_id, pharmacy_id, pharmacy_name, pharmacy_whatsapp,
-          items, total_htg, delivery_fee_htg, delivery_notes,
+          items, total_htg,
           agent_id, agent_name, confirmation_source, confirmed_at, expires_at, notes)
-       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12,now(),$13,$14)`,
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,now(),$12,$13)`,
       [
         quoteId,
         orderId,
@@ -768,8 +796,6 @@ async function recordQuote({ orderId, admin, payload }) {
         normalizeWhatsapp(pharmacy.whatsapp_number),
         JSON.stringify(sanitized.lines),
         sanitized.total,
-        deliveryFee,
-        clampText(payload.delivery_notes, LIMITS.deliveryNotes),
         admin.id,
         admin.name ?? '',
         clampText(payload.confirmation_source || 'WHATSAPP', 40),
@@ -808,8 +834,6 @@ async function recordQuote({ orderId, admin, payload }) {
         pharmacy_whatsapp: normalizeWhatsapp(pharmacy.whatsapp_number),
         items: sanitized.lines,
         total_htg: sanitized.total,
-        delivery_fee_htg: deliveryFee,
-        delivery_notes: clampText(payload.delivery_notes, LIMITS.deliveryNotes),
         agent_id: admin.id,
         agent_name: admin.name ?? '',
         confirmation_source: clampText(payload.confirmation_source || 'WHATSAPP', 40),
@@ -958,6 +982,9 @@ module.exports = {
   LIMITS,
   buildReference,
   normalizeWhatsapp,
+  normalizeZone,
+  configuredDeliveryZones,
+  validateDeliveryRequest,
   sanitizeQuoteLines,
   createOrder,
   persistDueTransitions,
