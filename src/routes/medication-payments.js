@@ -108,9 +108,18 @@ router.post('/medication-orders/:id/payment/verify', authenticate, requireRole('
     }
 
     if (!verified || verified.status !== 'completed') {
-      return res.json({
+      if (verified && verified.status === 'failed') {
+        await payments.markFailed(row.id, verified.raw || { status: 'failed' });
+        return res.status(200).json({
+          success: false,
+          payment: { status: 'FAILED', transactionId: null },
+          error: 'Le paiement a échoué. Vous pouvez réessayer avec une nouvelle référence.',
+        });
+      }
+      return res.status(202).json({
         success: false,
         payment: { status: verified?.status || 'pending', transactionId: null },
+        error: 'Le paiement est toujours en attente de confirmation.',
       });
     }
 
