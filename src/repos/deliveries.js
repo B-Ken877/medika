@@ -251,6 +251,18 @@ async function report({ from, to }) {
       WHERE id = 'DEFAULT'`
   );
   const budget = budgetRows[0] || null;
+  const localParts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Port-au-Prince', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  const localYear = localParts.find((p) => p.type === 'year').value;
+  const localMonth = localParts.find((p) => p.type === 'month').value;
+  const localDay = localParts.find((p) => p.type === 'day').value;
+  const { rows: budgetUsageRows } = await query(
+    `SELECT COALESCE(SUM(amount_htg),0)::int AS current_month_expense_htg
+       FROM medication_delivery_expenses
+      WHERE created_at >= ($1::date::timestamp AT TIME ZONE 'America/Port-au-Prince')
+        AND created_at < (($2::date + interval '1 day')::timestamp AT TIME ZONE 'America/Port-au-Prince')`,
+    [localYear + '-' + localMonth + '-01', localYear + '-' + localMonth + '-' + localDay]
+  );
+  const currentMonthExpense = budgetUsageRows[0]?.current_month_expense_htg || 0;
   const successful = row.delivered || 0;
   const rangeParams = [from, to];
   const { rows: weekly } = await query(
@@ -275,7 +287,8 @@ async function report({ from, to }) {
     ...row,
     cost_per_successful_delivery_htg: successful > 0 ? Math.round(row.expense_htg / successful) : null,
     budget,
-    budget_alert: Boolean(budget && row.expense_htg >= Math.round(budget.monthly_budget_htg * budget.alert_threshold_percent / 100)),
+    current_month_expense_htg: currentMonthExpense,
+    budget_alert: Boolean(budget && currentMonthExpense >= Math.round(budget.monthly_budget_htg * budget.alert_threshold_percent / 100)),
     weekly, monthly,
   };
 }
