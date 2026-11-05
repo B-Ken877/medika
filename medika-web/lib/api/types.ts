@@ -8,7 +8,7 @@
  * established that convention (e.g. CreateConsultationRequest).
  */
 
-export type Role = "patient" | "doctor" | "admin";
+export type Role = "patient" | "doctor" | "admin" | "delivery";
 
 export type ConsultationStatus =
   | "RECHERCHE_MEDECIN"
