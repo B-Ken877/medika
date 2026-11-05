@@ -15,6 +15,9 @@ import { readFileSync } from "node:fs";
 const webPolish = readFileSync("app/visual-polish.css", "utf8");
 const webGlobals = readFileSync("app/globals.css", "utf8");
 const adminGlobals = readFileSync("../medika-admin/app/globals.css", "utf8");
+// Issue #99: the patient-app mint theme is a THIRD stylesheet — governance
+// must cover it exactly like visual-polish.css.
+const patientTheme = readFileSync("app/patient-theme.css", "utf8");
 
 /** Every hex/rgba the legacy "warm lime + forest-green" palette ever used. */
 const LEGACY_VALUES = [
@@ -47,6 +50,45 @@ describe("visual-polish.css can never override the palette again", () => {
   it("keeps the functional auth toast rules it owns", () => {
     expect(webPolish).toContain(".auth-shell ~ .toast-stack");
     expect(webPolish).toContain("body.has-offline-toast .auth-form-pane");
+  });
+});
+
+describe("patient-theme.css obeys the same governance (issue #99)", () => {
+  it("declares no :root block — tokens are scoped to .app-shell only", () => {
+    expect(patientTheme).not.toMatch(/:root\s*\{/);
+    // Its custom properties are namespaced and scoped to the app shell.
+    expect(patientTheme).toMatch(/\.app-shell \{[^}]*--pt-/);
+  });
+
+  it("never redefines a global color token", () => {
+    for (const forbidden of [
+      "--green-50:", "--green-500:", "--green-600:", "--green-900:",
+      "--bg:", "--surface:", "--text-primary:", "--text-secondary:",
+      "--divider:", "--success:", "--auth-submit:", "--brand-deep:",
+    ]) {
+      expect(patientTheme).not.toContain(forbidden);
+    }
+  });
+
+  it("contains no legacy palette value anywhere", () => {
+    for (const legacy of LEGACY_VALUES) {
+      expect(patientTheme).not.toContain(legacy);
+    }
+  });
+
+  it("keeps every rule scoped under .app-shell (auth/admin pages untouched)", () => {
+    // Strip comments and block content; every top-level selector that opens a
+    // rule must reference the app shell (or a pseudo-element of it / its
+    // descendants). The hero classes ship only inside the app shell markup.
+    const withoutComments = patientTheme.replace(/\/\*[\s\S]*?\*\//g, "");
+    const selectors = withoutComments
+      .split("}")
+      .map((chunk) => chunk.split("{")[0].trim())
+      .filter((sel) => sel.length > 0 && !sel.startsWith("@"));
+    expect(selectors.length).toBeGreaterThan(0);
+    for (const selector of selectors) {
+      expect(selector).toMatch(/\.app-shell|\.home-hero|\.hero-art|\.hero-copy/);
+    }
   });
 });
 

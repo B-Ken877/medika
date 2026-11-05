@@ -90,18 +90,24 @@ export default function PatientDashboard() {
 
   return (
     <div className="stack">
-      {/* Page heading */}
-      <div className="page-head">
-        <div>
+      {/* Issue #99: Akèy hero — greeting + primary action + reserved
+          doctor-artwork slot. The slot is a neutral CSS placeholder sized to
+          accept a transparent PNG later without layout change; no image is
+          generated, uploaded or referenced. */}
+      <section className="home-hero" aria-label="Resime sante ou">
+        <div className="hero-copy">
           <h1 className="page-title">Bonjou, {user?.name?.split(" ")[0] ?? ""}</h1>
           <p className="page-desc">Men yon ti rezime sou swen sante ou.</p>
+          <div className="page-head-actions">
+            <Link href="/app/consult" className="btn btn-primary">
+              <Plus size={18} aria-hidden /> Kòmanse yon konsiltasyon
+            </Link>
+          </div>
         </div>
-        <div className="page-head-actions">
-          <Link href="/app/consult" className="btn btn-primary">
-            <Plus size={18} aria-hidden /> Kòmanse yon konsiltasyon
-          </Link>
+        <div className="hero-art" role="img" aria-label="Espas rezève pou ilistrasyon doktè Medika a">
+          <span className="hero-art-shape" aria-hidden />
         </div>
-      </div>
+      </section>
 
       {/* Summary metrics (real counts) */}
       <div className="stat-grid" role="group" aria-label="Rezime konsiltasyon yo">
