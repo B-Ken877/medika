@@ -787,7 +787,7 @@ async function recordQuote({ orderId, admin, payload }) {
          (id, order_id, pharmacy_id, pharmacy_name, pharmacy_whatsapp,
           items, total_htg,
           agent_id, agent_name, confirmation_source, confirmed_at, expires_at, notes)
-       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,now(),$12,$13)`,
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,now(),$11,$12)`,
       [
         quoteId,
         orderId,
