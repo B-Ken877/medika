@@ -339,8 +339,6 @@ export interface MedicationQuote {
   items: MedicationQuoteItem[];
   /** Integer gourdes — recomputed server-side, never client-supplied. */
   total_htg: number;
-  delivery_fee_htg?: number | null;
-  delivery_notes?: string;
   agent_name?: string;
   confirmation_source?: string;
   confirmed_at?: number | null;
@@ -364,6 +362,7 @@ export interface MedicationOrder {
   status_label_fr?: string;
   delivery_address?: string;
   delivery_phone?: string;
+  delivery_zone?: string;
   requested_at?: number | null;
   /** 30-minute operations SLA target (epoch seconds, from the request). */
   sla_deadline_at?: number | null;
@@ -380,8 +379,9 @@ export interface MedicationOrder {
 }
 
 export interface CreateMedicationOrderRequest {
-  delivery_address?: string;
-  delivery_phone?: string;
+  delivery_address: string;
+  delivery_phone: string;
+  delivery_zone: string;
 }
 
 export interface AllergyItem {
