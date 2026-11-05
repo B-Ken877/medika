@@ -894,6 +894,13 @@ function nextFridayIso() {
   return d.toISOString().slice(0, 10);
 }
 
+function nextMondayIso() {
+  const d = new Date();
+  const delta = ((1 - d.getDay() + 7) % 7) || 7;
+  d.setDate(d.getDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
 describe('issue #85 — Medika-owned delivery operations', () => {
   it('assigns only verified-paid orders and enforces Friday unless an admin records an urgent exception', async () => {
     const { orderId } = await paidMedicationOrderForDelivery();
@@ -903,13 +910,13 @@ describe('issue #85 — Medika-owned delivery operations', () => {
 
     const invalidDate = await r.post('/api/admin/deliveries/assign')
       .set('Authorization', 'Bearer ' + token.admin)
-      .send({ medication_order_id: orderId, employee_id: employee.id, zone_id: zone.rows[0].id, scheduled_for: '2026-11-09', urgent: false });
+      .send({ medication_order_id: orderId, employee_id: employee.id, zone_id: zone.rows[0].id, scheduled_for: nextMondayIso(), urgent: false });
     expect(invalidDate.status).toBe(400);
     expect(invalidDate.body.code).toBe('FRIDAY_ONLY');
 
     const urgent = await r.post('/api/admin/deliveries/assign')
       .set('Authorization', 'Bearer ' + token.admin)
-      .send({ medication_order_id: orderId, employee_id: employee.id, zone_id: zone.rows[0].id, scheduled_for: '2026-11-09', urgent: true, urgent_reason: 'Situation médicale nécessitant une livraison rapide.' });
+      .send({ medication_order_id: orderId, employee_id: employee.id, zone_id: zone.rows[0].id, scheduled_for: nextMondayIso(), urgent: true, urgent_reason: 'Situation médicale nécessitant une livraison rapide.' });
     expect(urgent.status).toBe(201);
     const employeeList = await r.get('/api/delivery/my').set('Authorization', 'Bearer ' + employee.token);
     expect(employeeList.status).toBe(200);
