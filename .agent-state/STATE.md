@@ -1,6 +1,32 @@
-Last updated: 2026-11-07T04:20:00Z (cron run — owner authorized merges via temp PAT; PR #111 merged)
+Last updated: 2026-11-07T05:15:00Z (owner chat: home blank-space fix — pushed straight to main, prod READY 8ec297d)
 
-## THIS RUN (owner chat: "Continue and also merge the pr, all of them related to medika" + temp PAT provided)
+## LATEST RUN (owner chat: "home page has a blank space on top... fix and deploy to prod, no PR")
+- Owner reported (screenshots 2026-11-06 15:45): mobile patient home showed a
+  large blank mint band between the header and the greeting; required comp =
+  artwork flush to top, compact hero.
+- ROOT CAUSE: .home-hero forced min-height clamp(280px,40vh,380px) while
+  artwork + copy were bottom-aligned (align-items:flex-end) -> ~110px empty
+  field above them on mobile.
+- FIX (8ec297d, patient-theme.css only): align-items center; min-height
+  dropped (hero = artwork stage height); .hero-art align-self flex-start
+  (top-anchored); desktop media min-height 320px dropped.
+- VERIFIED LOCALLY before push: one-shot pipeline scripts/run_visual.sh
+  (boot-pg :5433 -> seed-local -> server.js :3000 -> next dev :4100 ->
+  python playwright shot_home.py, login kenley/Passw0rd!, real data 3/0/1/2):
+  mobile 370x800 blank band GONE, proportions match owner screenshot;
+  desktop 1440x900 unchanged-good. vitest 568/568, tsc clean.
+  NOTE: sandbox kills background processes at tool-call boundaries -> EVERYTHING
+  (pg+backend+web+capture) must run inside ONE bash invocation.
+  NOTE: embedded-postgres pkg has exports-only (no main) -> boot-pg.js patched
+  to require .../embedded-postgres/dist/index.js directly.
+  NOTE: agent-browser cannot reach localhost services (isolated context) ->
+  use python playwright (installed, chromium-1200) instead.
+- PUSHED straight to main 8ec297d (owner authorized no-PR in chat).
+  Vercel PRODUCTION deploy of 8ec297d: SUCCESS/READY (commit-status API,
+  ~90s after push).
+- User shot_home.py/run_visual.sh live under /home/z/my-project/scripts/.
+
+## PREVIOUS RUN (owner chat: "merge the pr" + temp PAT)
 - Owner supplied a temp PAT in chat; stored at /home/z/my-project/.agent/gh_token
   (chmod 600, outside any repo; top-level .gitignore now excludes .agent/ and .env).
   OWNER WILL REVOKE IT WHEN THIS RUN ENDS.
