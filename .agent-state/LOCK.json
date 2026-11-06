@@ -1,9 +1,9 @@
 {
-  "run_id": "cron-issue109-visual-fix",
-  "started_at_utc": "2026-11-06T01:30:00Z",
-  "heartbeat_utc": "2026-11-06T02:50:00Z",
+  "run_id": "cron-merge-prs-owner-authorized",
+  "started_at_utc": "2026-11-07T04:10:00Z",
+  "heartbeat_utc": "2026-11-07T04:20:00Z",
   "active": false,
   "owner": "medika-autonomous-agent",
-  "issue": 109,
-  "note": "Lock released. #109 work committed LOCALLY on feat/issue-109-doctor-hero-artwork (17dd22d); push blocked (no gh_token after sandbox recycle). Next run with token: push + PR, then label IN REVIEW."
+  "issue": 111,
+  "note": "Lock released. PR #111 merged (squash ad541d8) with explicit owner chat authorization; main production deploy READY; #109 auto-closed. Temp PAT in use, owner revokes after run. Queue: only #106 (IN PROGRESS, owner) — skip."
 }
