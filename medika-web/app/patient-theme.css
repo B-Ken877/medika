@@ -232,9 +232,12 @@
 }
 
 /* Doctor-artwork stage — anchored to the screen's right edge (cropped there
-   in the reference), reserved aspect + radius so the transparent PNG drops
-   in later with no layout shift. Deliberately abstract placeholder: soft
-   translucent forms ONLY — no silhouette, avatar glyph or invented image. */
+   in the reference), fixed 4/5 aspect + radius so the artwork cannot shift
+   layout while loading. Issue #109: the stage now holds the generated
+   Medika doctor artwork; its PNG carries mint-matched feathered edges so
+   it melts into the wave field like the reference cut-out — no rectangular
+   image boundary. The stage gradient stays as the landing color for the
+   feathered rim. */
 .hero-art {
   position: relative;
   flex: 0 0 auto;
@@ -249,33 +252,17 @@
   overflow: hidden;
 }
 
-/* Abstract placeholder forms: two soft translucent organic shapes. */
-.hero-art .hero-art-shape {
-  position: relative;
+/* Generated artwork (issue #109) — fills the stage; the asset's intrinsic
+   4/5 ratio equals the stage ratio so object-fit: cover crops nothing and
+   the face keeps the reference's upper-third position. */
+.hero-art .hero-art-img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
+  object-fit: cover;
+  object-position: 50% 20%;
   display: block;
-}
-.hero-art .hero-art-shape::before {
-  content: "";
-  position: absolute;
-  left: -14%;
-  top: 20%;
-  width: 122%;
-  aspect-ratio: 1.35;
-  transform: rotate(-14deg);
-  border-radius: 50% 50% 46% 54% / 58% 44% 56% 42%;
-  background: radial-gradient(closest-side, rgba(166, 240, 201, 0.55), rgba(166, 240, 201, 0.18) 62%, transparent 76%);
-}
-.hero-art .hero-art-shape::after {
-  content: "";
-  position: absolute;
-  left: 6%;
-  right: -22%;
-  bottom: 10%;
-  height: 36%;
-  border-radius: 48% 52% 0 0 / 100% 100% 0 0;
-  background: radial-gradient(closest-side, rgba(20, 91, 80, 0.12), transparent 80%);
 }
 
 /* Full-width single-line primary action directly below the hero. */
