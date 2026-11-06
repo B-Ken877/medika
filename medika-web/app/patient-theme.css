@@ -175,14 +175,18 @@
 .home-hero {
   position: relative;
   display: flex;
-  align-items: flex-end;
+  /* Copy rides vertically centered against the artwork (reference: the
+     greeting starts about a quarter of the way down the stage); the hero is
+     exactly as tall as the artwork stage — no forced minimum band height, so
+     the mobile screen never shows an empty mint band between the header and
+     the greeting. */
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
   /* Bleed to the screen edges: the artwork stage anchors to the right edge
      exactly like the reference, while the copy keeps the page rhythm. */
   margin-inline: calc(-1 * var(--content-pad));
-  padding: 10px 0 0;
-  min-height: clamp(280px, 40vh, 380px);
+  padding: 0;
   border: none;
   border-radius: 0;
   background: none;
@@ -242,7 +246,9 @@
   position: relative;
   flex: 0 0 auto;
   width: min(46%, 232px);
-  align-self: flex-end;
+  /* Reference composition: the stage is flush with the TOP of the content
+     area (it kisses the header line), cropped at the screen's right edge. */
+  align-self: flex-start;
   aspect-ratio: 4 / 5;
   border: none;
   border-radius: 20px 0 0 0;
@@ -278,7 +284,6 @@
 }
 
 @media (min-width: 900px) {
-  .home-hero { min-height: 320px; }
   .hero-art { width: 300px; border-radius: 24px 0 0 0; }
 }
 
