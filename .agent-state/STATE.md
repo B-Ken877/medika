@@ -80,3 +80,27 @@ Last updated: 2026-11-07T05:15:00Z (owner chat: home blank-space fix — pushed 
    never merge, never push main.
 
 One issue at a time. Never merge without explicit owner authorization. Never push main without it.
+
+## Run 2026-11-09 (direct owner task, chat-authorized)
+- Owner reported production prescription failure ("Impossible de charger l'ordonnance",
+  "Erreur interne du serveur") with screenshot 2026-11-08. ROOT CAUSE: production DB never
+  received migrations 009-013 (prescription_documents, medication_orders, medication_payments,
+  delivery ops) — runner is manual-only, schema lagged the code. Consultation GET (001-008) worked,
+  hence partial UI.
+- FIX pushed straight to main per owner authorization ("fix and push to github and deploy",
+  "no need to open pr"): 20c19bf (cold-start auto-migration: src/auto-migrate.js advisory-locked +
+  idempotent + fail-open, AUTO_MIGRATE=0 opt-out; create-app.js request gate) then 639f9a3
+  (vercel.json includeFiles REVERTED — platform rejects that key under services.*.functions, deploy
+  hard-failed; SQL instead embedded in committed db/migrations-bundle.js via
+  scripts/bundle-migrations.js, drift-guarded by tests/migrations-bundle.test.js).
+- Tests: backend 538/538 (45 files, incl. 3 child-process cold-start tests + 2 bundle tests);
+  web 568/568 untouched. Vercel deploy of 639f9a3 = SUCCESS (GitHub commit status).
+- First prod cold start applies 009-013 and re-seeds specialties; Vercel logs show
+  "[auto-migrate] applied ...". AUTO_MIGRATE=0 opt-out exists.
+- DNS/infra finding for the owner (NOT fixed — no access): medikahaiti.site + www resolve to
+  167.86.124.101 (legacy VPS, now nginx+Odoo; /api/health 404), NOT Vercel. Android BASE_URL and
+  custom-domain bookmarks never reach the Vercel deployment; the default
+  medika-bkencompanyy-4380s-projects.vercel.app is behind Vercel SSO protection. Owner must attach
+  the domain to the Vercel project (A 76.76.21.21 / cname.vercel-dns.com) or use Vercel aliases.
+- Temp PAT stored at /home/z/my-project/.agent/gh_token (chmod 600); owner revokes after this run.
+  Next run: expect NO token; never push main without explicit chat authorization.
