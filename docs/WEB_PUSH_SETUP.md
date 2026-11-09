@@ -111,3 +111,25 @@ Unset `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` and redeploy: pushes stop, rows
 queue harmlessly, in-app notifications continue. Re-set and redeploy to turn
 back on. Rotating the keys does NOT require a redeploy (config is read per
 call) — but rotating invalidates existing subscriptions (users re-enable).
+
+## 7. First-login permission bootstrap (owner request, Nov 2026)
+
+On the first login of an account on a device, the app now asks for camera,
+microphone and push-notification permission automatically — fired from the
+login/register submit click (a genuine user gesture), with a one-tap fallback
+card inside the authenticated shell for browsers that swallow programmatic
+prompts (iOS Safari, Chrome quiet-UI). The per-account, per-device flag lives
+in localStorage (`medika_perm_bootstrap_<userId>`), so the app never nags
+twice for the same account on the same device.
+
+Practical consequences for this runbook:
+- Fresh users no longer need to visit the notification settings page to turn
+  push on: granting the login prompt subscribes the device immediately (the
+  subscription registration still needs the VAPID variables above — without
+  them `enablePush` reports `server-disabled` and the user is simply not
+  subscribed, exactly as before).
+- Users who previously granted notification permission in the browser but
+  never subscribed get wired up automatically on their next visit (quiet
+  re-enable, no new prompt).
+- The explicit settings page (`/app/settings/notifications`) remains the
+  manual enable/disable/retry path; the logout push revocation is unchanged.

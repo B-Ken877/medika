@@ -2614,6 +2614,33 @@ body.has-install-banner .app-main { padding-bottom: calc(var(--bottomnav-h) + 11
   body.has-install-banner .app-main { padding-bottom: 120px; }
 }
 
+/* ── First-login permission bootstrap card ──────────────────────────────── */
+
+/* Same fixed-slot treatment as the install banner: floats above the bottom
+   nav, one card, never covers the composer (hidden on chat/call routes). */
+.perm-bootstrap-card {
+  position: fixed;
+  bottom: calc(var(--bottomnav-h) + 12px);
+  left: 12px;
+  right: 12px;
+  z-index: 60;
+  background: var(--surface);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 480px;
+  margin: 0 auto;
+}
+@media (min-width: 900px) { .perm-bootstrap-card { bottom: 16px; } }
+body.has-perm-card .app-main { padding-bottom: calc(var(--bottomnav-h) + 110px); }
+@media (min-width: 900px) {
+  body.has-perm-card .app-main { padding-bottom: 120px; }
+}
+
 /* ── Utility ─────────────────────────────────────────────────────────────── */
 
 .flex { display: flex; }

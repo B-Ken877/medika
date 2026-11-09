@@ -16,6 +16,7 @@ import { useAuth } from "@/lib/auth/context";
 import { useSocket } from "@/lib/ws/socket-context";
 import { Avatar, Spinner } from "@/components/ui/primitives";
 import { UnreadProvider, useUnread } from "@/components/notifications/UnreadProvider";
+import { PermissionBootstrap } from "@/components/pwa/PermissionBootstrap";
 
 function navItems(role: "patient" | "doctor") {
   if (role === "doctor") {
@@ -106,6 +107,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <UnreadProvider>
       <AppShellInner>{children}</AppShellInner>
+      {/* First-login permission bootstrap: the one-tap safety net for the
+          camera/mic/push asks (lib/permissions.ts). Renders nothing once the
+          account+device flag is set, and never on chat/call screens. */}
+      <PermissionBootstrap />
     </UnreadProvider>
   );
 }
