@@ -22,6 +22,7 @@ const cors = require('cors');
 const { config, isProduction } = require('./config');
 const { errorHandler, notFoundHandler } = require('./errors');
 const { localStaticMiddleware } = require('./uploads');
+const { ensureMigrations, migrationsGate } = require('./auto-migrate');
 
 const authRoutes = require('./routes/auth');
 const profileRoutes = require('./routes/profile');
@@ -91,8 +92,18 @@ function uploadsRoute() {
 }
 
 function createApp() {
+  // Kick off (or join) the once-per-instance cold-start auto-migration and
+  // hold EVERY request until it settles — a freshly deployed function can
+  // never serve requests against a schema older than the code (the Nov 2026
+  // prescription-system outage: migrations 009–013 were never applied in
+  // production, so every prescription/medication-order endpoint 500'd).
+  // Fail-open: if migration application fails, the gate still opens and the
+  // API serves exactly as it did before this module existed, with a precise
+  // error in the logs. Set AUTO_MIGRATE=0 to opt out.
+  ensureMigrations();
   const app = express();
   app.disable('x-powered-by');
+  app.use(migrationsGate);
   app.use(corsMiddleware());
   app.use(express.json({ limit: '1mb' })); // legacy default was 100kb; 1mb is a safe superset
 

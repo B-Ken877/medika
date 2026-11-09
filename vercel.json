@@ -20,7 +20,8 @@
       "entrypoint": "server.js",
       "functions": {
         "server.js": {
-          "maxDuration": 300
+          "maxDuration": 300,
+          "includeFiles": ["db/migrations/**", "specialties.json"]
         }
       }
     }
