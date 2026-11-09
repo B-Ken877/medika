@@ -14,7 +14,9 @@ import {
   ArrowDown,
   ArrowLeft,
   ClipboardList,
+  FileText,
   Info,
+  MessagesSquare,
   MonitorPlay,
   NotebookPen,
   Phone,
@@ -98,6 +100,11 @@ export default function ConsultationChatPage() {
   const [uploadProgress, setUploadProgress] = useState<{ name: string; pct: number } | null>(null);
   const [showEmoji, setShowEmoji] = useState(false);
   const [showRx, setShowRx] = useState(false);
+  /** Finished-consultation view (owner request, Nov 2026): opening a finished
+   *  consultation lands on the PRESCRIPTION PAGE (ordonnance + medication
+   *  flow) — the chat history is one button away, not the default surface.
+   *  Active consultations always render the chat room as before. */
+  const [finishedView, setFinishedView] = useState<"docs" | "chat">("docs");
   /** Authoritative voice-composer mode — replaces the normal composer while
    *  recording / previewing / uploading a voice message. */
   const [voiceMode, setVoiceMode] = useState<VoiceMode>("idle");
@@ -1025,30 +1032,62 @@ export default function ConsultationChatPage() {
         </div>
       )}
 
-      {/* Chat log — the page's single scrollable region. The prescription
-          document (issue #82) and the medication-order / quote panel
-          (issue #83) are intentionally rendered as the FIRST children of
-          this scroll region: when the consultation is finished, the
-          patient/doctor scrolls the same chat-log surface to read both the
-          ordonnance and the messages. Putting them above the chat-log as
-          flex siblings clipped them under chat-mode's height:100dvh +
-          overflow:hidden shell (a patient could not scroll down to the
-          document). The chat-log's own overflow-y:auto is the only scroll
-          this layout needs. */}
-      <div className="chat-log" ref={logRef} role="log" aria-label="Mesaj konsiltasyon an" aria-live="polite">
-       <div className="chat-log-inner">
-        {/* Prescription document (issue #82 — patient AND issuing doctor,
-            when finished; the panel itself falls back to legacy free-text
-            records). */}
-        {finished && <PrescriptionPanel consultation={consultation} token={token} />}
+      {/* Finished consultation — prescription-first (owner request, Nov 2026):
+          opening a finished consultation lands on the ordonnance page; the
+          chat history is one toggle away. The toggle sits under the header so
+          it is always reachable, in both directions. */}
+      {finished && (
+        <div className="rx-view-toggle" role="tablist" aria-label="Chwazi sa w vle gade">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={finishedView === "docs"}
+            className={finishedView === "docs" ? "active" : ""}
+            onClick={() => setFinishedView("docs")}
+          >
+            <FileText size={15} aria-hidden /> Òrdònans lan
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={finishedView === "chat"}
+            className={finishedView === "chat" ? "active" : ""}
+            onClick={() => setFinishedView("chat")}
+          >
+            <MessagesSquare size={15} aria-hidden /> Istwa konvèsasyon an
+          </button>
+        </div>
+      )}
 
-        {/* Medication order + pharmacy quote (issue #83 — PATIENT viewer
-            only; doctors keep the clinical document view without the
-            ordering flow). The panel hides itself for legacy free-text
-            prescriptions. */}
-        {finished && isPatientViewer && (
-          <MedicationOrderPanel consultation={consultation} token={token} />
-        )}
+      {/* Prescription page — the DEFAULT surface of a finished consultation:
+          the ordonnance document (issue #82 — patient AND issuing doctor) and
+          the medication-order / quote panel (issue #83 — patient viewer only;
+          hides itself for legacy free-text prescriptions) render in their own
+          scroll region, visually separated from the chat. */}
+      {finished && finishedView === "docs" && (
+        <div className="chat-log rx-docs-view">
+          {finished && <PrescriptionPanel consultation={consultation} token={token} />}
+
+          {finished && isPatientViewer && (
+            <MedicationOrderPanel consultation={consultation} token={token} />
+          )}
+        </div>
+      )}
+
+      {/* Chat log — the live room's scroll region. For a finished consultation
+          it stays MOUNTED but hidden while the prescription page is shown: the
+          scroll controller keeps its element (callback ref + ResizeObserver),
+          and the moment the patient opens the chat history the observer fires
+          and re-pins a bottom-pinned user to the latest message. */}
+      <div
+        className="chat-log"
+        ref={logRef}
+        role="log"
+        aria-label="Mesaj konsiltasyon an"
+        aria-live="polite"
+        style={finished && finishedView === "docs" ? { display: "none" } : undefined}
+      >
+       <div className="chat-log-inner">
         {messages === null && <Spinner />}
         {messages !== null && (messages ?? []).length === 0 && pending.length === 0 && (
           <div className="empty-state">
@@ -1289,7 +1328,7 @@ export default function ConsultationChatPage() {
             </>
           )}
         </form>
-      ) : (
+      ) : finished && finishedView === "docs" ? null : (
         <div
           className="chat-composer"
           style={{ justifyContent: "center", color: "var(--text-secondary)", fontSize: "0.85rem" }}
