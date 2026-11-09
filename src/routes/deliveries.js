@@ -23,6 +23,7 @@ const { query } = require('../db');
 const { authenticate, requireRole } = require('../auth');
 const deliveries = require('../repos/deliveries');
 const notifications = require('../notifications/emit');
+const simulation = require('../medication-simulation');
 
 const router = express.Router();
 
@@ -95,6 +96,10 @@ router.post('/delivery/:id/events', authenticate, requireRole('delivery'), async
 
 router.get('/medication-orders/:id/delivery', authenticate, requireRole('patient'), async (req, res, next) => {
   try {
+    // Simulation: walk the custody chain one step forward on each patient
+    // visit (up to AWAITING_CONFIRMATION — never past it). Idempotent and
+    // fail-safe; a real (manual) delivery is never overridden.
+    await simulation.maybeSimulateDelivery(req.params.id);
     const tracking = await deliveries.trackingForPatient(req.params.id, req.user.id);
     if (!tracking) return res.status(404).json({ error: 'Suivi de livraison introuvable.' });
     res.json(tracking);

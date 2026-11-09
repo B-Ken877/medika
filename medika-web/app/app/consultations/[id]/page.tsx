@@ -1025,20 +1025,30 @@ export default function ConsultationChatPage() {
         </div>
       )}
 
-      {/* Prescription document (issue #82 — patient AND issuing doctor, when
-          finished; the panel itself falls back to legacy free-text records). */}
-      {finished && <PrescriptionPanel consultation={consultation} token={token} />}
-
-      {/* Medication order + pharmacy quote (issue #83 — PATIENT viewer only;
-          doctors keep the clinical document view without the ordering flow).
-          The panel hides itself for legacy free-text prescriptions. */}
-      {finished && isPatientViewer && (
-        <MedicationOrderPanel consultation={consultation} token={token} />
-      )}
-
-      {/* Chat log */}
+      {/* Chat log — the page's single scrollable region. The prescription
+          document (issue #82) and the medication-order / quote panel
+          (issue #83) are intentionally rendered as the FIRST children of
+          this scroll region: when the consultation is finished, the
+          patient/doctor scrolls the same chat-log surface to read both the
+          ordonnance and the messages. Putting them above the chat-log as
+          flex siblings clipped them under chat-mode's height:100dvh +
+          overflow:hidden shell (a patient could not scroll down to the
+          document). The chat-log's own overflow-y:auto is the only scroll
+          this layout needs. */}
       <div className="chat-log" ref={logRef} role="log" aria-label="Mesaj konsiltasyon an" aria-live="polite">
        <div className="chat-log-inner">
+        {/* Prescription document (issue #82 — patient AND issuing doctor,
+            when finished; the panel itself falls back to legacy free-text
+            records). */}
+        {finished && <PrescriptionPanel consultation={consultation} token={token} />}
+
+        {/* Medication order + pharmacy quote (issue #83 — PATIENT viewer
+            only; doctors keep the clinical document view without the
+            ordering flow). The panel hides itself for legacy free-text
+            prescriptions. */}
+        {finished && isPatientViewer && (
+          <MedicationOrderPanel consultation={consultation} token={token} />
+        )}
         {messages === null && <Spinner />}
         {messages !== null && (messages ?? []).length === 0 && pending.length === 0 && (
           <div className="empty-state">

@@ -381,3 +381,138 @@
   .app-shell.patient-shell .bottom-nav { display: none; }
   .app-shell.patient-shell .app-main { padding-bottom: 48px; }
 }
+
+/* ── 7. Nov 2026 homepage redesign — journey + split layout ────────────────
+   The home page now carries a 3-step journey (consult → price → deliver) so
+   a first-time visitor understands what Medika does beyond the consult, and
+   the active consultation + quick links sit side by side on desktop instead
+   of stacked under a long history list. All rules are scoped to the patient
+   shell so doctor/admin surfaces are untouched. */
+
+/* Hero eyebrow chip — a small uppercase tag above the greeting that names
+   the platform category (Telemedicine · Haiti). Quiet, not a button. */
+.app-shell .hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(207, 234, 219, 0.55);
+  color: var(--green-700);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid rgba(30, 91, 70, 0.12);
+}
+.app-shell .hero-eyebrow svg { color: var(--green-600); }
+
+/* CTA row: keep the primary full-width on mobile, allow two-up on desktop. */
+.app-shell .home-cta-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.app-shell .home-cta-row .btn { flex: 1 1 auto; }
+@media (min-width: 720px) {
+  .app-shell .home-cta-row .btn-primary { flex: 1 1 auto; }
+  .app-shell .home-cta-row .btn-ghost { flex: 0 0 auto; }
+}
+
+/* 3-step journey grid. Mobile: stacked cards; desktop: 3 across. */
+.app-shell .home-journey { margin-top: 8px; }
+.app-shell .journey-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+@media (min-width: 720px) {
+  .app-shell .journey-grid { grid-template-columns: repeat(3, 1fr); gap: 14px; }
+}
+.app-shell .journey-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--pt-card-border);
+  border-radius: 18px;
+  padding: 18px 18px 16px;
+  box-shadow: var(--pt-shadow-card);
+  overflow: hidden;
+}
+.app-shell .journey-card::before {
+  /* Subtle top accent — the same mint gradient family as the hero, never
+     a strong color block (keeps the calm institutional tone). */
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--green-500), var(--pt-mint-100, #d9f3e6));
+}
+.app-shell .journey-step-no {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--green-700);
+  letter-spacing: 0.08em;
+  opacity: 0.6;
+}
+.app-shell .journey-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--green-100, #d9f3e6);
+  color: var(--green-700);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.app-shell .journey-title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 6px;
+}
+.app-shell .journey-text {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* Stat-card accent variants. The base .stat-card styles from section 5b
+   remain; these add a colored top stripe + a faint matching tint so the
+   four tiles read as distinct categories at a glance. */
+.app-shell .stat-card.stat-gray::before,
+.app-shell .stat-card.stat-yellow::before,
+.app-shell .stat-card.stat-green::before,
+.app-shell .stat-card.stat-blue::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  border-radius: 18px 18px 0 0;
+}
+.app-shell .stat-card.stat-gray::before { background: #b8b8b8; }
+.app-shell .stat-card.stat-yellow::before { background: #e0a93a; }
+.app-shell .stat-card.stat-green::before { background: var(--green-500); }
+.app-shell .stat-card.stat-blue::before { background: #3b82f6; }
+
+/* Desktop two-column split: active consultation (left) + quick links (right).
+   On mobile collapses to a single stack (default block flow). */
+.app-shell .home-split {
+  display: block;
+}
+@media (min-width: 900px) {
+  .app-shell .home-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+  }
+  /* In the split, the quick-links grid drops to a single column so the
+     three links sit in a tidy vertical stack on the right. */
+  .app-shell .home-split .quick-links { grid-template-columns: 1fr !important; }
+}

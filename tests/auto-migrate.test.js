@@ -6,12 +6,12 @@
  * serverless cold start sees — and assert that the API self-migrates:
  *
  *   1. healing      — an empty database comes up with the full schema
- *                     (migrations 001–013), including every prescription /
+ *                     (migrations 001–014), including every prescription /
  *                     medication-order / delivery table, so the endpoints
  *                     that 500'd in production ("Impossible de charger
  *                     l'ordonnance", "Erreur interne du serveur") work.
  *   2. idempotency  — a second cold start on the same database applies
- *                     nothing, logs no failure, and leaves exactly 13 rows
+ *                     nothing, logs no failure, and leaves exactly 14 rows
  *                     in schema_migrations.
  *   3. opt-out      — AUTO_MIGRATE=0 leaves a fresh database untouched.
  *
@@ -134,7 +134,7 @@ const PROD_OUTAGE_TABLES = [
   'medication_deliveries',      // migration 013 — delivery tracking
 ];
 
-const EXPECTED_MIGRATIONS = Array.from({ length: 13 }, (_, i) => {
+const EXPECTED_MIGRATIONS = Array.from({ length: 14 }, (_, i) => {
   const n = String(i + 1).padStart(3, '0');
   return migrationFiles().find((f) => f.startsWith(`${n}_`));
 });
@@ -155,7 +155,7 @@ afterAll(async () => {
 });
 
 describe('auto-migrate: the API self-heals a fresh production database', () => {
-  it('a cold start on an EMPTY database applies every migration (001–013), including the prescription tables', async () => {
+  it('a cold start on an EMPTY database applies every migration (001–014), including the prescription tables', async () => {
     const dbUrl = await createFreshDatabase(`medika_auto_heal_${randomInt(100000)}`);
     const port = freePort();
     const server = bootServer({ databaseUrl: dbUrl, port });
@@ -174,7 +174,7 @@ describe('auto-migrate: the API self-heals a fresh production database', () => {
 
       // The logs name what was applied (Vercel log visibility for support).
       expect(server.stdout()).toMatch(/\[auto-migrate\] applied 009_prescription_documents\.sql/);
-      expect(server.stdout()).toMatch(/\[auto-migrate\] 13 migration\(s\) applied at cold start/);
+      expect(server.stdout()).toMatch(/\[auto-migrate\] 14 migration\(s\) applied at cold start/);
 
       // The failure path is gone: the exact endpoint that answered 500
       // "Erreur interne du serveur" in production now answers a proper,
