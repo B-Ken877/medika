@@ -31,6 +31,12 @@
  *  - Reference data: specialties are re-seeded idempotently (same upsert as
  *    scripts/migrate.js). The env-driven admin account is deliberately NOT
  *    auto-created here — admin provisioning stays a conscious, manual step.
+ *  - Bundling: the migration SQL ships inside db/migrations-bundle.js (an
+ *    auto-generated, statically-required module — require()'d files are
+ *    ALWAYS included in the Vercel function bundle; the platform rejects
+ *    services.*.functions.includeFiles). Regenerate it with
+ *    scripts/bundle-migrations.js after editing any migration; the drift is
+ *    caught by tests/migrations-bundle.test.js.
  *  - Nothing is ever logged except migration file names and error categories
  *    — never connection strings or credentials.
  */
@@ -39,20 +45,19 @@
 const fs = require('fs');
 const path = require('path');
 const { query, withTransaction } = require('./db');
+const MIGRATION_BUNDLE = require('../db/migrations-bundle.js');
 
-const MIGRATIONS_DIR = path.join(__dirname, '..', 'db', 'migrations');
 const SPECIALTIES_JSON = path.join(__dirname, '..', 'specialties.json');
 // Arbitrary fixed bigint advisory-lock key for Medika schema changes.
 const ADVISORY_LOCK_KEY = 813622010;
 
 let pending = null; // module-singleton: one auto-migration per function instance
 
-function migrationFiles() {
-  try {
-    return fs.readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql')).sort();
-  } catch {
-    return null; // dir not bundled (deployment packaging issue) — see caller
-  }
+/** Ordered [{ name, sql }] straight from the embedded bundle (no fs needed). */
+function migrationEntries() {
+  return Object.entries(MIGRATION_BUNDLE)
+    .map(([name, sql]) => ({ name, sql }))
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
 async function appliedSet(client) {
@@ -69,35 +74,34 @@ async function appliedSet(client) {
  * second cold start that lost the race skips the file cleanly.
  */
 async function applyPendingMigrations() {
-  const files = migrationFiles();
-  if (!files) {
-    console.error('[auto-migrate] db/migrations is not present in this bundle — cannot self-migrate. Run `npm run migrate` manually.');
-    return { applied: [], error: 'migrations-dir-missing' };
+  const entries = migrationEntries();
+  if (entries.length === 0) {
+    console.error('[auto-migrate] the migrations bundle is empty — cannot self-migrate. Run `npm run migrate` manually.');
+    return { applied: [], error: 'migrations-bundle-empty' };
   }
   const applied = await appliedSet({ query: (t, p) => query(t, p) });
-  const pendingFiles = files.filter((f) => !applied.has(f));
-  if (pendingFiles.length === 0) {
+  const pendingEntries = entries.filter(({ name }) => !applied.has(name));
+  if (pendingEntries.length === 0) {
     return { applied: [] };
   }
 
   const done = [];
-  for (const file of pendingFiles) {
-    const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
+  for (const { name, sql } of pendingEntries) {
     try {
       await withTransaction(async (client) => {
         await client.query(`SELECT pg_advisory_xact_lock($1)`, [ADVISORY_LOCK_KEY]);
         // Re-check under the lock: another instance may have applied it while
         // this one waited.
         const current = await appliedSet(client);
-        if (current.has(file)) return;
+        if (current.has(name)) return;
         await client.query(sql);
-        await client.query(`INSERT INTO schema_migrations (id) VALUES ($1)`, [file]);
-        done.push(file);
+        await client.query(`INSERT INTO schema_migrations (id) VALUES ($1)`, [name]);
+        done.push(name);
       });
-      if (done.includes(file)) console.log(`[auto-migrate] applied ${file}`);
+      if (done.includes(name)) console.log(`[auto-migrate] applied ${name}`);
     } catch (err) {
-      console.error(`[auto-migrate] FAILED ${file}:`, err.code || err.message);
-      return { applied: done, error: `${file}: ${err.code || err.message}` };
+      console.error(`[auto-migrate] FAILED ${name}:`, err.code || err.message);
+      return { applied: done, error: `${name}: ${err.code || err.message}` };
     }
   }
   return { applied: done };
@@ -171,7 +175,7 @@ function migrationsGate(req, res, next) {
   );
 }
 
-module.exports = { ensureMigrations, migrationsReady, migrationsGate, migrationFiles };
+module.exports = { ensureMigrations, migrationsReady, migrationsGate, migrationEntries };
 
 // Test-only helper (kept out of the public contract above).
 module.exports.__resetForTests = () => { pending = null; };
