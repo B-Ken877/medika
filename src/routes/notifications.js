@@ -118,6 +118,11 @@ router.delete('/notifications/subscriptions', authenticate, async (req, res, nex
 
 router.get('/notifications', authenticate, async (req, res, next) => {
   try {
+    // Opportunistic, throttled, non-fatal outbox drain: an authenticated
+    // read proves the app is being used, which is exactly when queued
+    // pushes should reach devices — even when no scheduler is configured.
+    // The response never waits on it.
+    dispatch.maybeDispatchOpportunistic().catch(() => undefined);
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 50);
     const before = req.query.before ? parseInt(req.query.before, 10) : null;
     const params = [req.user.id];
@@ -155,6 +160,10 @@ router.get('/notifications', authenticate, async (req, res, next) => {
  */
 router.get('/notifications/unread', authenticate, async (req, res, next) => {
   try {
+    // Same opportunistic drain as the history read (the header bell polls
+    // this endpoint every 60s while the app is open, giving the outbox a
+    // regular drain without any scheduler). Throttled per process.
+    dispatch.maybeDispatchOpportunistic().catch(() => undefined);
     const { rows } = await query(
       `SELECT count(*)::int AS n FROM notifications WHERE user_id = $1 AND read_at IS NULL`,
       [req.user.id]

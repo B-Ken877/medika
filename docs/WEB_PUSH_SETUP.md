@@ -69,9 +69,13 @@ repo settings:
 - The API project also needs `CRON_SECRET` set (Production) for the cron
   authorization to pass.
 
-Without a scheduler, pushes are only sent opportunistically (after emits);
-the workflow is the delivery-latency guarantee. Duplicate/overlapping runs
-are harmless (FOR UPDATE SKIP LOCKED + stable idempotency keys).
+Without a scheduler, pushes still drain opportunistically: every authenticated
+notification read (the header bell's unread poll, the history fetch) triggers a
+throttled dispatch, so any user opening Medika drains due rows for everyone.
+The workflow remains the background-latency guarantee for pushes that must
+arrive while nobody is using the app (device closed, app killed). Duplicate or
+overlapping runs are harmless (FOR UPDATE SKIP LOCKED + stable idempotency
+keys).
 
 ## 5. Verify (in order)
 
