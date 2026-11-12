@@ -69,9 +69,14 @@ repo settings:
 - The API project also needs `CRON_SECRET` set (Production) for the cron
   authorization to pass.
 
-Without a scheduler, pushes are only sent opportunistically (after emits);
-the workflow is the delivery-latency guarantee. Duplicate/overlapping runs
-are harmless (FOR UPDATE SKIP LOCKED + stable idempotency keys).
+Without a scheduler, pushes are only sent while a drain trigger happens to
+run: after a new push subscription is registered, AND on any authenticated
+notification read (bell poll / history load — throttled per process, drains
+due rows for EVERYONE). Duplicate/overlapping runs are harmless (FOR UPDATE
+SKIP LOCKED + stable idempotency keys). Configure CRON_SECRET anyway — it is
+the only delivery-latency guarantee for events emitted while nobody has the
+app open (typical for medication events, which land hours after the
+consultation).
 
 ## 5. Verify (in order)
 
@@ -107,3 +112,31 @@ Unset `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` and redeploy: pushes stop, rows
 queue harmlessly, in-app notifications continue. Re-set and redeploy to turn
 back on. Rotating the keys does NOT require a redeploy (config is read per
 call) — but rotating invalidates existing subscriptions (users re-enable).
+
+## 7. What changed in November 2026 (medication push + read-aware suppression)
+
+Two owner-requested fixes landed on top of this system:
+
+**Medication push coverage.** The full medication lifecycle now flows through
+the SAME dispatcher as consultation events — `medication:order-submitted`
+(order REQUESTED → ops admins), `medication:quoted` (→ patient),
+`medication:paid` and `medication:payment-review` (→ patient + admins),
+`medication:delivery-assigned` / `medication:delivery-update` (→ patient).
+All payloads are generic copy: no medication names, patient names or medical
+data ever leave the server. If medication pushes still do not arrive in
+production, check IN ORDER: (1) the recipient's device actually has a push
+subscription (`push_subscriptions`, `revoked_at IS NULL` — fresh patient
+devices get asked on first login by the permission bootstrap);
+(2) `VAPID_*` is configured (§2); (3) `CRON_SECRET` is set (§4) — without it
+delivery waits for SOMEONE to open the app.
+
+**Read-aware chat suppression.** A new message only suppresses the recipient's
+push when they are ACTIVELY VIEWING that exact conversation (per-connection
+`consultation:viewing` frame, membership-validated server-side) AND their
+read receipt (`POST /api/consultations/:id/read`) actually lands. Viewing
+alone arms a 30-second grace window on the queued row; a read receipt marks
+it `suppressed` (`read_in_conversation`), otherwise it dispatches normally —
+an unread message is never silently lost. Merely being online, browsing
+another page or viewing a different conversation still gets a push.
+Medication/payment/delivery/consultation lifecycle pushes are NEVER
+suppressed by connectivity or viewing state.

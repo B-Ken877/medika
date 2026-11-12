@@ -350,6 +350,25 @@ export default function ConsultationChatPage() {
     return () => document.removeEventListener("visibilitychange", markNow);
   }, [messages, token, consultationId, user]);
 
+  // ── Read-aware push suppression (owner request) ───────────────────────────
+  // Announce that THIS conversation is actively viewed so the server can
+  // arm its push-suppression grace window around new messages. The push is
+  // only suppressed when the mark-read above ALSO succeeds (server-side
+  // read receipt) — viewing alone never suppresses. Announced on mount, on
+  // every socket (re)connect, and refreshed periodically so the server-side
+  // cross-instance copy never goes stale while the page is open; cleared on
+  // unmount (a closed tab must not keep suppressing).
+  useEffect(() => {
+    if (!socket || !consultationId) return;
+    const announce = () => socket.sendViewing(consultationId);
+    announce();
+    const refresh = setInterval(announce, 60_000);
+    return () => {
+      clearInterval(refresh);
+      socket.sendViewing(null);
+    };
+  }, [socket, socketStatus, consultationId]);
+
   // ── Composer ──────────────────────────────────────────────────────────────
   const notifyTyping = useCallback((text: string) => {
     notifierRef.current?.notify(text);

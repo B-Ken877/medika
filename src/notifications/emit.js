@@ -40,6 +40,11 @@ const CATEGORY_FOR_EVENT = {
   'call:incoming': 'calls',
   'wallet:earnings': 'wallet',
   'payout:paid': 'wallet',
+  // Medication order REQUESTED (patient asked Medika to source a prescription):
+  // the actionable party is the ops/admin team, who must prepare a pharmacy
+  // quote. Grouped under 'consultations' like the other medication events
+  // (the DB CHECK in migration 007 has no 'orders' category).
+  'medication:order-submitted': 'consultations',
   // Issue #83: medication-order quote ready for the patient's review. Grouped
   // under the 'consultations' category (the DB CHECK in migration 007 has no
   // 'orders' category; the deep link opens the consultation's document view).
@@ -58,14 +63,23 @@ const CATEGORIES = ['consultations', 'messages', 'calls', 'wallet'];
 /**
  * Emit one notification. Idempotent per idempotencyKey: a second call with
  * the same key is a no-op (both the in-app row and the outbox row).
- * `push: false` (active-conversation suppression) still records the in-app
- * row but queues the outbox row as already-suppressed — used when the
- * recipient is CONNECTED and received the live WS delivery, so push is not
- * spammy for a user who is actively in the app (any connected device counts;
- * documented trade-off — they still get the live message + in-app unread).
- * Failures are logged by category only and swallowed.
+ * `push: false` records the in-app row but queues the outbox row as
+ * already-suppressed — used ONLY where a live channel provably replaces the
+ * push (incoming call rings app-wide while connected); chat messages never
+ * use it (see pushDelaySeconds below). Failures are logged by category only
+ * and swallowed.
+ *
+ * `pushDelaySeconds` (read-aware suppression, owner request): queues the
+ * outbox row as normal but defers its FIRST dispatch attempt — the row only
+ * becomes due after the grace window. Used for message:new rows emitted
+ * while the recipient is actively viewing the EXACT conversation: if their
+ * read receipt lands within the window, the read route marks the queued row
+ * suppressed (read_in_conversation) and no redundant push is sent; if the
+ * message remains unread, the row dispatches normally (unread messages are
+ * never silently lost). The dispatcher already claims only rows with
+ * next_attempt_at <= now(), so no dispatcher change is needed.
  */
-async function emit({ userId, eventType, idempotencyKey, title, body, url = null, push = true }) {
+async function emit({ userId, eventType, idempotencyKey, title, body, url = null, push = true, pushDelaySeconds = 0 }) {
   try {
     const category = CATEGORY_FOR_EVENT[eventType];
     if (!category || !userId || !idempotencyKey || !title || !body) return;
@@ -83,14 +97,27 @@ async function emit({ userId, eventType, idempotencyKey, title, body, url = null
     // Durable outbox (drained by the dispatcher; push policy applied there).
     // Active-conversation suppression is recorded as a terminal state so the
     // outbox stays a coherent mirror of the in-app history.
+    const delay = Number.isFinite(pushDelaySeconds) && pushDelaySeconds > 0
+      ? Math.min(Math.floor(pushDelaySeconds), 600)
+      : 0;
     if (push) {
-      await query(
-        `INSERT INTO notification_outbox
-           (user_id, category, event_type, idempotency_key, title, body, url)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)
-         ON CONFLICT (idempotency_key) DO NOTHING`,
-        [userId, category, eventType, idempotencyKey, title, body, url]
-      );
+      if (delay > 0) {
+        await query(
+          `INSERT INTO notification_outbox
+             (user_id, category, event_type, idempotency_key, title, body, url, next_attempt_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7, now() + make_interval(secs => $8))
+           ON CONFLICT (idempotency_key) DO NOTHING`,
+          [userId, category, eventType, idempotencyKey, title, body, url, delay]
+        );
+      } else {
+        await query(
+          `INSERT INTO notification_outbox
+             (user_id, category, event_type, idempotency_key, title, body, url)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)
+           ON CONFLICT (idempotency_key) DO NOTHING`,
+          [userId, category, eventType, idempotencyKey, title, body, url]
+        );
+      }
     } else {
       await query(
         `INSERT INTO notification_outbox
@@ -167,6 +194,14 @@ const COPY = {
     title: 'Medika',
     body: 'Ou gen yon apèl ki ap rantre sou Medika.',
     url: '/app/consultations',
+  },
+  // Admin ops: a patient asked Medika to source a prescription (order
+  // REQUESTED). Generic French copy — no medication name, no patient data;
+  // the deep link opens the ops panel after authentication.
+  medicationOrderSubmitted: {
+    title: 'Medika',
+    body: 'Une nouvelle demande de médicaments attend un devis. Ouvrez le panneau ops.',
+    url: '/admin/medicaments',
   },
   // Doctor: earnings became available.
   walletEarnings: {

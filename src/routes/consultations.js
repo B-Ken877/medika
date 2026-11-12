@@ -28,6 +28,7 @@ const prescriptionsRepo = require('../repos/prescriptions');
 const walletRepo = require('../repos/wallet');
 const lifecycle = require('../consultation-lifecycle');
 const notifications = require('../notifications/emit');
+const { query } = require('../db');
 const moncash = require('../moncash');
 const { config, simulationAllowed } = require('../config');
 const { authenticate, requireRole } = require('../auth');
@@ -474,30 +475,37 @@ router.post('/consultations/:id/messages', authenticate, async (req, res, next) 
       file_size: fileSize ?? null,
       client_msg_id: correlationId,
     });
+    // Read-aware suppression (owner request) — SAME contract as the WS path:
+    // the durable notification is enqueued (awaited; emit never throws) BEFORE
+    // any live delivery, so the recipient's read receipt can never race ahead
+    // of the outbox row it must suppress. "Actively viewing" is
+    // per-CONVERSATION (a live socket inside THIS consultation); generic WS
+    // connectivity is NOT proof of reading and never suppresses push by
+    // itself. Rows queued while the recipient views the exact conversation
+    // carry a grace window — suppressed by their read receipt, dispatched
+    // normally if the message remains unread (nothing is silently lost).
     const hub = req.app.locals.hub;
-    if (hub) {
-      const envelope = require('../realtime/hub').messageEnvelope(msg, { clientMsgId: correlationId || undefined });
-      hub.publishToUser(req.user.id, envelope);
-      const recipientId = c.patient_id === req.user.id ? c.doctor_id : c.patient_id;
-      if (recipientId) hub.publishToUser(recipientId, envelope);
-    }
-    // Issue #36: same durable-notification contract as the WS path — the
-    // recipient gets an in-app record + a queued push (suppressed when they
-    // are connected, i.e. the live WS delivery already reached them).
-    // Fire-and-forget: never blocks or breaks the REST send.
     const recipientId = c.patient_id === req.user.id ? c.doctor_id : c.patient_id;
     if (recipientId) {
-      const hub2 = req.app.locals.hub;
-      const recipientOnline = hub2 ? (hub2.sockets.get(recipientId)?.size ?? 0) > 0 : false;
-      notifications.emit({
+      const viewingExact = hub
+        ? hub.isUserViewingConsultation(recipientId, String(req.params.id))
+        : false;
+      const { MESSAGE_PUSH_GRACE_SECONDS } = require('../realtime/hub');
+      await notifications.emit({
         userId: recipientId,
         eventType: 'message:new',
         idempotencyKey: `message:${Number(msg.id)}`,
         title: notifications.COPY.messageNew.title,
         body: notifications.COPY.messageNew.body,
         url: `/app/consultations/${req.params.id}`,
-        push: !recipientOnline,
+        push: true,
+        pushDelaySeconds: viewingExact ? MESSAGE_PUSH_GRACE_SECONDS : 0,
       });
+      if (hub) {
+        const envelope = require('../realtime/hub').messageEnvelope(msg, { clientMsgId: correlationId || undefined });
+        hub.publishToUser(req.user.id, envelope);
+        hub.publishToUser(recipientId, envelope);
+      }
     }
     res.status(201).json(consultationsRepo.msgToApi(msg));
   } catch (err) { next(err); }
@@ -541,6 +549,29 @@ router.post('/consultations/:id/read', authenticate, async (req, res, next) => {
           readAt,
         });
       }
+      // Read-aware push suppression (owner request): the reader just proved
+      // they are in the conversation and received the messages — any STILL
+      // QUEUED push rows for exactly these messages (grace rows from the
+      // viewing path) are marked suppressed so no redundant push goes out.
+      // Delivered/processing rows are untouched (already sent to the push
+      // service — nothing to undo). The update is ownership-scoped: the
+      // notification rows suppressed here are the READER'S OWN
+      // (user_id = reader), which is exactly whose device would have buzzed.
+      // AWAITED and non-fatal: suppression is part of the read's persisted
+      // semantics, and the recipient's client may mark-read within moments
+      // of receiving the live message — the response must never report a
+      // read while a suppressible push row is still queued.
+      const keys = messageIds.map((id) => `message:${Number(id)}`);
+      await query(
+        `UPDATE notification_outbox
+            SET status = 'suppressed', last_error_code = 'read_in_conversation',
+                attempts = attempts + 1, updated_at = now()
+          WHERE user_id = $1 AND idempotency_key = ANY($2::text[])
+            AND status IN ('queued', 'retryable')`,
+        [req.user.id, keys]
+      ).catch((err) => {
+        console.error('[consultations] read-suppression failed:', err.code || err.constructor?.name);
+      });
     }
     res.json({ consultationId: req.params.id, readerId: req.user.id, messageIds, readAt });
   } catch (err) { next(err); }

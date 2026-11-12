@@ -2614,6 +2614,55 @@ body.has-install-banner .app-main { padding-bottom: calc(var(--bottomnav-h) + 11
   body.has-install-banner .app-main { padding-bottom: 120px; }
 }
 
+/* ── First-login permission bootstrap card ──────────────────────────────── */
+
+/* Same fixed-slot treatment as the install banner: floats above the bottom
+   nav, one card, never covers the composer (hidden on chat/call routes). */
+.perm-bootstrap-card {
+  position: fixed;
+  bottom: calc(var(--bottomnav-h) + 12px);
+  left: 12px;
+  right: 12px;
+  z-index: 60;
+  background: var(--surface);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 480px;
+  margin: 0 auto;
+}
+@media (min-width: 900px) { .perm-bootstrap-card { bottom: 16px; } }
+body.has-perm-card .app-main { padding-bottom: calc(var(--bottomnav-h) + 110px); }
+@media (min-width: 900px) {
+  body.has-perm-card .app-main { padding-bottom: 120px; }
+}
+
+.perm-card-icon {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--green-50, #eef7f2);
+  color: var(--green-600);
+}
+.perm-card-copy { flex: 1 1 auto; min-width: 0; }
+.perm-card-title { margin: 0 0 2px; font-weight: 600; font-size: 14px; color: var(--text-primary); }
+.perm-card-body { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-secondary); }
+.perm-card-actions { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; }
+.perm-card-actions .btn { padding: 6px 12px; font-size: 13px; white-space: nowrap; }
+@media (max-width: 480px) {
+  .perm-bootstrap-card { flex-direction: column; align-items: stretch; }
+  .perm-card-actions { flex-direction: row; }
+  .perm-card-actions .btn { flex: 1; }
+}
+
 /* ── Utility ─────────────────────────────────────────────────────────────── */
 
 .flex { display: flex; }
