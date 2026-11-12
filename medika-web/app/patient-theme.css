@@ -80,14 +80,15 @@
     radial-gradient(40rem 28rem at -10% 96%, rgba(233, 246, 239, 0.6) 0 99%, transparent 100%);
 }
 
-/* Owner request: the four main destinations (Akèy, Doktè yo, Konsiltasyon
-   list, Pwofil) back their content with the uploaded mint medical-wave
-   artwork instead of the gradient field. The fixed ::after layer keeps its
+/* Owner request: each role's main destinations back their content with the
+   uploaded mint medical-wave artwork instead of the gradient field —
+   patient: Akèy / Doktè yo / Konsiltasyon list / Pwofil; doctor: Akèy /
+   Demann / Revni / Alèt / Pwofil. The fixed ::after layer keeps its
    geometry (inset 0, z-index -1, pointer-events none) and only swaps its
    paint for the image; cover crops per-viewport from the 941×1672 portrait
    master (35 KB webp). AppShell adds .pages-wallpaper on exact routes only,
    so detail pages and the chat room keep their own treatments. */
-.app-shell.patient-shell.pages-wallpaper::after {
+.app-shell.pages-wallpaper::after {
   background: url("/pages-wallpaper-mint.webp") center / cover no-repeat;
 }
 

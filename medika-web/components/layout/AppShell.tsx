@@ -144,15 +144,21 @@ function AppShellInner({ children }: { children: ReactNode }) {
   const onCallPage = pathname?.startsWith("/app/consultations/") && pathname.endsWith("/call");
   const isConsultationChat =
     /^\/app\/consultations\/[^/]+$/.test(pathname ?? "");
-  // Owner request: the four main destinations (Akèy, Doktè yo, Konsiltasyon
-  // list, Pwofil) carry the uploaded mint medical-wave artwork behind their
-  // content. Exact matches only — detail routes (doctor, chat room, settings)
-  // keep their own treatments; the CSS override is patient-shell scoped.
+  // Owner request: the mint medical-wave artwork backs each role's main
+  // destinations — patient: Akèy / Doktè yo / Konsiltasyon list / Pwofil;
+  // doctor: Akèy / Demann / Revni / Alèt / Pwofil. Exact matches only —
+  // detail routes (doctor page, chat room, settings) keep their treatments.
   const pagesWallpaper =
-    pathname === "/app" ||
-    pathname === "/app/doctors" ||
-    pathname === "/app/consultations" ||
-    pathname === "/app/profile";
+    user.role === "doctor"
+      ? pathname === "/app" ||
+        pathname === "/app/consultations" ||
+        pathname === "/app/wallet" ||
+        pathname === "/app/notifications" ||
+        pathname === "/app/profile"
+      : pathname === "/app" ||
+        pathname === "/app/doctors" ||
+        pathname === "/app/consultations" ||
+        pathname === "/app/profile";
 
   /**
    * Shared navigation link renderer — issue #71. Both navigation surfaces
