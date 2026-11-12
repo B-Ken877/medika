@@ -1,82 +1,78 @@
 /**
- * First-login permission bootstrap (owner request: "whenever someone first
- * logs into their account it must automatically ask for video, mic and push
- * permission").
+ * First-login permission bootstrap (owner request, Nov 2026).
  *
- * Why this exists: without it a fresh device never gets asked anything —
- * camera/mic only surface when joining a call, and push only from the
- * notification settings page — so pushes silently never arrive (no
- * subscription) and first calls stumble on a permission wall mid-consult.
+ * Owner requirement: "whenever someone first logs into their account it must
+ * automatically ask for video, mic and push permission."
+ *
+ * Why this module exists: before it, a fresh device never got asked anything —
+ * camera/mic only surfaced when joining a call, and push only from the
+ * notification settings page — so pushes silently never arrived (no
+ * subscription) and first calls stumbled on a permission wall mid-consult.
  *
  * Browser-reality design notes (these constraints shaped the flow):
- *  - the login/register submit click IS a user gesture, so the PRIMARY ask
- *    is fired from the login/register success handlers while transient user
+ *  - the login/register submit click IS a user gesture, so the PRIMARY ask is
+ *    fired from the login/register success handlers while transient user
  *    activation is still alive;
  *  - some browsers still swallow programmatic requests (iOS Safari requires
- *    the call inside the gesture task; Chrome quiet-UI may defer), so the
- *    authenticated shell renders a ONE-TAP fallback card
- *    (components/pwa/PermissionBootstrap.tsx) whose tap is itself a user
- *    gesture and re-fires the same asks;
- *  - BOTH asks (camera+mic, notifications) are started in the SAME
- *    synchronous task — they must ride one transient activation;
- *  - every path is fire-and-forget and NEVER throws: permissions can delay
- *    nothing and break nothing in the login/redirect flow;
- *  - a per-account, per-device localStorage flag
- *    (`medika_perm_bootstrap_<userId>`) makes the flow FIRST-LOGIN-ONLY:
- *    denied permissions are respected and never re-prompted for the same
- *    account on the same device. A different account or device gets its own
- *    ask. Storage failures count as "already done" (never nag).
- *  - push subscription: when notifications end up granted and a session
- *    token exists, enablePush() runs immediately — permission was just
- *    granted through an explicit user-initiated flow, and subscribing right
- *    there is what makes push actually work on fresh devices (the missing
- *    piece behind "push notifications do not work").
+ *    the call inside the gesture task; Chrome quiet-UI can suppress them),
+ *    so the authenticated shell renders a ONE-TAP fallback card exactly
+ *    once — <PermissionBootstrap /> — when permission is still undecided and
+ *    this device never completed the bootstrap for this user;
+ *  - "first login" is tracked per DEVICE+account in localStorage (permissions
+ *    themselves are per-browser, and sessionStorage is wiped on tab close,
+ *    so localStorage is the right scope): once the bootstrap ran for an
+ *    account on a device it never nags again;
+ *  - everything here is fire-and-forget and never throws: a blocked or
+ *    denied permission NEVER blocks navigation, the session, or the shell.
+ *
+ * Note on lib/push.ts's "explicit user action only" rule: that rule governs
+ * ITS callers. The two callers added here are the login/register click and
+ * the one-tap card — both genuine user actions. The quiet re-enable inside
+ * <PermissionBootstrap /> only runs when notification permission is ALREADY
+ * granted (no prompt, no new browser ask) and merely wires the existing
+ * grant to the server so pushes actually deliver.
  */
-
 import { enablePush } from "@/lib/push";
 import { readSession } from "@/lib/auth/session";
 
-const FLAG_PREFIX = "medika_perm_bootstrap_";
+export type PermissionOutcome = "granted" | "denied" | "unsupported";
 
-export type CameraMicDecision = "granted" | "denied" | "unsupported" | "unavailable";
-
-export type StartupPermissionResult = {
-  cameraMic: CameraMicDecision;
-  notifications: "granted" | "denied" | "unsupported" | "unavailable";
+export interface PermissionBootstrapResult {
+  cameraMic: PermissionOutcome;
+  notifications: PermissionOutcome;
   push: "subscribed" | "not-subscribed";
-};
-
-function flagKey(userId: string): string {
-  return `${FLAG_PREFIX}${userId}`;
 }
 
-/** True when this account already completed (or was offered) the bootstrap
- *  on this device. A THROWING/unavailable storage counts as done: the
- *  fallback card must never nag in an environment where it cannot remember. */
+/** localStorage flag namespace — one entry per account per device. */
+const DONE_KEY_PREFIX = "medika_perm_bootstrap_";
+
+/** True once the first-login bootstrap ran for THIS account on THIS device. */
 export function hasPermissionBootstrapRun(userId: string): boolean {
+  if (typeof window === "undefined") return true; // SSR: behave as done (never render the card)
   try {
-    if (typeof window === "undefined") return true;
-    return window.localStorage.getItem(flagKey(userId)) !== null;
+    return window.localStorage.getItem(DONE_KEY_PREFIX + userId) === "1";
   } catch {
-    return true;
+    return true; // storage blocked (private mode): never nag
   }
 }
 
-/** Mark the bootstrap as done for this account+device. Never throws. */
+/** Mark the bootstrap as ran for THIS account on THIS device. Never throws. */
 export function markPermissionBootstrapRun(userId: string): void {
+  if (typeof window === "undefined") return;
   try {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(flagKey(userId), String(Date.now()));
+    window.localStorage.setItem(DONE_KEY_PREFIX + userId, "1");
   } catch {
-    // Storage unavailable/disabled: nothing to remember — the flow stays
-    // non-nagging because hasPermissionBootstrapRun() treats this as done.
+    // ignore — a blocked flag means the fallback card may show again, which
+    // is strictly better than a session that can never enable push.
   }
 }
 
-/** Ask for camera + microphone in ONE combined prompt (browsers coalesce
- *  them). Tracks are stopped immediately — this asks for permission, it
- *  does not open a stream. Never throws. */
-async function askCameraMic(): Promise<CameraMicDecision> {
+/**
+ * Ask for camera + microphone (ONE prompt in most browsers — Chrome groups
+ * them). On success the tracks are stopped immediately: the goal is the
+ * permission grant, not holding the camera open.
+ */
+async function askCameraMic(): Promise<PermissionOutcome> {
   try {
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
       return "unsupported";
@@ -86,55 +82,63 @@ async function askCameraMic(): Promise<CameraMicDecision> {
     return "granted";
   } catch (err) {
     const name = (err as DOMException | undefined)?.name;
-    if (name === "NotFoundError" || name === "OverconstrainedError") return "unsupported";
-    if (name === "NotAllowedError" || name === "SecurityError") return "denied";
-    return "unavailable";
-  }
-}
-
-/** Ask for notification permission (a no-op resolution when the browser
- *  already decided). Never throws. */
-async function askNotifications(): Promise<StartupPermissionResult["notifications"]> {
-  try {
-    if (typeof Notification === "undefined") return "unsupported";
-    const current = Notification.permission;
-    if (current === "granted" || current === "denied") return current;
-    const result = await Notification.requestPermission();
-    if (result === "granted" || result === "denied") return result;
-    return "unavailable";
-  } catch {
-    return "unavailable";
+    if (name === "NotFoundError" || name === "OverconstrainedError" || name === "NotReadableError") {
+      // No usable camera/mic on this device (or busy) — not a denial.
+      return "unsupported";
+    }
+    return "denied"; // NotAllowedError, SecurityError, anything else
   }
 }
 
 /**
- * Run BOTH asks + the push subscription. Called from the login/register
- * submit handlers (primary, gesture-bound) and from the shell fallback
- * card (one-tap). Only undecided permissions actually prompt; already-
- * granted ones resolve silently, so double-invocation is harmless.
+ * Ask for notification permission. When permission was already decided, the
+ * browser resolves without showing any UI (so re-running is safe).
+ */
+async function askNotifications(): Promise<PermissionOutcome> {
+  try {
+    if (typeof window === "undefined" || typeof Notification === "undefined") {
+      return "unsupported";
+    }
+    if (Notification.permission === "default") {
+      return (await Notification.requestPermission()) === "granted" ? "granted" : "denied";
+    }
+    return Notification.permission === "granted" ? "granted" : "denied";
+  } catch {
+    // Some browsers throw when requestPermission is called outside a user
+    // gesture — that is a swallowed prompt, not a device limitation, but the
+    // one-tap fallback card covers it either way.
+    return "denied";
+  }
+}
+
+/**
+ * Fire the asks. BOTH are started in the same synchronous task (before the
+ * first await completes) so they ride the SAME transient user activation —
+ * some browsers consume it on the first request, and a notification prompt
+ * fired after that gap would be silently dropped.
+ *
+ * When notifications come back granted, the device is immediately subscribed
+ * to web push via enablePush() (VAPID discovery, subscribe, server
+ * registration inside). Server-side push problems surface through
+ * enablePush's honest states and are never rethrown here.
  */
 export async function requestStartupPermissions(
   userId: string,
   token: string | null,
-): Promise<StartupPermissionResult> {
-  // Same synchronous task: both asks must ride ONE transient user
-  // activation (an await between them can let it expire).
+): Promise<PermissionBootstrapResult> {
   const cameraMicPromise = askCameraMic();
   const notificationsPromise = askNotifications();
 
-  const [cameraMic, notifications] = await Promise.all([cameraMicPromise, notificationsPromise]);
+  const cameraMic = await cameraMicPromise;
+  const notifications = await notificationsPromise;
 
-  let push: StartupPermissionResult["push"] = "not-subscribed";
+  let push: PermissionBootstrapResult["push"] = "not-subscribed";
   if (notifications === "granted" && token) {
-    // Notification permission was just granted through this explicit,
-    // user-initiated flow — subscribe the device right away (best-effort;
-    // a missing VAPID config or network problem reports through the
-    // notification settings UI and never blocks the login flow).
     try {
       const state = await enablePush(token);
       push = state.enabled ? "subscribed" : "not-subscribed";
     } catch {
-      push = "not-subscribed";
+      push = "not-subscribed"; // best-effort; the settings page can retry
     }
   }
 
@@ -142,21 +146,18 @@ export async function requestStartupPermissions(
 }
 
 /**
- * Login/register entry point: reads the just-written session and runs the
- * bootstrap for the freshly authenticated account. Fire-and-forget by
- * contract — callers `void` it and never await it.
+ * The one-liner the login/register pages call right after a successful auth
+ * response (still inside the submit click's activation window). Reads the
+ * freshly written session for the token + user id; never throws.
  */
-export async function requestStartupPermissionsAfterLogin(): Promise<StartupPermissionResult | null> {
+export async function requestStartupPermissionsAfterLogin(): Promise<void> {
   try {
-    if (typeof window === "undefined") return null;
     const session = readSession();
-    const user = (session?.user ?? null) as { id?: string } | null;
-    if (!session || !user?.id) return null;
-    if (hasPermissionBootstrapRun(user.id)) return null;
-    const result = await requestStartupPermissions(user.id, session.token);
-    markPermissionBootstrapRun(user.id);
-    return result;
+    if (!session?.token) return;
+    const user = session.user as { id?: string } | null;
+    if (!user?.id) return;
+    await requestStartupPermissions(user.id, session.token);
   } catch {
-    return null;
+    // Never surface anything from a best-effort bootstrap.
   }
 }

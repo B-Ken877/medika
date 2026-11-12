@@ -36,6 +36,36 @@ async function resetDb() {
                verification_audit_log, notification_outbox, notifications,
                push_subscriptions, notification_preferences,
                payments, consultations, users RESTART IDENTITY CASCADE`);
+  // Re-seed the simulation pharmacy + courier that migration 014 provisions
+  // (resetDb wipes partner_pharmacies and the simulation courier lives in
+  // users, both of which the medication-simulation engine depends on). This
+  // mirrors what a fresh deploy's auto-migrate leaves behind.
+  await query(
+    `INSERT INTO partner_pharmacies
+       (id, name, contact_name, whatsapp_number, location, notes, active)
+     VALUES ('PHARMA_SIM_DEMO',
+             'Pharmacie partenaire Medika (simulation)',
+             'Équipe simulation Medika',
+             '5090000000',
+             'Port-au-Prince — mode simulation',
+             'Re-seeded by resetDb for the medication-simulation engine.',
+             TRUE)
+     ON CONFLICT (id) DO UPDATE SET active = TRUE, updated_at = now()`
+  );
+  await query(
+    `INSERT INTO users (id, username, password_hash, role, name, email, is_available)
+     VALUES ('USER_SIM_LIVREUR',
+             'livreur.simulation',
+             '$2a$10$UEmg0QbchMweIpvSelb6UevZq28S5YnzTB/6Dq.HaeNt4R5mjehtq',
+             'delivery',
+             'Équipe livraison Medika (simulation)',
+             'livreur.simulation@medika.local',
+             TRUE)
+     ON CONFLICT (id) DO UPDATE SET role = 'delivery', is_available = TRUE`
+  );
+  // The coverage zone (ZONE_PAP) is in delivery_zones, not in the truncate
+  // list — it survives. But the simulation pharmacy and courier are in
+  // tables that ARE truncated, so they need re-seeding.
 }
 
 async function closeAll() {

@@ -7,6 +7,7 @@ const moncash = require('../moncash');
 const payments = require('../repos/medication-payments');
 const notifications = require('../notifications/emit');
 const { query } = require('../db');
+const simulation = require('../medication-simulation');
 
 function emitPaidNotification(userId, orderId) {
   const key = `medication-order:${orderId}:payment-verified`;
@@ -159,6 +160,10 @@ router.post('/medication-orders/:id/payment/verify', authenticate, requireRole('
     }
     if (saved.outcome !== 'PAID') return res.status(409).json({ error: 'Le paiement n’a pas pu être confirmé.', code: 'PAYMENT_NOT_CONFIRMED' });
     emitPaidNotification(req.user.id, row.medication_order_id);
+    // Note: the delivery simulation runs LAZILY on the patient's next GET of
+    // the order (medication-orders route), not here. This keeps the payment
+    // verify response focused on the payment itself and avoids racing an
+    // admin-driven manual delivery assignment (issue #82).
     return res.json({ success: true, payment: saved.payment });
   } catch (err) {
     if (String(err.message || '').startsWith('moncash_')) {

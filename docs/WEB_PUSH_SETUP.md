@@ -69,14 +69,13 @@ repo settings:
 - The API project also needs `CRON_SECRET` set (Production) for the cron
   authorization to pass.
 
-Without a scheduler, pushes are only sent while a drain trigger happens to
-run: after a new push subscription is registered, AND on any authenticated
-notification read (bell poll / history load — throttled per process, drains
-due rows for EVERYONE). Duplicate/overlapping runs are harmless (FOR UPDATE
-SKIP LOCKED + stable idempotency keys). Configure CRON_SECRET anyway — it is
-the only delivery-latency guarantee for events emitted while nobody has the
-app open (typical for medication events, which land hours after the
-consultation).
+Without a scheduler, pushes still drain opportunistically: every authenticated
+notification read (the header bell's unread poll, the history fetch) triggers a
+throttled dispatch, so any user opening Medika drains due rows for everyone.
+The workflow remains the background-latency guarantee for pushes that must
+arrive while nobody is using the app (device closed, app killed). Duplicate or
+overlapping runs are harmless (FOR UPDATE SKIP LOCKED + stable idempotency
+keys).
 
 ## 5. Verify (in order)
 
@@ -113,30 +112,24 @@ queue harmlessly, in-app notifications continue. Re-set and redeploy to turn
 back on. Rotating the keys does NOT require a redeploy (config is read per
 call) — but rotating invalidates existing subscriptions (users re-enable).
 
-## 7. What changed in November 2026 (medication push + read-aware suppression)
+## 7. First-login permission bootstrap (owner request, Nov 2026)
 
-Two owner-requested fixes landed on top of this system:
+On the first login of an account on a device, the app now asks for camera,
+microphone and push-notification permission automatically — fired from the
+login/register submit click (a genuine user gesture), with a one-tap fallback
+card inside the authenticated shell for browsers that swallow programmatic
+prompts (iOS Safari, Chrome quiet-UI). The per-account, per-device flag lives
+in localStorage (`medika_perm_bootstrap_<userId>`), so the app never nags
+twice for the same account on the same device.
 
-**Medication push coverage.** The full medication lifecycle now flows through
-the SAME dispatcher as consultation events — `medication:order-submitted`
-(order REQUESTED → ops admins), `medication:quoted` (→ patient),
-`medication:paid` and `medication:payment-review` (→ patient + admins),
-`medication:delivery-assigned` / `medication:delivery-update` (→ patient).
-All payloads are generic copy: no medication names, patient names or medical
-data ever leave the server. If medication pushes still do not arrive in
-production, check IN ORDER: (1) the recipient's device actually has a push
-subscription (`push_subscriptions`, `revoked_at IS NULL` — fresh patient
-devices get asked on first login by the permission bootstrap);
-(2) `VAPID_*` is configured (§2); (3) `CRON_SECRET` is set (§4) — without it
-delivery waits for SOMEONE to open the app.
-
-**Read-aware chat suppression.** A new message only suppresses the recipient's
-push when they are ACTIVELY VIEWING that exact conversation (per-connection
-`consultation:viewing` frame, membership-validated server-side) AND their
-read receipt (`POST /api/consultations/:id/read`) actually lands. Viewing
-alone arms a 30-second grace window on the queued row; a read receipt marks
-it `suppressed` (`read_in_conversation`), otherwise it dispatches normally —
-an unread message is never silently lost. Merely being online, browsing
-another page or viewing a different conversation still gets a push.
-Medication/payment/delivery/consultation lifecycle pushes are NEVER
-suppressed by connectivity or viewing state.
+Practical consequences for this runbook:
+- Fresh users no longer need to visit the notification settings page to turn
+  push on: granting the login prompt subscribes the device immediately (the
+  subscription registration still needs the VAPID variables above — without
+  them `enablePush` reports `server-disabled` and the user is simply not
+  subscribed, exactly as before).
+- Users who previously granted notification permission in the browser but
+  never subscribed get wired up automatically on their next visit (quiet
+  re-enable, no new prompt).
+- The explicit settings page (`/app/settings/notifications`) remains the
+  manual enable/disable/retry path; the logout push revocation is unchanged.

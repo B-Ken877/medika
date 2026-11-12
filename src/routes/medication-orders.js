@@ -24,6 +24,7 @@ const medicationPayments = require('../repos/medication-payments');
 const { authenticate, requireRole } = require('../auth');
 const { query } = require('../db');
 const notifications = require('../notifications/emit');
+const simulation = require('../medication-simulation');
 
 const router = express.Router();
 
@@ -109,6 +110,13 @@ router.post('/consultations/:id/medication-order', authenticate, requireRole('pa
       });
     }
 
+    // Note: the simulation engine (Nov 2026) runs LAZILY on the next GET of
+    // the order, not here on the POST. This keeps createOrder returning a
+    // clean REQUESTED order so admin-driven manual quoting (issue #83) and
+    // the simulation never race: the patient's next status poll is what
+    // auto-records the simulated quote when no real pharmacy network is
+    // connected.
+
     res.status(201).json(ordersRepo.orderRowToApi(result.order));
   } catch (err) { next(err); }
 });
@@ -127,6 +135,18 @@ router.get('/consultations/:id/medication-order', authenticate, requireRole('pat
       [req.params.id, req.user.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Not found' });
+
+    // Simulation (owner request, Nov 2026): if the order is still
+    // REQUESTED/ESCALATED and the seeded simulation pharmacy is active,
+    // auto-record a quote so the patient sees « pricing discovery »
+    // immediately instead of waiting for a manual ops call that will never
+    // come while no real pharmacy network is connected. Idempotent and
+    // fail-safe — never overrides a real (manual) quote.
+    await simulation.maybeSimulateQuote(rows[0].id);
+    // If the order has already been paid, advance the simulated delivery
+    // chain so the patient sees the custody progression.
+    await simulation.maybeSimulateDelivery(rows[0].id);
+
     const order = await ordersRepo.getForPatient(rows[0].id, req.user.id);
     if (!order) return res.status(404).json({ error: 'Not found' });
     order.payment = medicationPayments.toApi(await medicationPayments.findByOrderId(order.id));

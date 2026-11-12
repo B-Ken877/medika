@@ -32,33 +32,6 @@ const router = express.Router();
 
 const MAX_SUBSCRIPTIONS_PER_USER = 10;
 
-// ─── Read-triggered dispatcher drain ─────────────────────────────────────────
-
-/**
- * Any authenticated notification READ opportunistically drains the due
- * outbox (documented dispatcher contract): a user simply opening Medika
- * delivers due pushes for EVERYONE — concurrency-safe by design (FOR UPDATE
- * SKIP LOCKED + stable idempotency keys make overlapping runs harmless).
- *
- * This is the medication-push latency fix (owner request, Nov 2026): the
- * GitHub Actions dispatcher silently skips without CRON_SECRET, so business
- * events emitted while nobody happens to (re)register a push subscription —
- * exactly when medication quotes/payments/deliveries land, hours after the
- * interactive flows — used to sit queued indefinitely. Now any in-app read
- * (bell unread poll, history load) drains them within seconds.
- *
- * Throttled per process (throttle below ≫ the bell's poll interval) and
- * fire-and-forget: a drain failure can never affect the read response.
- */
-const READ_DRAIN_THROTTLE_MS = 30_000;
-let lastReadDrainAt = 0;
-
-function maybeDrainOnRead() {
-  const now = Date.now();
-  if (now - lastReadDrainAt < READ_DRAIN_THROTTLE_MS) return;
-  lastReadDrainAt = now;
-  dispatch.dispatchDueNotifications({ limit: 25 }).catch(() => undefined);
-}
 
 function validateSubscription(body) {
   const endpoint = typeof body.endpoint === 'string' ? body.endpoint.trim() : '';
@@ -146,7 +119,11 @@ router.delete('/notifications/subscriptions', authenticate, async (req, res, nex
 
 router.get('/notifications', authenticate, async (req, res, next) => {
   try {
-    maybeDrainOnRead();
+    // Opportunistic, throttled, non-fatal outbox drain: an authenticated
+    // read proves the app is being used, which is exactly when queued
+    // pushes should reach devices — even when no scheduler is configured.
+    // The response never waits on it.
+    dispatch.maybeDispatchOpportunistic().catch(() => undefined);
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 50);
     const before = req.query.before ? parseInt(req.query.before, 10) : null;
     const params = [req.user.id];
@@ -184,7 +161,10 @@ router.get('/notifications', authenticate, async (req, res, next) => {
  */
 router.get('/notifications/unread', authenticate, async (req, res, next) => {
   try {
-    maybeDrainOnRead();
+    // Same opportunistic drain as the history read (the header bell polls
+    // this endpoint every 60s while the app is open, giving the outbox a
+    // regular drain without any scheduler). Throttled per process.
+    dispatch.maybeDispatchOpportunistic().catch(() => undefined);
     const { rows } = await query(
       `SELECT count(*)::int AS n FROM notifications WHERE user_id = $1 AND read_at IS NULL`,
       [req.user.id]

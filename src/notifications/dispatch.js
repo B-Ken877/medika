@@ -39,6 +39,59 @@ const MAX_ATTEMPTS = 6;
 /** Exponential backoff schedule (seconds) per attempt number. */
 const BACKOFF_SECONDS = [0, 60, 5 * 60, 15 * 60, 60 * 60, 6 * 60 * 60];
 
+/**
+ * Opportunistic-drain throttle (issue: push delivery latency without a
+ * scheduler). The GitHub Actions dispatcher is a LATENCY enhancement, never
+ * a correctness dependency — but without CRON_SECRET configured it silently
+ * skips, and queued pushes then waited for the next subscription
+ * registration (which may never come). Authenticated notification reads now
+ * also drain the outbox: any user simply opening Medika drains due rows for
+ * EVERYONE (FOR UPDATE SKIP LOCKED + stable idempotency keys make concurrent
+ * runs harmless). Throttled per process so the 60s unread poll and WS-driven
+ * refetches cannot turn reads into a hammering worker.
+ */
+const OPPORTUNISTIC_THROTTLE_MS = 15_000;
+
+/**
+ * The throttle timestamp lives on globalThis rather than in a module-local:
+ * the module can be evaluated more than once in a process (test runners
+ * evaluate it both through require-interop and dynamic import; some bundlers
+ * may too), and the throttle is meaningless unless EVERY copy shares one
+ * state. Harmless in serverless: each isolation context gets its own
+ * globalThis, which is exactly the granularity the throttle needs.
+ */
+function drainThrottleState() {
+  const g = globalThis;
+  if (!g.__medikaNotificationDrainThrottle) {
+    g.__medikaNotificationDrainThrottle = { lastOpportunisticAt: 0 };
+  }
+  return g.__medikaNotificationDrainThrottle;
+}
+
+/**
+ * Throttled, fire-and-forget drain for hot request paths. NEVER awaited by
+ * the caller, never throws (dispatchDueNotifications already never throws —
+ * per-row errors are absorbed). `force: true` bypasses the throttle (tests,
+ * admin runs).
+ */
+async function maybeDispatchOpportunistic({ limit = 10, force = false } = {}) {
+  const state = drainThrottleState();
+  const now = Date.now();
+  if (!force && now - state.lastOpportunisticAt < OPPORTUNISTIC_THROTTLE_MS) return;
+  state.lastOpportunisticAt = now;
+  try {
+    await dispatchDueNotifications({ limit });
+  } catch {
+    /* unreachable (dispatchDueNotifications never throws) — defensive */
+  }
+}
+
+/** Test hook: reset the per-process throttle so a test can prove the next
+ *  read really triggers a drain. */
+function _resetOpportunisticThrottle() {
+  drainThrottleState().lastOpportunisticAt = 0;
+}
+
 /** Process due outbox rows. Returns aggregate counts (never payloads). */
 async function dispatchDueNotifications({ limit = 25 } = {}) {
   const counts = { claimed: 0, delivered: 0, suppressed: 0, retryable: 0, revoked: 0, dead: 0, failed: 0 };
@@ -184,4 +237,11 @@ async function activeSubscriptionCount(userId) {
   return rows[0].n;
 }
 
-module.exports = { dispatchDueNotifications, activeSubscriptionCount, MAX_ATTEMPTS };
+module.exports = {
+  dispatchDueNotifications,
+  maybeDispatchOpportunistic,
+  activeSubscriptionCount,
+  MAX_ATTEMPTS,
+  OPPORTUNISTIC_THROTTLE_MS,
+  _resetOpportunisticThrottle,
+};

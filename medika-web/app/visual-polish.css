@@ -389,6 +389,59 @@ textarea.input:focus {
   display: none;
 }
 
+/* ── Finished consultation — prescription-first view toggle (Nov 2026) ──────
+   Opening a finished consultation lands on the ordonnance page; the chat
+   history is one toggle away. The segmented bar sits directly under the room
+   header and is always visible in both views, so neither surface is a
+   dead end. */
+.rx-view-toggle {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+  padding: 8px clamp(12px, 3vw, 24px);
+  background: var(--surface);
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.rx-view-toggle button {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid var(--gray-200);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.rx-view-toggle button:hover { border-color: var(--green-200); }
+
+.rx-view-toggle button.active {
+  background: var(--green-50, #eaf6f0);
+  border-color: var(--green-300, #9fd4c0);
+  color: var(--green-800, #145b50);
+}
+
+.rx-view-toggle button:focus-visible {
+  outline: 2px solid var(--green-500);
+  outline-offset: 2px;
+}
+
+/* The prescription page reuses .chat-log's flexible scroll surface (same
+   padding + background as the messages region) with slightly tighter bottom
+   padding — the ordonnance card already carries its own margin. */
+.chat-log.rx-docs-view {
+  padding-bottom: 16px;
+}
+
 .chat-log {
   flex: 1 1 auto;
   min-height: 0;

@@ -16,31 +16,34 @@
  * Placement rules mirror PwaBootstrap's install banner: never on full-screen
  * interaction pages (chat conversations / tickets / call rooms) where it
  * could cover the composer — the flag stays unset there, so the card simply
- * appears on the next regular /app page instead of fighting the chat UI.
- *
- * Already-granted permissions are never re-prompted: when notifications are
- * already decided, the flow marks itself done (and quietly re-registers an
- * existing push subscription — the heal that makes previously-granted
- * devices actually receive pushes).
+ * appears on the next regular /app page instead.
  */
-
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { BellRing } from "lucide-react";
+import { BellRing, X } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
+import { readSession } from "@/lib/auth/session";
+import { enablePush } from "@/lib/push";
 import {
   hasPermissionBootstrapRun,
   markPermissionBootstrapRun,
   requestStartupPermissions,
 } from "@/lib/permissions";
-import { syncExistingPushSubscription } from "@/lib/push";
 
-/** Let a genuinely-pending browser prompt (fired by the login page) surface
- *  before this card considers appearing over it. */
-const DECISION_DELAY_MS = 2_000;
+/** Let a pending login-page prompt surface before deciding to show the card. */
+const DECIDE_DELAY_MS = 2_000;
+
+function isFullScreenInteractionPage(pathname: string | null): boolean {
+  if (!pathname) return false;
+  return (
+    /^\/app\/consultations\/[^/]+$/.test(pathname) ||
+    /^\/app\/consultations\/[^/]+\/call/.test(pathname) ||
+    /^\/app\/tickets\/[^/]+$/.test(pathname)
+  );
+}
 
 export function PermissionBootstrap() {
-  const { user, status, token } = useAuth();
+  const { user, status } = useAuth();
   const pathname = usePathname();
   const [shouldOffer, setShouldOffer] = useState(false);
 
@@ -49,44 +52,73 @@ export function PermissionBootstrap() {
     if (hasPermissionBootstrapRun(user.id)) return;
 
     let cancelled = false;
-    // A short delay lets a genuinely-pending browser prompt (fired by the
-    // login page) surface and be decided first; while it pends the
-    // permission stays "default" and we simply never open over it.
-    const timer = setTimeout(() => {
-      const notif =
-        typeof Notification === "undefined" ? "unsupported" : Notification.permission;
-      if (cancelled) return;
-      if (notif !== "default") {
-        // Already decided (granted on the login page, or denied anywhere):
-        // wire push when granted, mark done either way. The media question
-        // is answered by the call room when the user first joins a call.
-        if (notif === "granted" && token) void syncExistingPushSubscription(token);
+
+    const decide = async () => {
+      // Notification support/decision is the gate: everything else (camera,
+      // mic) is asked opportunistically in the same gesture.
+      const notifSupported = typeof Notification !== "undefined";
+      const notif = notifSupported ? Notification.permission : "denied";
+
+      if (!notifSupported) {
+        // Nothing to ask for push; camera/mic are handled by the call room.
         markPermissionBootstrapRun(user.id);
         return;
       }
-      if (typeof navigator !== "undefined" && navigator.userActivation?.isActive) {
-        // Transient activation is still alive (fast login): fire now —
-        // only undecided permissions actually prompt.
-        void requestStartupPermissions(user.id, token)
-          .catch(() => undefined)
-          .finally(() => {
-            if (!cancelled) markPermissionBootstrapRun(user.id);
-          });
+
+      if (notif === "granted") {
+        // The browser already decided (e.g. grant remembered from an earlier
+        // visit): wire the existing grant to the server quietly — no prompt,
+        // no new ask — so pushes actually deliver. Then mark done.
+        const token = readSession()?.token ?? null;
+        if (token) {
+          try {
+            await enablePush(token);
+          } catch {
+            // best-effort; the settings page remains the explicit retry path
+          }
+        }
+        if (!cancelled) markPermissionBootstrapRun(user.id);
         return;
       }
-      setShouldOffer(true); // swallowed ask → one-tap card
-    }, DECISION_DELAY_MS);
 
+      if (notif === "denied") {
+        // Explicitly declined at browser level — re-asking is futile.
+        markPermissionBootstrapRun(user.id);
+        return;
+      }
+
+      // "default": the login-page ask was swallowed or is still pending.
+      if (navigator.userActivation?.isActive) {
+        // Transient activation is still alive (fast login → redirect): fire
+        // the asks right now, no card needed. Only undecided permissions
+        // actually prompt; everything already decided resolves silently.
+        try {
+          await requestStartupPermissions(user.id, readSession()?.token ?? null);
+        } catch {
+          // never propagate
+        }
+        if (!cancelled) markPermissionBootstrapRun(user.id);
+        return;
+      }
+
+      if (!cancelled) setShouldOffer(true);
+    };
+
+    const timer = setTimeout(() => void decide(), DECIDE_DELAY_MS);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [status, user?.id, token]);
+  }, [status, user?.id]);
 
-  const accept = () => {
+  const accept = async () => {
     if (user?.id) markPermissionBootstrapRun(user.id);
     setShouldOffer(false);
-    void requestStartupPermissions(user?.id ?? "", token).catch(() => undefined);
+    try {
+      await requestStartupPermissions(user?.id ?? "anonymous", readSession()?.token ?? null);
+    } catch {
+      // never propagate
+    }
   };
 
   const dismiss = () => {
@@ -94,14 +126,10 @@ export function PermissionBootstrap() {
     setShouldOffer(false);
   };
 
-  // Same visibility rule as the install banner: never on chat/tickets/call
-  // screens where a floating card would cover the composer or the room UI.
-  const onFullScreenInteractionPage =
-    /^\/app\/consultations\/[^/]+/.test(pathname ?? "") || /^\/app\/tickets\/[^/]+/.test(pathname ?? "");
-  const visible = shouldOffer && !onFullScreenInteractionPage;
+  const visible = shouldOffer && !isFullScreenInteractionPage(pathname);
 
-  // Reserve the fixed slot's height on page content (same mechanism as the
-  // install banner) so the card never covers the bottom of a list.
+  // Same page-guard mechanism as the install banner: keep the card from
+  // covering bottom content on regular pages.
   useEffect(() => {
     if (typeof document === "undefined") return;
     document.body.classList.toggle("has-perm-card", visible);
@@ -111,25 +139,23 @@ export function PermissionBootstrap() {
   if (!visible) return null;
 
   return (
-    <div className="perm-bootstrap-card" role="dialog" aria-label="Pèmèt notifikasyon ak kamera">
-      <span className="perm-card-icon" aria-hidden>
-        <BellRing size={20} />
+    <div className="perm-bootstrap-card" role="dialog" aria-label="Pèmèt notifikasyon, kamera ak mikro">
+      <span className="brand-mark" aria-hidden>
+        <BellRing size={17} />
       </span>
-      <div className="perm-card-copy">
-        <p className="perm-card-title">Pèmèt notifikasyon, kamera ak mikro</p>
-        <p className="perm-card-body">
-          Pou resevwa notifikasyon epi fè konsiltasyon videyo, Medika bezwen pèmèt sa yo.
-          Navigatè a pral mande w — peze Owi pou chak.
-        </p>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <strong>Pèmèt notifikasyon, kamera ak mikro</strong>
+        <div className="tiny muted">
+          Pou w resevwa notifikasyon yo epi swiv konsiltasyon videyo ou, Medika bezwen pèmèt sa yo.
+          Navigatè a pral mande w — peze Owi pou chak demann.
+        </div>
       </div>
-      <div className="perm-card-actions">
-        <button type="button" className="btn btn-primary" onClick={accept}>
-          Owi, mande m kounye a
-        </button>
-        <button type="button" className="btn btn-ghost" onClick={dismiss}>
-          Pa kounye a
-        </button>
-      </div>
+      <button className="btn btn-primary btn-sm" onClick={accept}>
+        Owi, mande m
+      </button>
+      <button className="icon-btn" onClick={dismiss} aria-label="Pa kounye a">
+        <X size={17} />
+      </button>
     </div>
   );
 }

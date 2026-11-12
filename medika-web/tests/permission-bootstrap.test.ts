@@ -5,38 +5,39 @@
  *
  * Verified here (runtime where possible, source-contract otherwise — this
  * package has no jsdom):
- *  - lib/permissions.ts: BOTH asks (camera+mic, notifications) start in the
+ *  - lib/permissions.ts: both asks (camera+mic, notifications) start in the
  *    SAME synchronous task (they must ride one transient user activation);
  *    camera/mic tracks are stopped immediately after the grant; push is
- *    subscribed ONLY when notifications come back granted and a token
- *    exists; the per-account+device flag never nags and never throws;
+ *    subscribed ONLY when notifications come back granted and a token exists;
+ *    the per-account+device flag never nags and never throws;
  *  - login/register pages fire the bootstrap from the submit click handler
  *    (fire-and-forget, after the auth call succeeds);
  *  - the shell fallback card (PermissionBootstrap) is mounted from AppShell,
- *    marks the flag on BOTH accept and dismiss, quietly re-registers an
- *    already-granted push subscription, and hides on chat/call screens;
- *  - the socket client can announce viewing state (read-aware suppression).
+ *    marks the flag on BOTH accept and dismiss, quietly wires an already-
+ *    granted notification permission to the server, and never renders on
+ *    chat/call screens;
+ *  - the card reuses the install-banner design system (CSS tokens).
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const WEB = resolve(__dirname, "..");
-const src = (p: string) => readFileSync(resolve(WEB, p), "utf8");
+const read = (p: string) => readFileSync(resolve(__dirname, p), "utf8");
 
+// enablePush is lib/push.ts's job (fully covered by push-notifications.test.ts);
+// here it is stubbed so the bootstrap's ORCHESTRATION is what gets verified.
 vi.mock("@/lib/push", () => ({
   enablePush: vi.fn(async () => ({ support: "supported", enabled: true })),
-  syncExistingPushSubscription: vi.fn(async () => true),
 }));
 
-// ── Node-environment browser stubs ──────────────────────────────────────────
-type StorageShim = ReturnType<typeof storageStub>;
+// ── DOM-ish environment shims (node environment: no window/navigator) ────────
+type StorageShim = Record<string, string>;
 
-function storageStub(store: Record<string, string>) {
+function storageStub(store: StorageShim) {
   return {
     getItem: (k: string) => (k in store ? store[k] : null),
     setItem: (k: string, v: string) => {
-      store[k] = String(v);
+      store[k] = v;
     },
     removeItem: (k: string) => {
       delete store[k];
@@ -45,226 +46,305 @@ function storageStub(store: Record<string, string>) {
 }
 
 function makeStream() {
-  const stop = vi.fn();
-  return { stream: { getTracks: () => [{ stop }, { stop }] }, stop };
+  const stopped: string[] = [];
+  const tracks = ["video", "audio"].map((kind) => ({ kind, stop: () => stopped.push(kind) }));
+  return { stream: { getTracks: () => tracks }, stopped };
 }
 
-interface Env {
-  getUserMedia: ReturnType<typeof vi.fn>;
-  requestPermission: ReturnType<typeof vi.fn>;
-  media: { stream: unknown; stop: ReturnType<typeof vi.fn> };
-}
+const originalWindow = globalThis.window;
+const originalNavigator = globalThis.navigator;
+const originalNotification = (globalThis as { Notification?: unknown }).Notification;
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+afterEach(() => {
+  globalThis.window = originalWindow;
+  Object.defineProperty(globalThis, "navigator", {
+    value: originalNavigator,
+    configurable: true,
+    writable: true,
+  });
+  (globalThis as { Notification?: unknown }).Notification = originalNotification;
+});
 
 function installEnv(options: {
   permission?: "default" | "granted" | "denied";
   getUserMedia?: () => Promise<unknown>;
   requestPermission?: () => Promise<NotificationPermission>;
   session?: { token: string; user: { id: string } } | null;
-}): Env {
-  const localStore: Record<string, string> = {};
-  const sessionStore: Record<string, string> = {};
+}) {
+  const localStore: StorageShim = {};
+  const sessionStore: StorageShim = {};
   if (options.session) {
     sessionStore["medika_session_token"] = options.session.token;
     sessionStore["medika_session_user"] = JSON.stringify(options.session.user);
   }
   const media = makeStream();
-  const getUserMedia = (options.getUserMedia ?? vi.fn(async () => media.stream)) as Env["getUserMedia"];
-  const requestPermission = (options.requestPermission ?? vi.fn(async () => "granted" as NotificationPermission)) as Env["requestPermission"];
+  const getUserMedia = options.getUserMedia ?? vi.fn(async () => media.stream);
+  const requestPermission = options.requestPermission ?? vi.fn(async () => "granted" as NotificationPermission);
 
   vi.stubGlobal("window", {
     isSecureContext: true,
     localStorage: storageStub(localStore),
     sessionStorage: storageStub(sessionStore),
   });
-  // Node ≥21 exposes `navigator` as a getter-only global — assignment and
-  // vi.stubGlobal both fail; a configurable defineProperty is the only way.
   Object.defineProperty(globalThis, "navigator", {
-    value: { mediaDevices: { getUserMedia }, userActivation: { isActive: false } },
+    value: { mediaDevices: { getUserMedia } },
     configurable: true,
     writable: true,
   });
-  vi.stubGlobal("Notification", { permission: options.permission ?? "default", requestPermission });
-  return { getUserMedia, requestPermission, media };
+  (globalThis as { Notification?: unknown }).Notification = {
+    permission: options.permission ?? "default",
+    requestPermission,
+  };
+
+  return { localStore, getUserMedia, requestPermission, stopped: media.stopped };
 }
 
-const ORIGINALS: Record<string, unknown> = {};
-beforeEach(() => {
-  ORIGINALS.window = globalThis.window;
-  ORIGINALS.navigator = globalThis.navigator;
-  ORIGINALS.Notification = (globalThis as { Notification?: unknown }).Notification;
-});
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.clearAllMocks();
-  (globalThis as { window?: unknown }).window = ORIGINALS.window;
-  (globalThis as { navigator?: unknown }).navigator = ORIGINALS.navigator;
-  (globalThis as { Notification?: unknown }).Notification = ORIGINALS.Notification;
+describe("lib/permissions.ts — flag helpers (per account+device)", () => {
+  it("starts unset, marks, and never re-nags once marked", async () => {
+    const { hasPermissionBootstrapRun, markPermissionBootstrapRun } = await import("../lib/permissions");
+    installEnv({ permission: "granted" });
+    expect(hasPermissionBootstrapRun("user-1")).toBe(false);
+    markPermissionBootstrapRun("user-1");
+    expect(hasPermissionBootstrapRun("user-1")).toBe(true);
+    // A DIFFERENT account on the same device still gets its own first login.
+    expect(hasPermissionBootstrapRun("user-2")).toBe(false);
+  });
+
+  it("treats blocked storage as done — a private-mode session is never nagged", async () => {
+    const { hasPermissionBootstrapRun } = await import("../lib/permissions");
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: () => {
+          throw new Error("blocked");
+        },
+      },
+    });
+    expect(hasPermissionBootstrapRun("user-1")).toBe(true);
+  });
 });
 
-describe("lib/permissions — runtime behavior", () => {
-  it("asks camera+mic AND notifications in the same synchronous task, stops tracks, subscribes push", async () => {
+describe("lib/permissions.ts — requestStartupPermissions orchestration", () => {
+  it("asks camera+mic and notifications, stops the tracks, subscribes push on grant", async () => {
     const mod = await import("../lib/permissions");
     const { enablePush } = await import("@/lib/push");
-    const env = installEnv({
-      permission: "default",
-      session: { token: "tok-1", user: { id: "user-1" } },
-    });
+    const env = installEnv({ permission: "default", session: { token: "tok-1", user: { id: "user-1" } } });
 
     const result = await mod.requestStartupPermissions("user-1", "tok-1");
 
     expect(env.getUserMedia).toHaveBeenCalledWith({ video: true, audio: true });
     expect(env.requestPermission).toHaveBeenCalledTimes(1);
-    expect(env.media.stop).toHaveBeenCalledTimes(2); // both tracks stopped immediately
+    expect(env.stopped).toEqual(["video", "audio"]); // camera released immediately
     expect(enablePush).toHaveBeenCalledWith("tok-1");
     expect(result).toEqual({ cameraMic: "granted", notifications: "granted", push: "subscribed" });
   });
 
-  it("does NOT re-prompt when the browser already decided; still wires push when granted", async () => {
+  it("does NOT call requestPermission when the browser already decided", async () => {
     const mod = await import("../lib/permissions");
     const { enablePush } = await import("@/lib/push");
     const env = installEnv({ permission: "granted" });
 
-    const result = await mod.requestStartupPermissions("user-1", "tok-2");
+    const result = await mod.requestStartupPermissions("user-1", "tok-1");
 
-    expect(env.requestPermission).not.toHaveBeenCalled();
-    expect(enablePush).toHaveBeenCalledWith("tok-2");
+    expect(env.requestPermission).not.toHaveBeenCalled(); // already decided → no prompt
+    expect(enablePush).toHaveBeenCalledWith("tok-1"); // existing grant → wire it up
     expect(result.notifications).toBe("granted");
     expect(result.push).toBe("subscribed");
   });
 
-  it("denied notifications → push NOT subscribed; camera/mic tracks still cleaned up", async () => {
+  it("never subscribes push when notifications were denied", async () => {
     const mod = await import("../lib/permissions");
     const { enablePush } = await import("@/lib/push");
-    const env = installEnv({ permission: "denied" });
+    installEnv({
+      permission: "default",
+      requestPermission: vi.fn(async () => "denied" as NotificationPermission),
+    });
 
-    const result = await mod.requestStartupPermissions("user-1", null);
+    const result = await mod.requestStartupPermissions("user-1", "tok-1");
 
     expect(enablePush).not.toHaveBeenCalled();
-    expect(result.push).toBe("not-subscribed");
     expect(result.notifications).toBe("denied");
-    expect(env.media.stop).toHaveBeenCalledTimes(2);
+    expect(result.push).toBe("not-subscribed");
   });
 
-  it("getUserMedia NotFoundError (no camera) → 'unsupported' but notifications STILL asked", async () => {
+  it("a missing camera is NOT a denial — notifications are still asked", async () => {
     const mod = await import("../lib/permissions");
-    const env = installEnv({
+    const notFound = Object.assign(new Error("no device"), { name: "NotFoundError" });
+    installEnv({
       permission: "default",
       getUserMedia: vi.fn(async () => {
-        throw Object.assign(new Error("no cam"), { name: "NotFoundError" });
+        throw notFound;
       }),
     });
 
-    const result = await mod.requestStartupPermissions("user-1", "tok-3");
+    const result = await mod.requestStartupPermissions("user-1", "tok-1");
 
     expect(result.cameraMic).toBe("unsupported");
-    expect(env.requestPermission).toHaveBeenCalledTimes(1);
     expect(result.notifications).toBe("granted");
   });
 
-  it("flag helpers: first run unset → marked; throwing storage counts as done (never nags)", async () => {
+  it("enablePush failures never propagate (settings page remains the retry path)", async () => {
     const mod = await import("../lib/permissions");
-    installEnv({ permission: "granted", session: null });
+    const { enablePush } = await import("@/lib/push");
+    vi.mocked(enablePush).mockRejectedValueOnce(new Error("server down"));
+    installEnv({ permission: "granted" });
 
-    expect(mod.hasPermissionBootstrapRun("user-9")).toBe(false);
-    mod.markPermissionBootstrapRun("user-9");
-    expect(mod.hasPermissionBootstrapRun("user-9")).toBe(true);
-    const store = (globalThis as { window: { localStorage: StorageShim } }).window.localStorage;
-    expect(store.getItem("medika_perm_bootstrap_user-9")).toMatch(/^\d+$/);
+    const result = await mod.requestStartupPermissions("user-1", "tok-1");
+    expect(result.push).toBe("not-subscribed");
   });
+});
 
-  it("requestStartupPermissionsAfterLogin reads the session and runs the bootstrap once", async () => {
+describe("lib/permissions.ts — after-login one-liner", () => {
+  it("reads the fresh session and fires the asks with the authenticated identity", async () => {
     const mod = await import("../lib/permissions");
     const { enablePush } = await import("@/lib/push");
     const env = installEnv({
       permission: "default",
-      session: { token: "tok-session", user: { id: "user-session" } },
+      session: { token: "tok-9", user: { id: "user-9" } },
     });
 
-    const first = await mod.requestStartupPermissionsAfterLogin();
-    expect(first).toEqual({ cameraMic: "granted", notifications: "granted", push: "subscribed" });
-    expect(env.getUserMedia).toHaveBeenCalledTimes(1);
-    expect(enablePush).toHaveBeenCalledWith("tok-session");
-    expect(mod.hasPermissionBootstrapRun("user-session")).toBe(true);
+    await mod.requestStartupPermissionsAfterLogin();
 
-    // Second call: flag set → no-op (never nags).
-    const second = await mod.requestStartupPermissionsAfterLogin();
-    expect(second).toBeNull();
-    expect(env.getUserMedia).toHaveBeenCalledTimes(1);
+    expect(env.getUserMedia).toHaveBeenCalled();
+    expect(enablePush).toHaveBeenCalledWith("tok-9");
   });
 
-  it("afterLogin without a session → no-op", async () => {
+  it("does nothing when there is no session (anonymous safety)", async () => {
     const mod = await import("../lib/permissions");
+    const { enablePush } = await import("@/lib/push");
     installEnv({ permission: "default", session: null });
-    expect(await mod.requestStartupPermissionsAfterLogin()).toBeNull();
+
+    await mod.requestStartupPermissionsAfterLogin();
+    expect(enablePush).not.toHaveBeenCalled();
+  });
+
+  it("survives a broken environment without throwing", async () => {
+    const mod = await import("../lib/permissions");
+    vi.stubGlobal("window", undefined); // readSession → null
+    await expect(mod.requestStartupPermissionsAfterLogin()).resolves.toBeUndefined();
   });
 });
 
-// ── Source contracts (no jsdom in this package) ─────────────────────────────
-
-describe("permission bootstrap wiring (source contracts)", () => {
-  const login = src("app/login/page.tsx");
-  const register = src("app/register/page.tsx");
-  const shell = src("components/layout/AppShell.tsx");
-  const card = src("components/pwa/PermissionBootstrap.tsx");
-  const permissions = src("lib/permissions.ts");
-  const css = src("app/globals.css");
-  const socket = src("lib/ws/socket.ts");
-
-  it("login + register fire the bootstrap fire-and-forget AFTER the auth call", () => {
-    for (const [page, authCall] of [
-      [login, "await login("],
-      [register, "await register("],
-    ] as const) {
-      expect(page).toContain('import { requestStartupPermissionsAfterLogin } from "@/lib/permissions"');
-      const afterAuth = page.indexOf(authCall);
-      const fire = page.indexOf("void requestStartupPermissionsAfterLogin();");
-      expect(afterAuth).toBeGreaterThan(-1);
-      expect(fire).toBeGreaterThan(afterAuth);
-    }
-  });
-
-  it("both asks start in the SAME synchronous task (no await between them)", () => {
-    expect(permissions).toMatch(
-      /const cameraMicPromise = askCameraMic\(\);\s*\n\s*const notificationsPromise = askNotifications\(\);/,
+describe("both asks start in the SAME synchronous task (one user activation)", () => {
+  it("the two promise starts sit back-to-back before the first await", () => {
+    const src = read("../lib/permissions.ts");
+    const body = src.slice(
+      src.indexOf("export async function requestStartupPermissions("),
+      src.indexOf("return { cameraMic, notifications, push };"),
     );
+    const cameraStart = body.indexOf("const cameraMicPromise = askCameraMic();");
+    const notifStart = body.indexOf("const notificationsPromise = askNotifications();");
+    const firstAwait = body.indexOf("await");
+    expect(cameraStart).toBeGreaterThan(-1);
+    expect(notifStart).toBeGreaterThan(cameraStart);
+    expect(firstAwait).toBeGreaterThan(notifStart);
   });
 
-  it("AppShell mounts the fallback card", () => {
-    expect(shell).toContain('import { PermissionBootstrap } from "@/components/pwa/PermissionBootstrap"');
-    expect(shell).toMatch(/<PermissionBootstrap\s*\/>/);
+  it("camera/mic tracks are stopped immediately after the grant", () => {
+    const src = read("../lib/permissions.ts");
+    expect(src).toContain("for (const track of stream.getTracks()) track.stop();");
+  });
+});
+
+describe("login + register pages fire the bootstrap from the submit click", () => {
+  it("the login page fires it right after login() succeeds, fire-and-forget", () => {
+    const page = read("../app/login/page.tsx");
+    expect(page).toContain('import { requestStartupPermissionsAfterLogin } from "@/lib/permissions";');
+    const firedIdx = page.indexOf("void requestStartupPermissionsAfterLogin();");
+    const loginIdx = page.indexOf("await login(username.trim(), password);");
+    expect(loginIdx).toBeGreaterThan(-1);
+    expect(firedIdx).toBeGreaterThan(loginIdx);
+    // Must stay inside the try (i.e. only on SUCCESS), not in a finally.
+    const catchIdx = page.indexOf("} catch (err) {", loginIdx);
+    expect(firedIdx).toBeLessThan(catchIdx);
   });
 
-  it("the card marks the flag on BOTH accept and dismiss and hides on chat/call screens", () => {
-    const accept = card.indexOf("const accept = () => {");
-    const dismiss = card.indexOf("const dismiss = () => {");
-    expect(accept).toBeGreaterThan(-1);
-    expect(dismiss).toBeGreaterThan(-1);
-    expect(card.slice(accept)).toContain("markPermissionBootstrapRun");
-    expect(card.slice(dismiss)).toContain("markPermissionBootstrapRun");
-    expect(card).toContain("consultations\\/[^/]+"); // chat screens
-    expect(card).toContain("tickets\\/[^/]+"); // ticket threads
-    expect(card).toContain("has-perm-card"); // content-clearance mechanism
+  it("the register page fires it too — a fresh account is a first login", () => {
+    const page = read("../app/register/page.tsx");
+    expect(page).toContain('import { requestStartupPermissionsAfterLogin } from "@/lib/permissions";');
+    const firedIdx = page.indexOf("void requestStartupPermissionsAfterLogin();");
+    const registerIdx = page.indexOf("await register({");
+    expect(registerIdx).toBeGreaterThan(-1);
+    expect(firedIdx).toBeGreaterThan(registerIdx);
+    const catchIdx = page.indexOf("} catch (err) {", registerIdx);
+    expect(firedIdx).toBeLessThan(catchIdx);
+  });
+});
+
+describe("PermissionBootstrap — the shell's one-tap fallback card", () => {
+  const component = read("../components/pwa/PermissionBootstrap.tsx");
+  const shell = read("../components/layout/AppShell.tsx");
+
+  it("is mounted from the AppShell (so every authenticated role gets it)", () => {
+    expect(shell).toContain('import { PermissionBootstrap } from "@/components/pwa/PermissionBootstrap";');
+    expect(shell).toContain("<PermissionBootstrap />");
   });
 
-  it("an already-decided notification permission quietly re-syncs push (heal)", () => {
-    const decided = card.indexOf('notif !== "default"');
-    expect(decided).toBeGreaterThan(-1);
-    expect(card.slice(decided)).toContain("syncExistingPushSubscription");
+  it("honors the account+device flag: nothing renders once the bootstrap ran", () => {
+    expect(component).toContain("hasPermissionBootstrapRun(user.id)");
+    expect(component).toContain("markPermissionBootstrapRun(user.id)");
+    // Marked on BOTH paths — accept and dismiss — so it never nags twice.
+    const acceptIdx = component.indexOf("const accept = async () => {");
+    const dismissIdx = component.indexOf("const dismiss = () => {");
+    expect(component.slice(acceptIdx, dismissIdx)).toContain("markPermissionBootstrapRun");
+    expect(component.slice(dismissIdx)).toContain("markPermissionBootstrapRun");
   });
 
-  it("card styles exist and clear page content like the install banner", () => {
-    expect(css).toMatch(/\.perm-bootstrap-card\s*\{/);
-    expect(css).toMatch(/body\.has-perm-card \.app-main\s*\{/);
+  it("an already-granted notification permission is wired to the server QUIETLY", () => {
+    // No prompt (permission already granted), just enablePush on the session.
+    const grantedIdx = component.indexOf('notif === "granted"');
+    const slice = component.slice(grantedIdx, component.indexOf('notif === "denied"'));
+    expect(slice).toContain("await enablePush(token)");
+    expect(slice).not.toContain("requestStartupPermissions(");
   });
 
-  it("the socket client can announce viewing state (read-aware suppression hook)", () => {
-    expect(socket).toContain("sendViewing(consultationId: string | null)");
-    expect(socket).toContain('"consultation:viewing"');
+  it("fires the full ask while transient activation is still alive (no card needed)", () => {
+    expect(component).toContain("navigator.userActivation?.isActive");
+    const slice = component.slice(component.indexOf("navigator.userActivation?.isActive"));
+    expect(slice).toContain("await requestStartupPermissions(user.id, readSession()?.token ?? null)");
   });
 
-  it("chat page announces viewing on mount and clears on unmount", () => {
-    const chat = src("app/app/consultations/[id]/page.tsx");
-    expect(chat).toContain("socket.sendViewing(consultationId)");
-    expect(chat).toContain("socket.sendViewing(null)");
+  it("never renders on full-screen interaction pages (chat / call / tickets)", () => {
+    for (const pattern of [
+      "/^\\/app\\/consultations\\/[^/]+$/",
+      "/^\\/app\\/consultations\\/[^/]+\\/call/",
+      "/^\\/app\\/tickets\\/[^/]+$/",
+    ]) {
+      expect(component).toContain(pattern);
+    }
+    expect(component).toContain("isFullScreenInteractionPage(pathname)");
+  });
+
+  it("waits before deciding, so a pending login-page prompt is never covered", () => {
+    expect(component).toContain("DECIDE_DELAY_MS");
+    expect(component).toContain("setTimeout(() => void decide(), DECIDE_DELAY_MS)");
+  });
+
+  it("uses Creole copy consistent with the app and an accessible dialog", () => {
+    expect(component).toContain('aria-label="Pèmèt notifikasyon, kamera ak mikro"');
+    expect(component).toContain("Pèmèt notifikasyon, kamera ak mikro");
+    expect(component).toContain("Owi, mande m");
+    expect(component).toContain("Pa kounye a");
+  });
+});
+
+describe("CSS — the card reuses the install-banner design system", () => {
+  const css = read("../app/globals.css");
+
+  it("has the fixed-slot card styled from the same tokens", () => {
+    expect(css).toContain(".perm-bootstrap-card {");
+    const block = css.match(/\.perm-bootstrap-card \{[^}]*\}/)?.[0] ?? "";
+    expect(block).toContain("position: fixed");
+    expect(block).toContain("var(--surface)");
+    expect(block).toContain("var(--shadow-lg)");
+    expect(block).toContain("max-width: 480px");
+  });
+
+  it("reserves page space while visible (same mechanism as the install banner)", () => {
+    expect(css).toContain("body.has-perm-card .app-main { padding-bottom: calc(var(--bottomnav-h) + 110px); }");
+    expect(css).toContain("@media (min-width: 900px) { .perm-bootstrap-card { bottom: 16px; } }");
   });
 });

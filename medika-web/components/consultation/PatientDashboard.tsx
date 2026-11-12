@@ -16,11 +16,14 @@ import {
   Droplets,
   FolderOpen,
   HeartPulse,
+  MessageSquareHeart,
   Moon,
+  Pill,
   Plus,
   Salad,
   Stethoscope,
   Sun,
+  Truck,
   LifeBuoy,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
@@ -39,6 +42,27 @@ const HEALTH_TIPS: { icon: typeof Droplets; title: string; text: string }[] = [
   { icon: HeartPulse, title: "Sante mantal", text: "Pran tan pou tèt ou: meditasyon, lekti oswa respire fon." },
   { icon: ClipboardList, title: "Vaksen ajou", text: "Verifye vaksen ou yo epi fè rapel yo doktè ou rekomande a." },
   { icon: Stethoscope, title: "Kè anfòm", text: "Siveye tansyon atè w regilyèman pou evite risk." },
+];
+
+// The 3-step Medika journey (Nov 2026 redesign). Explains the full patient
+// flow that the medication-order + payment + delivery surfaces now cover —
+// so a first-time visitor understands what Medika does beyond the consult.
+const JOURNEY_STEPS: { icon: typeof Stethoscope; title: string; text: string }[] = [
+  {
+    icon: MessageSquareHeart,
+    title: "1 · Konsiltasyon",
+    text: "Pale ak yon doktè pa videyo, lè w vle. Doktè a ekri òrdònans ou.",
+  },
+  {
+    icon: Pill,
+    title: "2 · Pri ak medikaman",
+    text: "Mande pri medikaman yo atravè Medika — wè devi a, aksepte oswa refize.",
+  },
+  {
+    icon: Truck,
+    title: "3 · Livrezon gratis",
+    text: "Peye (simile pou kounye a) epi resevwa medikaman yo lakay ou, nan zòn k kouvri.",
+  },
 ];
 
 export default function PatientDashboard() {
@@ -90,19 +114,20 @@ export default function PatientDashboard() {
 
   return (
     <div className="stack">
-      {/* Issue #99 → #103 → #109: Akèy hero rebuilt to the approved Premium
-          Mint reference (audit in issue #103): an OPEN, unboxed hero area —
-          large two-line greeting left, artwork stage anchored to the screen's
-          right edge — with the primary action as a full-width single-line
-          pill placed BELOW the hero. The reserved stage now holds the
-          generated Medika doctor artwork (issue #109, mint-matched feathered
-          edges so it melts into the wave field like the reference cut-out);
-          the stage keeps its fixed 4/5 aspect so the image cannot shift
-          layout while loading. */}
+      {/* Issue #99 → #103 → #109 → Nov 2026 redesign: Akèy hero — OPEN, unboxed
+          hero area with large two-line greeting left + artwork stage anchored
+          to the screen's right edge. The hero copy now carries a secondary
+          value line so first-time visitors understand what Medika does beyond
+          a single consult, plus a full-width CTA row directly below. */}
       <section className="home-hero" aria-label="Resime sante ou">
         <div className="hero-copy">
+          <span className="hero-eyebrow" aria-hidden>
+            <HeartPulse size={13} /> Telemedsin · Ayiti
+          </span>
           <h1 className="page-title">Bonjou, {user?.name?.split(" ")[0] ?? ""}</h1>
-          <p className="page-desc">Men yon ti rezime sou swen sante ou.</p>
+          <p className="page-desc">
+            Pale ak yon doktè, jwenn pri medikaman ou yo, epi fè yo delivre — tout sa nan yon sèl aplikasyon.
+          </p>
         </div>
         <div className="hero-art">
           {/* eslint-disable-next-line @next/next/no-img-element -- static same-origin decorative asset with fixed intrinsic dimensions; plain <img> matches repo convention (see PrescriptionPanel) and keeps the stage layout-shift-free */}
@@ -118,35 +143,66 @@ export default function PatientDashboard() {
         </div>
       </section>
 
-      {/* Primary action — full-width, single-line, directly below the hero
-          (approved reference composition). Same destination/behavior. */}
+      {/* Primary actions — full-width row directly below the hero: the main
+          consult CTA plus a secondary link to the consultation history so a
+          returning patient can resume immediately. */}
       <div className="page-head-actions home-cta-row">
         <Link href="/app/consult" className="btn btn-primary">
           <Plus size={18} aria-hidden /> Kòmanse yon konsiltasyon
         </Link>
+        {counts.total > 0 && (
+          <Link href="/app/consultations" className="btn btn-ghost">
+            <CalendarCheck size={17} aria-hidden /> Konsiltasyon mwen yo
+          </Link>
+        )}
       </div>
 
-      {/* Summary metrics (real counts) */}
+      {/* 3-step Medika journey (Nov 2026 redesign). Explains the full patient
+          flow that the medication-order + payment + delivery surfaces now
+          cover — so a first-time visitor understands what Medika does beyond
+          the consult. Replaces a featureless gap between the CTA and the
+          stats with concrete, ordered value. */}
+      <section className="home-journey" aria-labelledby="journey-title">
+        <h2 id="journey-title" className="section-title">
+          Kijan Medika mache
+        </h2>
+        <div className="journey-grid" role="list">
+          {JOURNEY_STEPS.map((step, i) => (
+            <div key={step.title} className="journey-card" role="listitem">
+              <div className="journey-step-no" aria-hidden>{i + 1}</div>
+              <div className="journey-icon" aria-hidden>
+                <step.icon size={20} />
+              </div>
+              <h4 className="journey-title">{step.title.replace(/^\d+\s·\s/, "")}</h4>
+              <p className="journey-text">{step.text}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Summary metrics (real counts). Nov 2026: each card carries a subtle
+          gradient accent strip so the row reads as four distinct tiles instead
+          of four identical white boxes. */}
       <div className="stat-grid" role="group" aria-label="Rezime konsiltasyon yo">
-        <div className="stat-card">
+        <div className="stat-card stat-gray">
           <div className="stat-label">
             <span className="stat-dot gray" aria-hidden /> Tout konsiltasyon yo
           </div>
           <div className="stat-value">{counts.total}</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card stat-yellow">
           <div className="stat-label">
             <span className="stat-dot yellow" aria-hidden /> An atant
           </div>
           <div className="stat-value">{counts.pending}</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card stat-green">
           <div className="stat-label">
             <span className="stat-dot green" aria-hidden /> K ap dewoule
           </div>
           <div className="stat-value">{counts.active}</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card stat-blue">
           <div className="stat-label">
             <span className="stat-dot blue" aria-hidden /> Fini
           </div>
@@ -154,43 +210,84 @@ export default function PatientDashboard() {
         </div>
       </div>
 
-      {/* Active consultation panel */}
-      {consultations !== null && current && (
-        <section className="panel" aria-labelledby="current-title">
-          <div className="panel-head">
-            <h2 id="current-title" className="panel-title">
-              Konsiltasyon k ap dewoule
-            </h2>
-            <StatusBadge status={current.status} />
-          </div>
-          <div className="panel-body" style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-            <span className="brand-mark" aria-hidden>
-              <Stethoscope size={17} />
-            </span>
-            <div style={{ flex: 1, minWidth: 220 }}>
-              <div className="row-title">
-                <span>{specialtyLabel(current.specialty_needed)}</span>
-              </div>
-              <div className="row-sub">{current.description || "Pa gen deskripsyon"}</div>
-              <div className="row-meta">Demann lan fèt {relativeTime(current.created_at)}</div>
+      {/* Desktop two-column section: active consultation + quick links side
+          by side so a desktop patient sees both without scrolling. On mobile
+          the column collapses to a single stack (CSS .home-split). */}
+      <div className="home-split">
+        {/* Active consultation panel */}
+        {consultations !== null && current && (
+          <section className="panel" aria-labelledby="current-title">
+            <div className="panel-head">
+              <h2 id="current-title" className="panel-title">
+                Konsiltasyon k ap dewoule
+              </h2>
+              <StatusBadge status={current.status} />
             </div>
-            {/* Issue #56: an ACTIVE consultation's primary surface is the
-                real video call; waiting/finished ones open the
-                detail chat. The retired placeholder room is no longer a
-                destination. */}
-            <Link
-              href={
-                current.status === "EN_COURS"
-                  ? `/app/consultations/${encodeURIComponent(current.id)}/call?mode=video`
-                  : `/app/consultations/${encodeURIComponent(current.id)}`
-              }
-              className="btn btn-secondary"
-            >
-              {current.status === "EN_COURS" ? "Antre nan apèl la" : "Gade detay yo"} <ChevronRight size={15} aria-hidden />
+            <div className="panel-body" style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+              <span className="brand-mark" aria-hidden>
+                <Stethoscope size={17} />
+              </span>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div className="row-title">
+                  <span>{specialtyLabel(current.specialty_needed)}</span>
+                </div>
+                <div className="row-sub">{current.description || "Pa gen deskripsyon"}</div>
+                <div className="row-meta">Demann lan fèt {relativeTime(current.created_at)}</div>
+              </div>
+              {/* Issue #56: an ACTIVE consultation's primary surface is the
+                  real video call; waiting/finished ones open the
+                  detail chat. The retired placeholder room is no longer a
+                  destination. */}
+              <Link
+                href={
+                  current.status === "EN_COURS"
+                    ? `/app/consultations/${encodeURIComponent(current.id)}/call?mode=video`
+                    : `/app/consultations/${encodeURIComponent(current.id)}`
+                }
+                className="btn btn-secondary"
+              >
+                {current.status === "EN_COURS" ? "Antre nan apèl la" : "Gade detay yo"} <ChevronRight size={15} aria-hidden />
+              </Link>
+            </div>
+          </section>
+        )}
+
+        {/* Compact quick links (existing routes only) */}
+        <section aria-labelledby="quick-title">
+          <h2 id="quick-title" className="section-title">
+            Aksè rapid
+          </h2>
+          <div className="quick-links">
+            <Link href="/app/doctors" className="quick-link">
+              <span className="quick-icon" aria-hidden>
+                <Stethoscope size={17} />
+              </span>
+              <span>
+                Jwenn yon doktè
+                <div className="quick-sub">Espesyalite ak disponibilite</div>
+              </span>
+            </Link>
+            <Link href="/app/dossier" className="quick-link">
+              <span className="quick-icon" aria-hidden>
+                <FolderOpen size={17} />
+              </span>
+              <span>
+                Dosisye medikal mwen
+                <div className="quick-sub">Alèji, tretman, istwa medikal</div>
+              </span>
+            </Link>
+            <Link href="/app/tickets" className="quick-link">
+              <span className="quick-icon" aria-hidden>
+                <LifeBuoy size={17} />
+              </span>
+              <span>
+                Èd
+                <div className="quick-sub">Kontakte sèvis kliyan Medika a</div>
+              </span>
             </Link>
           </div>
         </section>
-      )}
+      </div>
 
       {/* Consultation history */}
       <section aria-labelledby="recent-title">
@@ -248,42 +345,6 @@ export default function PatientDashboard() {
             ))}
           </div>
         )}
-      </section>
-
-      {/* Compact quick links (existing routes only) */}
-      <section aria-labelledby="quick-title">
-        <h2 id="quick-title" className="section-title">
-          Aksè rapid
-        </h2>
-        <div className="quick-links">
-          <Link href="/app/doctors" className="quick-link">
-            <span className="quick-icon" aria-hidden>
-              <Stethoscope size={17} />
-            </span>
-            <span>
-              Jwenn yon doktè
-              <div className="quick-sub">Espesyalite ak disponibilite</div>
-            </span>
-          </Link>
-          <Link href="/app/dossier" className="quick-link">
-            <span className="quick-icon" aria-hidden>
-              <FolderOpen size={17} />
-            </span>
-            <span>
-              Dosisye medikal mwen
-              <div className="quick-sub">Alèji, tretman, istwa medikal</div>
-            </span>
-          </Link>
-          <Link href="/app/tickets" className="quick-link">
-            <span className="quick-icon" aria-hidden>
-              <LifeBuoy size={17} />
-            </span>
-            <span>
-              Èd
-              <div className="quick-sub">Kontakte sèvis kliyan Medika a</div>
-            </span>
-          </Link>
-        </div>
       </section>
 
       {/* Health tips carousel (static content, same as Android) */}

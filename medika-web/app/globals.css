@@ -1677,18 +1677,6 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 
 /* Presence dot + avatar wrapper */
 .presence-avatar { position: relative; display: inline-flex; flex-shrink: 0; }
-
-/* ── WhatsApp-style conversation header identity (owner request, Nov 2026) ─
-   Compact two-line identity block: bold name over a muted status line
-   (specialty · presence). Keeps Medika's green-and-white header surface. */
-.chat-peer { min-width: 0; flex: 1; }
-.chat-peer-name {
-  font-weight: 700;
-  font-size: 0.95rem;
-  color: var(--text-primary);
-  line-height: 1.2;
-}
-.chat-peer-sub { line-height: 1.3; color: var(--text-secondary); }
 .presence-dot {
   position: absolute;
   right: -1px;
@@ -2651,28 +2639,6 @@ body.has-install-banner .app-main { padding-bottom: calc(var(--bottomnav-h) + 11
 body.has-perm-card .app-main { padding-bottom: calc(var(--bottomnav-h) + 110px); }
 @media (min-width: 900px) {
   body.has-perm-card .app-main { padding-bottom: 120px; }
-}
-
-.perm-card-icon {
-  flex: 0 0 auto;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--green-50, #eef7f2);
-  color: var(--green-600);
-}
-.perm-card-copy { flex: 1 1 auto; min-width: 0; }
-.perm-card-title { margin: 0 0 2px; font-weight: 600; font-size: 14px; color: var(--text-primary); }
-.perm-card-body { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-secondary); }
-.perm-card-actions { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; }
-.perm-card-actions .btn { padding: 6px 12px; font-size: 13px; white-space: nowrap; }
-@media (max-width: 480px) {
-  .perm-bootstrap-card { flex-direction: column; align-items: stretch; }
-  .perm-card-actions { flex-direction: row; }
-  .perm-card-actions .btn { flex: 1; }
 }
 
 /* ── Utility ─────────────────────────────────────────────────────────────── */

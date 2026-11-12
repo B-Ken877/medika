@@ -391,4 +391,20 @@ describe("Prescription document — source contracts (issue #82)", () => {
   it("the consultation page shows the panel for patient AND doctor when finished", () => {
     expect(page).toContain("{finished && <PrescriptionPanel consultation={consultation} token={token} />}");
   });
+
+  it("a finished consultation lands on the prescription page, chat history is a separate toggle (owner request, Nov 2026)", () => {
+    // The finished view defaults to the prescription page…
+    expect(page).toContain('useState<"docs" | "chat">("docs")');
+    // …rendered as its own scroll region (NOT inside the chat log)…
+    expect(page).toContain('className="chat-log rx-docs-view"');
+    // …reachable through an always-visible segmented toggle under the header,
+    // with the chat history as the second surface.
+    expect(page).toContain('className="rx-view-toggle"');
+    expect(page).toContain("Òrdònans lan");
+    expect(page).toContain("Istwa konvèsasyon an");
+    // The chat log stays mounted but hidden while the prescription page is
+    // shown, so the scroll controller re-pins to the latest message when the
+    // history opens.
+    expect(page).toContain('style={finished && finishedView === "docs" ? { display: "none" } : undefined}');
+  });
 });
