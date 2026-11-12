@@ -411,9 +411,44 @@ router.get('/consultations', authenticate, async (req, res, next) => {
     // whenever anyone reads the list, so state stays fresh even without a
     // scheduler. Never blocks or fails the read.
     lifecycle.enforceDueDeadlines(req.app.locals.hub);
-    res.json(await consultationsRepo.listForUser(req.user));
+    const rows = await consultationsRepo.listForUser(req.user);
+    res.json(await attachLiveIdentity(rows));
   } catch (err) { next(err); }
 });
+
+/**
+ * Live profile identity enrichment (owner request, Nov 2026 — "consistent
+ * user profiles everywhere"). Consultation rows carry a patient_name
+ * SNAPSHOT frozen at creation; this pass attaches patient_identity /
+ * doctor_identity read from the users table at request time, so profile
+ * updates show up everywhere without touching stored rows.
+ *
+ * Privacy: identitiesFor() returns name/avatar/role (+ specialty/hospital
+ * for doctors only) — never email/phone/biography. Every row here was
+ * already authorized for the viewer AND already exposes patient_name, so
+ * the live identity widens nothing. Degradation is graceful on purpose: an
+ * enrichment failure logs and leaves null identities (clients fall back to
+ * snapshots) — it never fails the read.
+ */
+async function attachLiveIdentity(rowsOrRow) {
+  const rows = Array.isArray(rowsOrRow) ? rowsOrRow : [rowsOrRow];
+  const ids = new Set();
+  for (const row of rows) {
+    if (row?.patient_id) ids.add(row.patient_id);
+    if (row?.doctor_id) ids.add(row.doctor_id);
+  }
+  let map = new Map();
+  try {
+    map = await usersRepo.identitiesFor([...ids]);
+  } catch (err) {
+    console.error('[consultations] identity enrichment failed:', err.code || err.constructor?.name);
+  }
+  for (const row of rows) {
+    row.patient_identity = map.get(row.patient_id) ?? null;
+    row.doctor_identity = map.get(row.doctor_id) ?? null;
+  }
+  return rowsOrRow;
+}
 
 router.get('/consultations/:id', authenticate, async (req, res, next) => {
   try {
@@ -423,7 +458,7 @@ router.get('/consultations/:id', authenticate, async (req, res, next) => {
     if (req.user.role !== 'admin' && c.patient_id !== req.user.id && c.doctor_id !== req.user.id) {
       return res.json(null);
     }
-    res.json(consultationsRepo.consToApi(c));
+    res.json(await attachLiveIdentity(consultationsRepo.consToApi(c)));
   } catch (err) { next(err); }
 });
 

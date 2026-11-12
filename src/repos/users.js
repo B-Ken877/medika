@@ -292,6 +292,45 @@ async function logCredentialFieldsEdit(doctorId, actorId, changedFields) {
   );
 }
 
+/**
+ * Live, public-safe identity for a set of user ids (owner request, Nov 2026
+ * — "consistent profile identity everywhere"). The users table is the SINGLE
+ * source of truth: consultation rows carry a patient_name SNAPSHOT frozen at
+ * creation, so a profile rename never showed up in lists/headers and the
+ * patient view had no doctor name at all.
+ *
+ * Privacy contract: name, avatar, role — plus specialty/hospital ONLY for
+ * doctors. Never email, phone, biography, license number or verification
+ * state (mirrors the publicDoctor redaction). Callers must only request ids
+ * of users the viewer is already authorized to see (consultation
+ * participants — every consultation row already exposes patient_name to its
+ * authorized viewer, so this widens nothing).
+ */
+async function identitiesFor(ids) {
+  const clean = [...new Set((ids || []).filter((x) => typeof x === 'string' && x.length > 0))];
+  if (clean.length === 0) return new Map();
+  const { rows } = await query(
+    `SELECT id, name, avatar_url, role, specialty, hospital
+       FROM users WHERE id = ANY($1::text[])`,
+    [clean]
+  );
+  const map = new Map();
+  for (const row of rows) {
+    const identity = {
+      id: row.id,
+      name: row.name,
+      avatar_url: row.avatar_url ?? null,
+      role: row.role,
+    };
+    if (row.role === 'doctor') {
+      identity.specialty = row.specialty ?? null;
+      identity.hospital = row.hospital ?? null;
+    }
+    map.set(row.id, identity);
+  }
+  return map;
+}
+
 module.exports = {
   toApi,
   safe,
@@ -299,6 +338,7 @@ module.exports = {
   findByUsername,
   login,
   create,
+  identitiesFor,
   listDoctors,
   publicDoctor,
   updateProfile,

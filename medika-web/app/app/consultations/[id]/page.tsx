@@ -770,7 +770,19 @@ export default function ConsultationChatPage() {
   // a destination (the /room route now only redirects here). ───────────
   const callHref = `/app/consultations/${encodeURIComponent(consultationId)}/call?mode=video`;
 
-  const partnerName = isDoctor ? consultation.patient_name : null;
+  // Live profile identity (owner request, Nov 2026): the consultation row's
+  // patient_name is a creation-time snapshot; the API enriches rows with
+  // live identities read from the users table, so a profile update shows up
+  // here on the next fetch — no staleness, no extra request. Fallbacks keep
+  // legacy rows rendering.
+  const partnerIdentity = isDoctor ? consultation.patient_identity : consultation.doctor_identity;
+  const partnerName =
+    partnerIdentity?.name ?? (isDoctor ? consultation.patient_name : null);
+  const partnerAvatarUrl = partnerIdentity?.avatar_url ?? null;
+  const partnerDesignation =
+    partnerIdentity?.role === "doctor"
+      ? [partnerIdentity.specialty, partnerIdentity.hospital].filter(Boolean).join(" · ") || null
+      : null;
   const canChat = consultation.status === "EN_COURS";
   const waiting = consultation.status === "RECHERCHE_MEDECIN";
   const refused = consultation.status === "REFUSE";
@@ -780,12 +792,15 @@ export default function ConsultationChatPage() {
   // the PATIENT viewer only; doctors keep the clinical document view.
   const isPatientViewer = user?.role !== "doctor" && user?.id === consultation.patient_id;
 
+  // WhatsApp-style subtitle: designation (doctor) + presence, typing wins.
   const subtitle = canChat
     ? partnerTyping
       ? "Ap ekri..."
       : presence !== "unknown" && partnerId
-        ? presenceLabel(presence)
-        : "Konsiltasyon an ap dewoule"
+        ? partnerDesignation
+          ? `${partnerDesignation} · ${presenceLabel(presence)}`
+          : presenceLabel(presence)
+        : partnerDesignation ?? "Konsiltasyon an ap dewoule"
     : waiting
       ? "N ap tann doktè a."
       : finished
@@ -910,7 +925,12 @@ export default function ConsultationChatPage() {
           <ArrowLeft size={20} />
         </button>
         <span className="presence-avatar">
-          <Avatar name={partnerName ?? user?.name} size="sm" alt={`Foto pwofil ${partnerName ?? "lòt moun nan"}`} />
+          <Avatar
+            name={partnerName ?? user?.name}
+            src={partnerAvatarUrl}
+            size="md"
+            alt={`Foto pwofil ${partnerName ?? "lòt moun nan"}`}
+          />
           {canChat && presence !== "unknown" && partnerId && (
             <span
               className={`presence-dot ${presence}`}
@@ -918,11 +938,11 @@ export default function ConsultationChatPage() {
             />
           )}
         </span>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontWeight: 700, fontSize: "0.95rem" }} className="nowrap">
+        <div className="chat-peer">
+          <div className="chat-peer-name nowrap">
             {partnerName ?? specialtyLabel(consultation.specialty_needed)}
           </div>
-          <div className="tiny muted nowrap" aria-live="polite">
+          <div className="chat-peer-sub tiny muted nowrap" aria-live="polite">
             {subtitle}
             {canChat && presence !== "unknown" && partnerId && (
               <span className="sr-only">{presence === "online" ? " — Sou entènèt" : " — Pa sou entènèt"}</span>
