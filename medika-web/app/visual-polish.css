@@ -389,6 +389,89 @@ textarea.input:focus {
   display: none;
 }
 
+/* ── In-room notices (owner feedback: "not a bar but something better") ─────
+   The call entry is a sticky glass card pinned over the wallpapered chat —
+   it stays reachable while the conversation scrolls underneath it. System
+   notices (expiry, waiting) are centered translucent chips in the message
+   flow, mirroring the day separators. Both sit ON the wallpaper instead of
+   stacking gray strips between the header and the messages. */
+.chat-mode .room-call-card {
+  position: sticky;
+  top: 8px;
+  z-index: 5;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: min(100% - 28px, 560px);
+  margin: 8px auto 4px;
+  padding: 10px 13px 10px 11px;
+  border-radius: 18px;
+  background: rgba(253, 255, 254, 0.78);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  backdrop-filter: blur(14px) saturate(1.15);
+  border: 1px solid rgba(30, 91, 70, 0.15);
+  box-shadow:
+    0 12px 32px rgba(21, 65, 48, 0.16),
+    0 1px 3px rgba(21, 65, 48, 0.08);
+}
+
+.chat-mode .room-call-card.accent {
+  border-color: rgba(22, 163, 74, 0.38);
+}
+
+.chat-mode .room-call-card-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(16, 185, 129, 0.4));
+  color: var(--green-700, var(--green-500, #047857));
+}
+
+.chat-mode .room-call-card-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.chat-mode .room-call-card-title {
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.chat-mode .room-call-card-sub {
+  color: var(--text-secondary);
+}
+
+.chat-mode .room-system-chip {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: min(94%, 460px);
+  margin: 12px auto 2px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(253, 255, 254, 0.72);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(30, 91, 70, 0.12);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.chat-mode .room-system-chip svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
 /* ── Finished consultation — prescription-first view toggle (Nov 2026) ──────
    Opening a finished consultation lands on the ordonnance page; the chat
    history is one toggle away. The segmented bar sits directly under the room

@@ -14,12 +14,14 @@ import {
   ArrowDown,
   ArrowLeft,
   ClipboardList,
+  Clock,
   FileText,
   MessagesSquare,
   MonitorPlay,
   NotebookPen,
   Phone,
   Send,
+  ShieldCheck,
   Smile,
   Video,
 } from "lucide-react";
@@ -993,39 +995,6 @@ export default function ConsultationChatPage() {
           surface is the video call; chat is the supporting tool.
           The acceptance transition above already auto-navigates; this bar
           is the fallback (e.g. if navigation was interrupted). */}
-      {canChat && justAccepted && (
-        <div className="alert alert-success room-entry-bar" role="status">
-          <MonitorPlay size={17} aria-hidden />
-          <span style={{ flex: 1 }}>Doktè a aksepte demann lan — konsiltasyon an kòmanse!</span>
-          <Link href={callHref} className="btn btn-primary btn-sm">
-            Antre nan apèl videyo a
-          </Link>
-        </div>
-      )}
-      {canChat && !justAccepted && (
-        <div className="room-entry-bar quiet" role="presentation">
-          <MonitorPlay size={15} aria-hidden />
-          <span style={{ flex: 1 }} className="tiny">Konsiltasyon an ap dewoule nan apèl videyo a.</span>
-          <Link href={callHref} className="btn btn-secondary btn-sm">
-            Ouvri apèl videyo a
-          </Link>
-        </div>
-      )}
-
-      {waiting && (
-        <div className="alert alert-warning" style={{ margin: 12, marginBottom: 0 }} role="status">
-          N ap tann doktè a. Ou ap resevwa yon notifikasyon le li aksepte demann lan.
-        </div>
-      )}
-      {canChat && consultation.expires_at != null && (
-        <div className="alert alert-info" style={{ margin: 12, marginBottom: 0 }} role="status">
-          {/* Issue #71: calm static copy instead of a ticking countdown. The
-              deadline itself stays server-authoritative (expires_at enforced
-              by the lifecycle engine); a durable pre-expiration reminder is
-              delivered through the notification system near the end. */}
-          Konsiltasyon sa a disponib jiska 5 èdtan apre doktè a aksepte. Istorik mesaj yo ap konsève.
-        </div>
-      )}
       {refused && (
         <div className="alert alert-error" style={{ margin: 12, marginBottom: 0 }} role="status">
           Demann sa a refize. Ou ka{" "}
@@ -1100,7 +1069,53 @@ export default function ConsultationChatPage() {
         aria-live="polite"
         style={finished && finishedView === "docs" ? { display: "none" } : undefined}
       >
-       <div className="chat-log-inner">
+       {/* Call entry: a sticky glass card pinned over the wallpapered chat
+          (owner feedback: "not a bar but something better"). It stays
+          reachable while the conversation scrolls under it. */}
+      {canChat && justAccepted && (
+        <div className="room-call-card accent" role="status">
+          <span className="room-call-card-icon" aria-hidden>
+            <MonitorPlay size={19} />
+          </span>
+          <span className="room-call-card-body">
+            <span className="room-call-card-title">Doktè a aksepte demann lan — konsiltasyon an kòmanse!</span>
+          </span>
+          <Link href={callHref} className="btn btn-primary btn-sm">
+            Antre nan apèl videyo a
+          </Link>
+        </div>
+      )}
+      {canChat && !justAccepted && (
+        <div className="room-call-card" role="presentation">
+          <span className="room-call-card-icon" aria-hidden>
+            <MonitorPlay size={19} />
+          </span>
+          <span className="room-call-card-body">
+            <span className="room-call-card-title">Apèl videyo</span>
+            <span className="room-call-card-sub tiny">Konsiltasyon an ap dewoule nan apèl videyo a.</span>
+          </span>
+          <Link href={callHref} className="btn btn-secondary btn-sm">
+            Ouvri apèl videyo a
+          </Link>
+        </div>
+      )}
+      <div className="chat-log-inner">
+        {waiting && (
+          <div className="room-system-chip" role="status">
+            <Clock size={13} aria-hidden />
+            <span>N ap tann doktè a. Ou ap resevwa yon notifikasyon le li aksepte demann lan.</span>
+          </div>
+        )}
+        {canChat && consultation.expires_at != null && (
+          <div className="room-system-chip" role="status">
+            {/* Issue #71: calm static copy instead of a ticking countdown. The
+                deadline itself stays server-authoritative (expires_at enforced
+                by the lifecycle engine); a durable pre-expiration reminder is
+                delivered through the notification system near the end. */}
+            <ShieldCheck size={13} aria-hidden />
+            <span>Konsiltasyon sa a disponib jiska 5 èdtan apre doktè a aksepte. Istorik mesaj yo ap konsève.</span>
+          </div>
+        )}
         {messages === null && <Spinner />}
         {messages !== null && (messages ?? []).length === 0 && pending.length === 0 && (
           <div className="empty-state">
