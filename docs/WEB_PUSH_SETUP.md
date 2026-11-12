@@ -133,3 +133,32 @@ Practical consequences for this runbook:
   re-enable, no new prompt).
 - The explicit settings page (`/app/settings/notifications`) remains the
   manual enable/disable/retry path; the logout push revocation is unchanged.
+
+
+## 8. What changed in November 2026 (medication push + read-aware suppression)
+
+Two owner-requested fixes landed on top of this system:
+
+**Medication push coverage.** The full medication lifecycle now flows through
+the SAME dispatcher as consultation events — `medication:order-submitted`
+(order REQUESTED → ops admins), `medication:quoted` (→ patient),
+`medication:paid` and `medication:payment-review` (→ patient + admins),
+`medication:delivery-assigned` / `medication:delivery-update` (→ patient).
+All payloads are generic copy: no medication names, patient names or medical
+data ever leave the server. If medication pushes still do not arrive in
+production, check IN ORDER: (1) the recipient's device actually has a push
+subscription (`push_subscriptions`, `revoked_at IS NULL` — fresh patient
+devices get asked on first login by the permission bootstrap);
+(2) `VAPID_*` is configured (§2); (3) `CRON_SECRET` is set (§4) — without it
+delivery waits for SOMEONE to open the app.
+
+**Read-aware chat suppression.** A new message only suppresses the recipient's
+push when they are ACTIVELY VIEWING that exact conversation (per-connection
+`consultation:viewing` frame, membership-validated server-side) AND their
+read receipt (`POST /api/consultations/:id/read`) actually lands. Viewing
+alone arms a 30-second grace window on the queued row; a read receipt marks
+it `suppressed` (`read_in_conversation`), otherwise it dispatches normally —
+an unread message is never silently lost. Merely being online, browsing
+another page or viewing a different conversation still gets a push.
+Medication/payment/delivery/consultation lifecycle pushes are NEVER
+suppressed by connectivity or viewing state.
