@@ -1554,11 +1554,13 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   flex: 1;
   overflow-y: auto;
   padding: 18px 14px;
-  /* WhatsApp-style wallpaper: mint healthcare background with faint red
-     medical doodles. `scroll` (default) anchors it to the scroll region,
-     so messages glide over a steady backdrop. The gray-50 base stays as
-     the fallback while the image loads and behind any transparent corners. */
-  background: var(--gray-50) url("/chat-wallpaper.webp") center / cover no-repeat;
+  /* Chat wallpaper: the owner-provided mint healthcare background, used
+     as-is. `center / cover` fills the scroll region on every breakpoint —
+     mobile containers are nearly the image's native portrait aspect (whole
+     design visible), desktop containers cover-crop to the decorated middle
+     band. `scroll` (default) anchors it to the scroll region so messages
+     glide over a steady backdrop; gray-50 stays as the loading fallback. */
+  background: var(--gray-50) url("/chat-wallpaper-mint.webp") center / cover no-repeat;
   scroll-behavior: smooth;
 }
 .chat-day {
