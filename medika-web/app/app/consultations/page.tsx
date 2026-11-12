@@ -12,7 +12,7 @@ import { getConsultations } from "@/lib/api/endpoints";
 import type { Consultation } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/format";
 import { specialtyLabel } from "@/lib/labels";
-import { EmptyState, ErrorAlert, SkeletonRows, StatusBadge } from "@/components/ui/primitives";
+import { Avatar, EmptyState, ErrorAlert, SkeletonRows, StatusBadge } from "@/components/ui/primitives";
 
 type Tab = "all" | "active" | "done";
 
@@ -107,12 +107,23 @@ export default function ConsultationsPage() {
       <div className="list">
         {filtered.map((c) => (
           <Link key={c.id} href={`/app/consultations/${encodeURIComponent(c.id)}`} className="row">
-            <span className="brand-mark" aria-hidden>
-              <Stethoscope size={16} />
+            {/* Live counterpart identity: photo when the profile has one,
+                initials fallback otherwise (WhatsApp-style list row). */}
+            <span className="presence-avatar">
+              <Avatar
+                name={isDoctor ? c.patient_identity?.name ?? c.patient_name : c.doctor_identity?.name ?? null}
+                src={isDoctor ? c.patient_identity?.avatar_url : c.doctor_identity?.avatar_url}
+                size="md"
+                alt={`Foto pwofil ${isDoctor ? c.patient_identity?.name ?? c.patient_name : c.doctor_identity?.name ?? "lòt moun nan"}`}
+              />
             </span>
             <div className="row-body">
               <div className="row-title">
-                <span>{isDoctor ? c.patient_name : specialtyLabel(c.specialty_needed)}</span>
+                <span>
+                  {isDoctor
+                    ? c.patient_identity?.name ?? c.patient_name
+                    : c.doctor_identity?.name ?? specialtyLabel(c.specialty_needed)}
+                </span>
                 <StatusBadge status={c.status} />
               </div>
               <div className="row-sub">{c.description || "Pa gen deskripsyon"}</div>

@@ -48,6 +48,24 @@ export interface AuthResponse {
   user: User;
 }
 
+/**
+ * Live profile identity (owner request, Nov 2026): read from the users
+ * table at request time by the consultations API — the single source of
+ * truth. Consultation rows carry a patient_name SNAPSHOT frozen at
+ * creation; the identity fields always reflect the SAVED profile.
+ * Privacy: name/avatar/role only, plus specialty/hospital for doctors —
+ * never email/phone/biography (server-side redaction).
+ */
+export interface ParticipantIdentity {
+  id: string;
+  name: string;
+  avatar_url?: string | null;
+  role: "patient" | "doctor" | "admin";
+  /** Doctor-only fields (null for patients, enforced server-side). */
+  specialty?: string | null;
+  hospital?: string | null;
+}
+
 export interface Consultation {
   id: string;
   patient_id: string;
@@ -76,6 +94,11 @@ export interface Consultation {
    * 'pending_timeout' (bounded unanswered-request expiry). Absent/null for
    * normal transitions. */
   close_reason?: string | null;
+  /** Live profile identity of both participants (users table at request
+   *  time). Null when enrichment degraded or the participant is unassigned
+   *  (doctor pending). Clients fall back to the patient_name snapshot. */
+  patient_identity?: ParticipantIdentity | null;
+  doctor_identity?: ParticipantIdentity | null;
 }
 
 // ─── Doctor wallet (issue #24) ─────────────────────────────────────────────

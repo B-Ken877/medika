@@ -32,6 +32,7 @@ const router = express.Router();
 
 const MAX_SUBSCRIPTIONS_PER_USER = 10;
 
+
 function validateSubscription(body) {
   const endpoint = typeof body.endpoint === 'string' ? body.endpoint.trim() : '';
   const p256dh = body.keys && typeof body.keys.p256dh === 'string' ? body.keys.p256dh : '';

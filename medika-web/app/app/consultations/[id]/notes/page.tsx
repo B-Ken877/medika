@@ -159,7 +159,7 @@ export default function DoctorNotesPage() {
       <div>
         <h1 className="page-title">Nòt medikal</h1>
         <p className="muted small">
-          Pasyan: {consultation.patient_name} · {specialtyLabel(consultation.specialty_needed)}
+          Pasyan: {consultation.patient_identity?.name ?? consultation.patient_name} · {specialtyLabel(consultation.specialty_needed)}
         </p>
       </div>
 

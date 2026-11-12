@@ -16,8 +16,18 @@
  *  - VAPID unconfigured → no-op (rows stay queued; in-app unaffected).
  *
  * Triggered by GET/POST /api/crons/notification-dispatch (same authorization
- * pattern as the deadlines cron) and opportunistically after emits are
- * drained — never inline with a business response.
+ * pattern as the deadlines cron), opportunistically after a new push
+ * subscription is registered, and by AUTHENTICATED NOTIFICATION READS
+ * (throttled per process — src/routes/notifications.js): any user simply
+ * opening Medika drains due rows for EVERYONE. Concurrency-safe by design
+ * (FOR UPDATE SKIP LOCKED + stable idempotency keys), so overlapping runs
+ * are harmless. The GitHub Actions dispatcher is a latency enhancement, not
+ * a correctness dependency — without CRON_SECRET configured it silently
+ * skips and the read-drain keeps delivery moving.
+ *
+ * Rows queued with a future next_attempt_at (message grace window, see
+ * notifications/emit.js pushDelaySeconds) are claimed only once due — the
+ * read receipt has that window to suppress them (read_in_conversation).
  */
 'use strict';
 

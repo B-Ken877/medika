@@ -14,7 +14,7 @@
  * Server-side transition validation everywhere: client-supplied status
  * values are ignored; the repo validates every transition under the order
  * row lock. Notification failures can never break order creation (emit() is
- * fire-and-forget by contract).
+ * fire-and-forget by contract and never throws).
  */
 'use strict';
 
@@ -23,6 +23,7 @@ const ordersRepo = require('../repos/medication-orders');
 const medicationPayments = require('../repos/medication-payments');
 const { authenticate, requireRole } = require('../auth');
 const { query } = require('../db');
+const notifications = require('../notifications/emit');
 const simulation = require('../medication-simulation');
 
 const router = express.Router();
@@ -88,6 +89,24 @@ router.post('/consultations/:id/medication-order', authenticate, requireRole('pa
         code: 'MEDICATION_ORDER_ALREADY_EXISTS',
         existing_id: result.existing.id,
         existing_reference: result.existing.reference,
+      });
+    }
+
+    // Ops team notified (owner request: full medication push coverage) AFTER
+    // the authoritative creation commits — an order awaits their quote, so
+    // the admins are the actionable party (the patient knows they just
+    // submitted it). Generic French copy: no medication name, no patient
+    // data, no diagnosis; the deep link opens the ops panel only after
+    // authentication. Admin ids come from the users table, never from the
+    // client; each admin gets their own idempotency key (exactly once).
+    // Fire-and-forget per the emit contract: never blocks or breaks the 201.
+    const { rows: admins } = await query("SELECT id FROM users WHERE role = 'admin'");
+    for (const admin of admins) {
+      notifications.emit({
+        userId: admin.id,
+        eventType: 'medication:order-submitted',
+        idempotencyKey: `medication-order:${result.order.id}:submitted:admin:${admin.id}`,
+        ...notifications.COPY.medicationOrderSubmitted,
       });
     }
 
