@@ -1554,7 +1554,11 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   flex: 1;
   overflow-y: auto;
   padding: 18px 14px;
-  background: var(--gray-50);
+  /* WhatsApp-style wallpaper: mint healthcare background with faint red
+     medical doodles. `scroll` (default) anchors it to the scroll region,
+     so messages glide over a steady backdrop. The gray-50 base stays as
+     the fallback while the image loads and behind any transparent corners. */
+  background: var(--gray-50) url("/chat-wallpaper.webp") center / cover no-repeat;
   scroll-behavior: smooth;
 }
 .chat-day {
