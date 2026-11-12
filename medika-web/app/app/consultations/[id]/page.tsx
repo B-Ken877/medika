@@ -15,7 +15,6 @@ import {
   ArrowLeft,
   ClipboardList,
   FileText,
-  Info,
   MessagesSquare,
   MonitorPlay,
   NotebookPen,
@@ -30,7 +29,7 @@ import { getConsultation, getMessages, markConsultationRead, sendConsultationMes
 import type { Consultation, ServerMessage } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
 import { fileSizeLabel, formatDaySeparator, formatTime } from "@/lib/format";
-import { specialtyLabel, urgencyLabel } from "@/lib/labels";
+import { specialtyLabel } from "@/lib/labels";
 import { wsEventToServerMessage } from "@/lib/ws/socket";
 import { PartnerTypingTracker, TypingNotifier } from "@/lib/ws/typing";
 import { PartnerRecordingTracker, RecordingSignaler } from "@/lib/ws/recording";
@@ -1012,31 +1011,6 @@ export default function ConsultationChatPage() {
           </Link>
         </div>
       )}
-
-      {/* Context strip */}
-      <div
-        className="flex"
-        style={{
-          gap: 8,
-          padding: "10px 16px",
-          background: "var(--gray-50)",
-          borderBottom: "1px solid var(--gray-200)",
-          fontSize: "0.8rem",
-          color: "var(--text-secondary)",
-          flexWrap: "wrap",
-        }}
-      >
-        <Info size={14} aria-hidden style={{ flexShrink: 0 }} />
-        <span className="nowrap">{specialtyLabel(consultation.specialty_needed)}</span>
-        <span>·</span>
-        <span>Ijans: {urgencyLabel(consultation.urgency_level)}</span>
-        {consultation.patient_age != null && consultation.patient_age !== "" && (
-          <>
-            <span>·</span>
-            <span>{consultation.patient_age} an</span>
-          </>
-        )}
-      </div>
 
       {waiting && (
         <div className="alert alert-warning" style={{ margin: 12, marginBottom: 0 }} role="status">
