@@ -249,11 +249,11 @@
 
 /* Doctor-artwork stage — anchored to the screen's right edge (cropped there
    in the reference), fixed 4/5 aspect + radius so the artwork cannot shift
-   layout while loading. Issue #109: the stage now holds the generated
-   Medika doctor artwork; its PNG carries mint-matched feathered edges so
-   it melts into the wave field like the reference cut-out — no rectangular
-   image boundary. The stage gradient stays as the landing color for the
-   feathered rim. */
+   layout while loading. Issue #109: the stage holds the generated Medika
+   doctor artwork as a background-free cut-out (RGBA PNG, feathered rim).
+   Owner request (Nov 2026): the stage itself paints nothing — with the
+   uploaded medical-wave wallpaper behind the page, the doctor must float
+   directly on it, so the former mint landing gradient is gone. */
 .hero-art {
   position: relative;
   flex: 0 0 auto;
@@ -264,7 +264,7 @@
   aspect-ratio: 4 / 5;
   border: none;
   border-radius: 20px 0 0 0;
-  background: linear-gradient(180deg, rgba(233, 246, 239, 0) 0%, var(--pt-mint-100) 78%);
+  background: transparent;
   display: grid;
   place-items: end center;
   overflow: hidden;
