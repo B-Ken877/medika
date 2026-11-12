@@ -144,6 +144,15 @@ function AppShellInner({ children }: { children: ReactNode }) {
   const onCallPage = pathname?.startsWith("/app/consultations/") && pathname.endsWith("/call");
   const isConsultationChat =
     /^\/app\/consultations\/[^/]+$/.test(pathname ?? "");
+  // Owner request: the four main destinations (Akèy, Doktè yo, Konsiltasyon
+  // list, Pwofil) carry the uploaded mint medical-wave artwork behind their
+  // content. Exact matches only — detail routes (doctor, chat room, settings)
+  // keep their own treatments; the CSS override is patient-shell scoped.
+  const pagesWallpaper =
+    pathname === "/app" ||
+    pathname === "/app/doctors" ||
+    pathname === "/app/consultations" ||
+    pathname === "/app/profile";
 
   /**
    * Shared navigation link renderer — issue #71. Both navigation surfaces
@@ -165,7 +174,7 @@ function AppShellInner({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className={`app-shell${user.role === "patient" ? " patient-shell" : ""}${isConsultationChat ? " chat-mode" : ""}`}>
+    <div className={`app-shell${user.role === "patient" ? " patient-shell" : ""}${isConsultationChat ? " chat-mode" : ""}${pagesWallpaper ? " pages-wallpaper" : ""}`}>
       <header className="app-header">
         <Link href="/app" className="brand" aria-label="Medika — Akèy">
           <span className="brand-mark" aria-hidden>
