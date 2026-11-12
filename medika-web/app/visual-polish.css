@@ -448,7 +448,11 @@ textarea.input:focus {
   padding: 20px clamp(12px, 3vw, 24px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  background: linear-gradient(180deg, var(--gray-50) 0%, var(--surface-dim) 100%);
+  /* No background here: this file loads after globals.css, so a background
+     declared at equal specificity silently overrides the chat wallpaper
+     (globals.css .chat-log) on every page — which is exactly what the
+     previous gradient did. The wallpaper rule's gray-50 fallback covers
+     this layer's needs while the image loads. */
   scroll-behavior: smooth;
 }
 
