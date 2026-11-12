@@ -373,13 +373,18 @@
   display: none;
 }
 
-.app-shell.patient-shell .app-main {
+/* :not(.chat-mode): the consultation room hides the bottom nav entirely
+   (visual-polish .chat-mode sets .app-main padding: 0). Without this guard,
+   the rule below ties it on specificity (0,3,0) and, loading later in the
+   bundle, wins — leaving a transparent strip under the room's composer where
+   neither the wallpaper nor any surface paints (seen as a blank gap). */
+.app-shell.patient-shell:not(.chat-mode) .app-main {
   padding-bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom, 0px) + 64px);
 }
 
 @media (min-width: 900px) {
   .app-shell.patient-shell .bottom-nav { display: none; }
-  .app-shell.patient-shell .app-main { padding-bottom: 48px; }
+  .app-shell.patient-shell:not(.chat-mode) .app-main { padding-bottom: 48px; }
 }
 
 /* ── 7. Nov 2026 homepage redesign — journey + split layout ────────────────
