@@ -59,7 +59,10 @@ export function EmptyState({
   return (
     <div className="empty-state">
       {icon && <div className="empty-icon">{icon}</div>}
-      <h3>{title}</h3>
+      {/* h2: EmptyState always sits inside a page whose h1 is the page
+          title — an h3 here skipped a level (axe heading-order) and left
+          screen-reader users without a section heading. */}
+      <h2>{title}</h2>
       {description && <p>{description}</p>}
       {action}
     </div>

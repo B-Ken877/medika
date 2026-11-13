@@ -71,7 +71,7 @@
   --surface-dim: #f0f3f2;
   --text-primary: #172b3a;
   --text-secondary: #52656d;
-  --text-tertiary: #788990;
+  --text-tertiary: #5b6c74;
   --on-primary: #ffffff;
   --divider: #eaf0ee;
 
@@ -2170,7 +2170,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   align-items: center;
   justify-content: center;
 }
-.empty-state h3 { color: var(--text-primary); margin-bottom: 4px; font-size: 15px; font-weight: 600; }
+.empty-state h2 { color: var(--text-primary); margin-bottom: 4px; font-size: 15px; font-weight: 600; }
 .empty-state p { font-size: 13px; line-height: 20px; max-width: 380px; margin: 0 auto 16px; }
 
 .skeleton {
