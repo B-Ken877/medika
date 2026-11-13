@@ -21,12 +21,18 @@
  * There is intentionally NO runtime caching of HTML documents: after logout
  * nothing sensitive can resurface from Cache Storage.
  *
- * VERSION must be bumped whenever the policy changes: activation deletes
+ * VERSION must reflect the policy/content generation: activation deletes
  * every cache that does not start with it, so clients drop poisoned
  * entries on their first visit after the deploy.
+ *
+ * The VERSION value is generated at build time by
+ * scripts/build-sw-version.mjs — a content hash of every file in public/
+ * plus the sw.js policy itself (VERSION line stripped). NEVER edit it by
+ * hand: change an asset or the policy and the version bumps itself; a
+ * hand-edited value is overwritten on the next build.
  */
 
-const VERSION = "medika-v2";
+const VERSION = "medika-v924c6c23a03e";
 const STATIC_CACHE = `${VERSION}-static`;
 const PRECACHE = `${VERSION}-precache`;
 
