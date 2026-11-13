@@ -6,6 +6,9 @@
  *
  * The install banner is deliberately hidden on chat/call screens — it would
  * cover the message composer — and auto-dismisses after 15 s elsewhere.
+ * Dismissals open quiet windows (7 days for the timeout, 30 for the X,
+ * forever once installed) so the banner never re-prompts on every visit,
+ * and it never renders inside the installed standalone app.
  */
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
@@ -16,7 +19,56 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
-const INSTALL_DISMISS_KEY = "medika_install_dismissed";
+const DISMISS_UNTIL_KEY = "medika_install_dismissed_until";
+const LEGACY_DISMISS_KEY = "medika_install_dismissed";
+/**
+ * Quiet windows after a dismissal, in days. The prompt is a nudge, not a
+ * nag: explicitly closing it silences it for a month, letting it time out
+ * for a week, and installing the app silences it forever. Without these
+ * windows the banner re-appeared on every visit (owner report) and could
+ * sit over primary CTAs.
+ */
+const AUTO_DISMISS_DAYS = 7;
+const EXPLICIT_DISMISS_DAYS = 30;
+const INSTALLED_DISMISS_DAYS = 365;
+
+/** True when the app is already running as an installed PWA — the prompt
+ *  must never appear there, there is nothing left to install. */
+function isStandaloneDisplay(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia?.("(display-mode: standalone)").matches ||
+    (window.navigator as { standalone?: boolean }).standalone === true
+  );
+}
+
+/** Expiry timestamp (epoch ms) of the current quiet window, or 0 when none
+ *  is active. Migrates the legacy boolean key once: a previous explicit
+ *  dismissal becomes a 30-day window instead of blocking the prompt forever
+ *  with no expiry. */
+function dismissedUntilMs(): number {
+  try {
+    const raw = window.localStorage.getItem(DISMISS_UNTIL_KEY);
+    if (raw) return parseInt(raw, 10) || 0;
+    if (window.localStorage.getItem(LEGACY_DISMISS_KEY) === "1") {
+      const until = Date.now() + EXPLICIT_DISMISS_DAYS * 86_400_000;
+      window.localStorage.setItem(DISMISS_UNTIL_KEY, String(until));
+      window.localStorage.removeItem(LEGACY_DISMISS_KEY);
+      return until;
+    }
+  } catch {
+    // localStorage unavailable (private mode etc.) — prompt as usual.
+  }
+  return 0;
+}
+
+function quietUntil(days: number): void {
+  try {
+    window.localStorage.setItem(DISMISS_UNTIL_KEY, String(Date.now() + days * 86_400_000));
+  } catch {
+    // ignore
+  }
+}
 
 function isFullScreenInteractionPage(pathname: string | null): boolean {
   if (!pathname) return false;
@@ -62,17 +114,22 @@ export function PwaBootstrap() {
 
   useEffect(() => {
     const onPrompt = (e: Event) => {
+      // Always swallow the browser's own prompt UI, even when we decide not
+      // to show our banner — otherwise Chrome stacks its mini-infobar on top.
       e.preventDefault();
       setInstallEvent(e as BeforeInstallPromptEvent);
-      let dismissed = "0";
-      try {
-        dismissed = window.localStorage.getItem(INSTALL_DISMISS_KEY) ?? "0";
-      } catch {
-        dismissed = "0";
-      }
-      if (dismissed !== "1") setShowInstall(true);
+      // Installed PWA: nothing left to install, never ask.
+      if (isStandaloneDisplay()) return;
+      // Inside a quiet window from a previous dismissal: stay quiet.
+      if (Date.now() < dismissedUntilMs()) return;
+      setShowInstall(true);
     };
-    const onInstalled = () => setShowInstall(false);
+    const onInstalled = () => {
+      // Just installed: never prompt again (browsers still emit this after
+      // our own banner's Enstale button succeeds).
+      quietUntil(INSTALLED_DISMISS_DAYS);
+      setShowInstall(false);
+    };
     window.addEventListener("beforeinstallprompt", onPrompt);
     window.addEventListener("appinstalled", onInstalled);
     return () => {
@@ -120,20 +177,22 @@ export function PwaBootstrap() {
     return () => document.body.classList.remove("has-offline-toast");
   }, [offline]);
 
-  // Auto-dismiss the banner so it never lingers over content.
+  // Auto-dismiss the banner so it never lingers over content. Timing out is
+  // NOT an explicit refusal, but it must not re-prompt on every visit
+  // either: a one-week quiet window.
   useEffect(() => {
     if (!bannerVisible) return;
-    const t = setTimeout(() => setShowInstall(false), 15_000);
+    const t = setTimeout(() => {
+      quietUntil(AUTO_DISMISS_DAYS);
+      setShowInstall(false);
+    }, 15_000);
     return () => clearTimeout(t);
   }, [bannerVisible]);
 
   const dismissInstall = () => {
     setShowInstall(false);
-    try {
-      window.localStorage.setItem(INSTALL_DISMISS_KEY, "1");
-    } catch {
-      // ignore
-    }
+    // An explicit X is a much stronger signal than the timeout: one month.
+    quietUntil(EXPLICIT_DISMISS_DAYS);
   };
 
   return (
