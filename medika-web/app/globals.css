@@ -2368,7 +2368,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   justify-content: center;
   margin-bottom: 10px;
 }
-.tip-card h4 { font-size: 13px; margin-bottom: 4px; }
+.tip-card h3 { font-size: 13px; margin-bottom: 4px; }
 .tip-card p { font-size: 12px; line-height: 18px; color: var(--text-secondary); }
 
 /* ── Video call ─────────────────────────────────────────────────────────── */

@@ -173,7 +173,7 @@ export default function PatientDashboard() {
               <div className="journey-icon" aria-hidden>
                 <step.icon size={20} />
               </div>
-              <h4 className="journey-title">{step.title.replace(/^\d+\s·\s/, "")}</h4>
+              <h3 className="journey-title">{step.title.replace(/^\d+\s·\s/, "")}</h3>
               <p className="journey-text">{step.text}</p>
             </div>
           ))}
@@ -352,13 +352,16 @@ export default function PatientDashboard() {
         <h2 id="tips-title" className="section-title">
           Konsèy sante
         </h2>
-        <div className="tips-track" role="list">
+        {/* tabIndex: the rail scrolls horizontally — without keyboard focus
+            (axe scrollable-region-focusable) its content was unreachable by
+            keyboard alone. */}
+        <div className="tips-track" role="list" tabIndex={0} aria-label="Konsèy sante Medika">
           {HEALTH_TIPS.map((tip) => (
             <div key={tip.title} className="tip-card" role="listitem">
               <div className="tip-icon">
                 <tip.icon size={19} aria-hidden />
               </div>
-              <h4>{tip.title}</h4>
+              <h3>{tip.title}</h3>
               <p>{tip.text}</p>
             </div>
           ))}
