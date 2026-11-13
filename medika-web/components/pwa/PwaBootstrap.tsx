@@ -73,7 +73,18 @@ function quietUntil(days: number): void {
 function isFullScreenInteractionPage(pathname: string | null): boolean {
   if (!pathname) return false;
   // Chat conversations and calls: the composer must never be covered.
-  return /^\/app\/consultations\/[^/]+$/.test(pathname) || /^\/app\/tickets\/[^/]+$/.test(pathname);
+  // - /app/consultations/<id>[/call] — chat and the video-call surface
+  //   (the call subpath was missed before and the banner floated over the
+  //   mic/camera controls)
+  // - /app/tickets/<id>[/call] — same surfaces for pharmacy tickets
+  // - /app/consult — the consultation intake form: its Kontinye / payment
+  //   CTAs sit at the bottom edge exactly where the banner floats, and the
+  //   E2E run could not advance the booking without dismissing it
+  return (
+    /^\/app\/consultations\/[^/]+(\/call)?$/.test(pathname) ||
+    /^\/app\/tickets\/[^/]+(\/call)?$/.test(pathname) ||
+    /^\/app\/consult$/.test(pathname)
+  );
 }
 
 /**
