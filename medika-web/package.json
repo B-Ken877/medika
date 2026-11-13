@@ -5,6 +5,7 @@
   "description": "Medika Haiti — responsive web app (patient & doctor) as an installable PWA",
   "scripts": {
     "dev": "next dev -p 4100",
+    "prebuild": "node scripts/build-sw-version.mjs",
     "build": "next build",
     "start": "next start -p 4100",
     "lint": "next lint",
