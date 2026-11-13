@@ -2216,6 +2216,13 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   flex-direction: column;
   gap: 8px;
   width: min(92vw, 420px);
+  /* Toasts are status indicators, not interactive surfaces: the stack must
+     never swallow clicks aimed at what sits beneath it (it floats exactly
+     over bottom-edge form CTAs, and a flaky navigator.onLine report kept
+     the offline toast blocking the consultation form's Kontinye button
+     until it disappeared). Children inherit none — no toast currently
+     carries interactive controls; revisit if one ever does. */
+  pointer-events: none;
 }
 @media (min-width: 900px) { .toast-stack { bottom: 20px; } }
 .toast {
