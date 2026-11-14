@@ -141,7 +141,10 @@ function LoginForm() {
         </span>
       </header>
 
-      <section className="auth-form-pane" aria-labelledby="login-title">
+      {/* Form panel — plain div (NOT a titled <section>: a titled section is a
+          region landmark, and <main> nested inside a landmark fails
+          axe `landmark-main-is-top-level`. Same pattern as register. */}
+      <div className="auth-form-pane">
         <main className="auth-form">
           <div className="auth-form-topline">
             <span className="auth-context-pill">KONT PASYAN</span>
@@ -228,7 +231,7 @@ function LoginForm() {
           <span>Medika</span>
           <span>Swen sante pi pre w.</span>
         </footer>
-      </section>
+      </div>
     </div>
   );
 }
