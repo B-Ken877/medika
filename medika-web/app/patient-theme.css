@@ -1026,3 +1026,228 @@
   .app-shell .doc-idcard { padding: 0 24px 22px; }
   .app-shell .doc-idcard .doc-idcard-banner { margin-inline: -24px; }
 }
+
+/* ==================================================================
+   Gade profil (doctor profile) — mint clinic-card hero redesign
+   Reference layout: rounded mint hero panel with the PHOTO as the
+   anchor of the page (large centered disc, white ring, layered
+   shadow), name, specialty chip, a small stat strip, then a plain
+   "About" section and a bold dark-green consultation CTA. Every
+   value in the panel comes from the server; the layout invents none.
+   ================================================================== */
+
+.doctor-profile {
+  gap: 14px;
+}
+
+/* Hero panel — soft mint gradient card, like the reference's green plate */
+.app-shell .doctor-profile .dp-hero {
+  position: relative;
+  padding: 18px 18px 16px;
+  border-radius: 24px;
+  text-align: center;
+  overflow: hidden;
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.94) 8%,
+    #e7f3ec 62%,
+    #d9ecdf 100%
+  );
+  border: 1px solid rgba(20, 91, 80, 0.1);
+  box-shadow: 0 12px 32px rgba(16, 72, 63, 0.08);
+}
+
+/* Decorative mint glow in the top corner */
+.dp-hero::before {
+  content: "";
+  position: absolute;
+  top: -70px;
+  right: -50px;
+  width: 190px;
+  height: 190px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(25, 117, 104, 0.12), transparent 70%);
+  pointer-events: none;
+}
+
+.dp-hero-top {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+}
+
+/* Circular back button (reference uses an icon button in the panel corner) */
+.dp-back {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--green-700);
+  border: 1px solid rgba(20, 91, 80, 0.14);
+  box-shadow: 0 2px 8px rgba(16, 72, 63, 0.08);
+}
+
+.dp-back:hover {
+  background: #ffffff;
+}
+
+/* The photo is the anchor: oversized disc with a white ring and a
+   layered mint shadow so it reads as the centerpiece of the panel. */
+.dp-avatar {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.dp-avatar .avatar {
+  width: 124px;
+  height: 124px;
+  font-size: 42px;
+  border-radius: 50%;
+  border: 4px solid #ffffff;
+  box-shadow:
+    0 14px 30px -6px rgba(16, 72, 63, 0.28),
+    0 0 0 6px rgba(255, 255, 255, 0.45),
+    0 0 0 7px rgba(20, 91, 80, 0.08);
+  background: #ffffff;
+}
+
+.dp-avatar .avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dp-name {
+  position: relative;
+  z-index: 1;
+  margin-top: 14px;
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  color: var(--green-700);
+}
+
+.dp-specialty-chip {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--green-600);
+  font-size: 13px;
+  font-weight: 700;
+  border: 1px solid rgba(20, 91, 80, 0.12);
+}
+
+.dp-availability {
+  position: relative;
+  z-index: 1;
+  margin-top: 8px;
+}
+
+/* Stat strip — rating / price / verification, separated by hairlines */
+.dp-stats {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  margin-top: 14px;
+  padding: 12px 6px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(20, 91, 80, 0.1);
+}
+
+.dp-stat {
+  flex: 1;
+  min-width: 0;
+  padding: 0 6px;
+}
+
+.dp-stat + .dp-stat {
+  border-left: 1px solid rgba(20, 91, 80, 0.14);
+}
+
+.dp-stat strong {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 16px;
+  color: var(--green-700);
+  white-space: nowrap;
+}
+
+.dp-stat span {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* About — plain section on the page background, like "About Doctor" */
+.doctor-profile .dp-about {
+  padding: 2px 6px;
+}
+
+.doctor-profile .dp-about > p {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.dp-facts {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.dp-fact {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+}
+
+.dp-fact svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--green-500);
+}
+
+.dp-fact strong {
+  color: var(--text-primary);
+}
+
+/* Consultation card — prominent price + full-width dark-green CTA */
+.app-shell .doctor-profile .dp-consult {
+  border-radius: 20px;
+}
+
+.dp-consult-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dp-consult-price {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--green-700);
+}
+
