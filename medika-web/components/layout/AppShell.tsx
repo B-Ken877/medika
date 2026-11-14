@@ -15,6 +15,7 @@ import { Bell, CalendarDays, ChevronDown, Home, LogOut, Stethoscope, User, Walle
 import { useAuth } from "@/lib/auth/context";
 import { useSocket } from "@/lib/ws/socket-context";
 import { Avatar, Spinner } from "@/components/ui/primitives";
+import { initialsOf } from "@/lib/format";
 import { UnreadProvider, useUnread } from "@/components/notifications/UnreadProvider";
 
 function navItems(role: "patient" | "doctor") {
@@ -68,7 +69,9 @@ function AccountMenu() {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="Meni kont la"
+        /* Label in Name (WCAG 2.5.3): the visible initials + name must be part
+           of the accessible name, or axe `label-content-name-mismatch` fires. */
+        aria-label={`Meni kont la — ${initialsOf(user.name)} ${user.name}`}
       >
         <Avatar name={user.name} src={user.avatar_url} size="sm" alt={`Foto pwofil ${user.name}`} />
         <span className="acct-name">{user.name}</span>

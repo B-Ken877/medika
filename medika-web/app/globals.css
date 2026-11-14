@@ -71,7 +71,7 @@
   --surface-dim: #f0f3f2;
   --text-primary: #172b3a;
   --text-secondary: #52656d;
-  --text-tertiary: #788990;
+  --text-tertiary: #5c6b72; /* was #788990 — 3.63:1 on white, below the 4.5:1 WCAG AA threshold */
   --on-primary: #ffffff;
   --divider: #eaf0ee;
 
@@ -902,7 +902,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 }
 
 .auth-login-shell .auth-brand-tagline {
-  color: #6c7d78;
+  color: #55655f; /* was #6c7d78 — 4.34:1 on white, below the 4.5:1 WCAG AA threshold */
   font-size: 11px;
   line-height: 16px;
   font-weight: 500;
@@ -1123,7 +1123,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   justify-content: center;
   gap: 7px;
   margin-top: 24px;
-  color: #788982;
+  color: #5a6b64; /* was #788982 — 3.68:1, below WCAG AA */
   font-size: 11px;
   line-height: 17px;
   text-align: center;
@@ -1142,7 +1142,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   max-width: 440px;
   margin: auto auto 0;
   padding-top: 35px;
-  color: #84918c;
+  color: #5f6d68; /* was #84918c — 3.28:1, below WCAG AA */
   font-size: 10px;
   line-height: 16px;
 }
