@@ -109,7 +109,7 @@ export default function DoctorsPage() {
 
       <div className="flex" style={{ gap: 8, overflowX: "auto", paddingBottom: 4 }} role="group" aria-label="Filtre selon espesyalite">
         <button
-          className={`doc-chip ${specialty === "" ? "doc-chip-active" : ""}`}
+          className={`spec-chip ${specialty === "" ? "spec-chip-active" : ""}`}
           onClick={() => setSpecialty("")}
         >
           Tout espesyalite
@@ -117,11 +117,11 @@ export default function DoctorsPage() {
         {specialties.map((s) => (
           <button
             key={s}
-            className={`doc-chip nowrap ${specialty === s ? "doc-chip-active" : ""}`}
+            className={`spec-chip nowrap ${specialty === s ? "spec-chip-active" : ""}`}
             onClick={() => setSpecialty(specialty === s ? "" : s)}
           >
             {specialtyLabel(s)}
-            {priceOf(s) != null && <span className="doc-chip-price">· {formatCurrency(priceOf(s))}</span>}
+            {priceOf(s) != null && <span className="spec-chip-price">· {formatCurrency(priceOf(s))}</span>}
           </button>
         ))}
       </div>
