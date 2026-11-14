@@ -628,7 +628,7 @@
 }
 
 /* Specialty chips: white pills on the mint field; selected = deep green. */
-.app-shell .doc-chip {
+.app-shell .spec-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -646,22 +646,22 @@
   box-shadow: var(--pt-shadow-card);
 }
 
-.app-shell .doc-chip:hover { border-color: var(--pt-mint-200); }
+.app-shell .spec-chip:hover { border-color: var(--pt-mint-200); }
 
-.app-shell .doc-chip.doc-chip-active {
+.app-shell .spec-chip.spec-chip-active {
   background: var(--green-600);
   border-color: var(--green-600);
   color: #fff;
   box-shadow: 0 6px 16px -8px rgba(16, 72, 63, 0.55);
 }
 
-.app-shell .doc-chip .doc-chip-price {
+.app-shell .spec-chip .spec-chip-price {
   font-weight: 500;
   font-size: 11px;
   opacity: 0.78;
 }
 
-.app-shell .doc-chip.doc-chip-active .doc-chip-price { opacity: 0.9; }
+.app-shell .spec-chip.spec-chip-active .spec-chip-price { opacity: 0.9; }
 
 /* Result count line under the filters. */
 .app-shell .doc-count strong { color: var(--green-700); font-weight: 700; }
