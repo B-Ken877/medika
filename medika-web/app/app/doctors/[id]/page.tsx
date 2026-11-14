@@ -31,7 +31,6 @@ import {
   MapPin,
   MessageSquareText,
   Stethoscope,
-  Star,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
 import { getDoctor, getSpecialtyPrices } from "@/lib/api/endpoints";
@@ -137,91 +136,97 @@ export default function DoctorProfilePage() {
 
   return (
     <div className="stack doctor-profile" style={{ maxWidth: 720, margin: "0 auto" }}>
-      <Link href="/app/doctors" className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start" }}>
-        <ArrowLeft size={16} aria-hidden /> Lis doktè yo
-      </Link>
+      {/* Identity hero — mint clinic-card panel, centered like the reference
+          design: circular back button, large photo, name, specialty chip and a
+          stat strip grounded in server data only. */}
+      <section className="dp-hero" aria-labelledby="dp-name">
+        <div className="dp-hero-top">
+          <Link href="/app/doctors" className="dp-back" aria-label="Retounen sou lis doktè yo">
+            <ArrowLeft size={18} aria-hidden />
+          </Link>
+          {doctor.verification_status === "verified" && <VerifiedBadge />}
+        </div>
 
-      {/* Identity header — premium banner card: deep-green gradient stage with
-          the avatar overlapping it (mint double ring), identity + chips below. */}
-      <section className="doc-idcard" aria-label={`Pwofil ${doctor.name}`}>
-        <div className="doc-idcard-banner" aria-hidden />
-        <div className="doc-idcard-head">
+        <div className="dp-avatar">
           <Avatar
             name={doctor.name}
             src={doctor.avatar_url}
             size="lg"
             alt={`Foto pwofil ${doctor.name}`}
           />
-          <div className="doc-idcard-id">
-            <h1 className="doc-idcard-name">
-              <span>{doctor.name}</span>
-              {doctor.verification_status === "verified" && <VerifiedBadge />}
-            </h1>
-            <div className="doc-idcard-spec">
-              {doctor.specialty ? specialtyLabel(doctor.specialty) : "Medsin Jeneral"}
-            </div>
-          </div>
         </div>
-        <div className="doc-idcard-chips">
+
+        <h1 id="dp-name" className="dp-name">{doctor.name}</h1>
+
+        <div className="dp-specialty-chip">
+          <Stethoscope size={14} aria-hidden />
+          {doctor.specialty ? specialtyLabel(doctor.specialty) : "Medsin Jeneral"}
+        </div>
+
+        <div className="dp-availability">
           {doctor.is_available === 1 ? (
-            <span className="doc-status doc-status-on">
-              <span className="doc-status-dot" aria-hidden /> Disponib
-            </span>
+            <span className="badge badge-green">Disponib kounye a</span>
           ) : (
-            <span className="doc-status doc-status-off">
-              <span className="doc-status-dot" aria-hidden /> Pa disponib
-            </span>
+            <span className="badge badge-gray">Pa disponib kounye a</span>
           )}
-          {doctor.rating != null && (
-            <span className="doc-rating" title="Nòt mwayèn">
-              <Star size={13} aria-hidden /> {Number(doctor.rating).toFixed(1)}
-            </span>
+        </div>
+
+        {/* Stat strip — every value comes from the server. A doctor nobody has
+            rated yet reads "Nouvo" (no fabricated stars), an unknown price
+            reads "Sou demann". */}
+        <div className="dp-stats">
+          <div className="dp-stat">
+            <strong>{doctor.rating != null ? Number(doctor.rating).toFixed(1) : "Nouvo"}</strong>
+            <span>{doctor.rating != null ? "Nòt mwayèn" : "Pa gen nòt ankò"}</span>
+          </div>
+          <div className="dp-stat">
+            <strong>{price != null ? formatCurrency(price) : "Sou demann"}</strong>
+            <span>Pri konsiltasyon</span>
+          </div>
+          {doctor.verification_status === "verified" && (
+            <div className="dp-stat">
+              <strong>Verifye</strong>
+              <span>Kredansyèl revize</span>
+            </div>
           )}
         </div>
       </section>
 
-      {/* Professional background — only what the server actually has.
-          Nothing is invented; missing optional fields are omitted. */}
+      {/* About — plain section under the hero. Only what the server actually
+          has; missing optional fields are omitted. */}
       {(doctor.biography || doctor.hospital || doctor.license_number || doctor.location) && (
-        <section className="card doc-section" aria-labelledby="bg-title">
+        <section className="dp-about" aria-labelledby="bg-title">
           <h2 id="bg-title" className="section-title">
-            <Stethoscope size={16} aria-hidden /> Kouch profesional
+            <Stethoscope size={16} aria-hidden /> Sou doktè a
           </h2>
 
-          {doctor.biography && <p className="doc-bio" style={{ whiteSpace: "pre-line" }}>{doctor.biography}</p>}
+          {doctor.biography && <p style={{ whiteSpace: "pre-line" }}>{doctor.biography}</p>}
 
-          <div className="doc-facts">
+          <div className="dp-facts">
             {doctor.hospital && (
-              <div className="doc-fact">
-                <span className="doc-fact-icon"><MapPin size={17} aria-hidden /></span>
-                <span className="doc-fact-text">
-                  <span className="doc-fact-label">Lopital</span>
-                  <span className="doc-fact-value">{doctor.hospital}</span>
-                </span>
+              <div className="dp-fact">
+                <MapPin size={15} aria-hidden />
+                <span>{doctor.hospital}</span>
               </div>
             )}
             {doctor.license_number && (
-              <div className="doc-fact">
-                <span className="doc-fact-icon"><Award size={17} aria-hidden /></span>
-                <span className="doc-fact-text">
-                  <span className="doc-fact-label">Lisans MSPP</span>
-                  <span className="doc-fact-value">{doctor.license_number}</span>
+              <div className="dp-fact">
+                <Award size={15} aria-hidden />
+                <span>
+                  Nimewo lisans: <strong>{doctor.license_number}</strong>
                 </span>
               </div>
             )}
             {doctor.location && (
-              <div className="doc-fact">
-                <span className="doc-fact-icon"><Clock size={17} aria-hidden /></span>
-                <span className="doc-fact-text">
-                  <span className="doc-fact-label">Kote</span>
-                  <span className="doc-fact-value">{doctor.location}</span>
-                </span>
+              <div className="dp-fact">
+                <Clock size={15} aria-hidden />
+                <span>{doctor.location}</span>
               </div>
             )}
           </div>
 
           {doctor.verification_status === "verified" && doctor.verified_at != null && (
-            <p className="tiny muted" style={{ marginTop: 12 }}>
+            <p className="tiny muted" style={{ marginTop: 10 }}>
               <VerifiedBadge compact /> Idantite ak kredansyèl doktè sa a fin revize pa ekip Medika a.
             </p>
           )}
@@ -229,27 +234,23 @@ export default function DoctorProfilePage() {
       )}
 
       {/* Price + continuation */}
-      <section className="card doc-section" aria-labelledby="price-title">
+      <section className="card dp-consult" aria-labelledby="price-title">
         <h2 id="price-title" className="section-title">
           <CalendarCheck size={16} aria-hidden /> Konsiltasyon
         </h2>
-        <div className="doc-price-row">
-          <div>
-            <span className="doc-price-label">Pri konsiltasyon</span>
-            {price != null ? (
-              <div className="doc-price-big">{formatCurrency(price)}</div>
-            ) : (
-              <div className="doc-price-missing">
-                Pou konnen pri egzak konsiltasyon an, kontinye ak demann lan.
-              </div>
-            )}
-          </div>
-          <span className="doc-specialty-chip">
-            {doctor.specialty ? specialtyLabel(doctor.specialty) : "Medsin Jeneral"}
+        <div className="dp-consult-row">
+          <span className="muted">
+            Espesyalite: {doctor.specialty ? specialtyLabel(doctor.specialty) : "Medsin Jeneral"}
           </span>
+          {price != null && (
+            <strong className="dp-consult-price">{formatCurrency(price)}</strong>
+          )}
         </div>
-        <p className="doc-note">
-          <MessageSquareText size={14} aria-hidden /> Avan peman an, w ap dekri sentòm ou epi chwazi nivo ijans yo.
+        {price == null && (
+          <p className="tiny muted">Pou konnen pri egzak konsiltasyon an, kontinye ak demann lan.</p>
+        )}
+        <p className="tiny muted" style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 8 }}>
+          <MessageSquareText size={13} aria-hidden /> Avan peman an, w ap dekri sentòm ou epi chwazi nivo ijans yo.
         </p>
         {/* Issue #40: arriving from the consult flow (a live draft exists) the
             CTA CONTINUES that consultation — resume=1 restores the intake and
@@ -261,7 +262,7 @@ export default function DoctorProfilePage() {
               ? `/app/consult?doctor=${encodeURIComponent(doctor.id)}&resume=1`
               : `/app/consult?doctor=${encodeURIComponent(doctor.id)}`
           }
-          className="btn btn-primary btn-block btn-lg doc-continue"
+          className="btn btn-primary btn-block btn-lg mt-2"
         >
           {resumeFromConsult ? "Kontinye konsiltasyon an" : "Kòmanse konsiltasyon ak doktè sa a"}{" "}
           <ChevronRight size={16} aria-hidden />
