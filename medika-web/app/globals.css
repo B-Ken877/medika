@@ -3019,3 +3019,129 @@ body.has-perm-card .app-main { padding-bottom: calc(var(--bottomnav-h) + 110px);
   /* Small brand chips keep their exact ink (text colors already print). */
   .ordonnance-doc * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ── Auth screens: premium-mint polish (Nov 2026 round) ───────────────────
+   The institutional palette stays untouched; this round brings the auth
+   pages into the same visual language as the authenticated app ("Premium
+   Mint"): warm wash, flowing mint field, refined surfaces and motion.
+   Purely additive rules — the flex layout system and markup contracts of
+   issues #14/#43 are unchanged. */
+
+/* Shared shell: warm white → light mint vertical wash instead of flat #fff
+   (register shows it around the centered form; login desktop pans keep
+   painting over it, which is fine). */
+.auth-login-shell,
+.auth-register-shell {
+  background: linear-gradient(180deg, #fdfffe 0%, #f7fbf9 52%, #f1f8f4 100%);
+  position: relative;
+  isolation: isolate;
+}
+
+/* Flowing mint field, fixed and non-interactive — the same decorative
+   language as the app shell's ::after field. */
+.auth-login-shell::before,
+.auth-register-shell::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(52rem 38rem at 112% -8%, rgba(166, 240, 201, 0.26), transparent 58%),
+    radial-gradient(44rem 32rem at -16% 92%, rgba(166, 240, 201, 0.16), transparent 56%);
+}
+
+/* Mobile (≤639px): the form pane carries the field itself — soft mint
+   radials over the warm wash. Tablet/desktop keep their existing card and
+   split-screen treatments untouched. */
+@media (max-width: 639px) {
+  .auth-login-shell .auth-form-pane,
+  .auth-register-shell .auth-form-pane {
+    background:
+      radial-gradient(38rem 26rem at 116% -6%, rgba(166, 240, 201, 0.22), transparent 60%),
+      radial-gradient(30rem 22rem at -14% 96%, rgba(166, 240, 201, 0.16), transparent 58%),
+      linear-gradient(180deg, #fdfffe 0%, #f6fbf8 100%);
+  }
+}
+
+/* Glass-tinted mobile brand bar. */
+.auth-login-shell .auth-mobile-brand,
+.auth-register-shell .auth-mobile-brand {
+  background: rgba(253, 255, 254, 0.9);
+  border-bottom-color: var(--brand-pill-border);
+}
+
+/* Inputs and selects: softer corners, tinted surface, gentle hover. */
+.auth-login-shell .auth-form .input,
+.auth-register-shell .auth-form .input,
+.auth-register-shell .auth-form .select {
+  border-radius: 12px;
+  background: var(--brand-input-bg);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.auth-login-shell .auth-form .input:hover:not(:focus):not([aria-invalid="true"]),
+.auth-register-shell .auth-form .input:hover:not(:focus):not([aria-invalid="true"]),
+.auth-register-shell .auth-form .select:hover:not(:focus) {
+  border-color: var(--brand-input-border);
+  box-shadow: 0 1px 4px rgba(23, 43, 58, 0.05);
+}
+
+/* Native select: custom mint-green chevron, no browser chrome. */
+.auth-register-shell .auth-form .select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 42px;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23197568' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 15px center;
+}
+
+/* Submit CTAs: quiet lift on hover (motion-gated). */
+@media (prefers-reduced-motion: no-preference) {
+  .auth-login-shell .auth-submit:hover:not(:disabled),
+  .auth-register-shell .auth-submit:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 26px -12px rgba(7, 90, 72, 0.6);
+  }
+  .auth-login-shell .auth-submit:active:not(:disabled),
+  .auth-register-shell .auth-submit:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: none;
+  }
+}
+
+/* Context pill reads as a soft mint capsule. */
+.auth-login-shell .auth-context-pill,
+.auth-register-shell .auth-context-pill {
+  border-radius: var(--radius-full);
+}
+
+/* Registration section headers: mint accent bar on the divider. */
+.auth-register-shell .form-section-title {
+  position: relative;
+}
+
+.auth-register-shell .form-section-title::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 44px;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--green-500), var(--brand-mint));
+}
+
+/* Calm entrance for the form content (motion-gated globally already). */
+@media (prefers-reduced-motion: no-preference) {
+  .auth-login-shell .auth-form,
+  .auth-register-shell .auth-form {
+    animation: auth-form-rise 0.45s cubic-bezier(0.22, 0.8, 0.36, 1) both;
+  }
+}
+
+@keyframes auth-form-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
