@@ -94,6 +94,10 @@ export interface Consultation {
    * 'pending_timeout' (bounded unanswered-request expiry). Absent/null for
    * normal transitions. */
   close_reason?: string | null;
+  /** Which intake path produced it (migration 016): 'SELF' = the patient
+   * filled the symptom form; 'CALL_CENTER' = express agent call — the
+   * patient typed nothing and is waiting in the voice call screen. */
+  channel?: "SELF" | "CALL_CENTER" | string;
   /** Live profile identity of both participants (users table at request
    *  time). Null when enrichment degraded or the participant is unassigned
    *  (doctor pending). Clients fall back to the patient_name snapshot. */

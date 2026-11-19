@@ -30,7 +30,9 @@ describe("doctor profile page (issue #30)", () => {
     expect(page).toMatch(/\{doctor\.biography && /);
     expect(page).toMatch(/\{doctor\.hospital && /);
     expect(page).toMatch(/\{doctor\.license_number && /);
-    expect(page).toMatch(/\{doctor\.rating != null && /);
+    // Rating: conditional render (&&) or an honest ternary ("Nouvo" /
+    // "Pa gen nòt ankò" when the server has no rating yet — no fabrication).
+    expect(page).toMatch(/\{doctor\.rating != null (\?|&&)/);
   });
 
   it("shows the verified badge only for the explicit server status", () => {

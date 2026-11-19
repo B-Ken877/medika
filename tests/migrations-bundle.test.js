@@ -32,11 +32,11 @@ describe('db/migrations-bundle.js', () => {
     }
   });
 
-  it('keys sort so that migrations apply in filename order (001 → 015)', () => {
+  it('keys sort so that migrations apply in filename order (001 → 016)', () => {
     const names = Object.keys(bundle);
     const sorted = [...names].sort();
     expect(names).toEqual(sorted);
     expect(names[0]).toMatch(/^001_/);
-    expect(names[names.length - 1]).toMatch(/^015_/);
+    expect(names[names.length - 1]).toMatch(/^016_/);
   });
 });

@@ -32,7 +32,7 @@
  * hand-edited value is overwritten on the next build.
  */
 
-const VERSION = "medika-v924c6c23a03e";
+const VERSION = "medika-v748f7b7241f8";
 const STATIC_CACHE = `${VERSION}-static`;
 const PRECACHE = `${VERSION}-precache`;
 

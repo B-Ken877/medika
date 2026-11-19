@@ -138,6 +138,24 @@ export function getConsultations(token: string, signal?: AbortSignal) {
   return apiFetch<Consultation[]>("/api/consultations", { token, signal });
 }
 
+/**
+ * Express call-center request: the patient supplies NOTHING (no body). The
+ * backend creates the consultation on the Medecine Generale defaults with
+ * channel='CALL_CENTER' and routes it to the on-duty agent; the caller then
+ * opens /app/consultations/<id>/call?mode=voice and waits for the agent to
+ * pick up. A 409 means the patient already has an active consultation
+ * (existing_id points at it).
+ */
+export function createCallCenterConsultation(token: string, signal?: AbortSignal) {
+  return apiFetch<Consultation>("/api/consultations/call-center", {
+    method: "POST",
+    body: {},
+    token,
+    signal,
+    timeoutMs: 25_000,
+  });
+}
+
 export function getConsultation(token: string, id: string, signal?: AbortSignal) {
   return apiFetch<Consultation | null>(`/api/consultations/${encodeURIComponent(id)}`, {
     token,

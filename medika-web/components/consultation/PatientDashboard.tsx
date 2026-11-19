@@ -19,7 +19,6 @@ import {
   MessageSquareHeart,
   Moon,
   Pill,
-  Plus,
   Salad,
   Stethoscope,
   Sun,
@@ -32,6 +31,7 @@ import type { Consultation } from "@/lib/api/types";
 import { relativeTime } from "@/lib/format";
 import { specialtyLabel } from "@/lib/labels";
 import { EmptyState, ErrorAlert, SkeletonRows, StatusBadge } from "@/components/ui/primitives";
+import StartConsultation from "@/components/consultation/StartConsultation";
 
 const HEALTH_TIPS: { icon: typeof Droplets; title: string; text: string }[] = [
   { icon: Droplets, title: "Bwè dlo", text: "Bwè omwen 8 vè dlo chak jou pou w kenbe kò w anfòm." },
@@ -143,13 +143,14 @@ export default function PatientDashboard() {
         </div>
       </section>
 
-      {/* Primary actions — full-width row directly below the hero: the main
-          consult CTA plus a secondary link to the consultation history so a
+      {/* Primary actions — full-width row directly below the hero. The main
+          consult CTA is a BUTTON, not a link: the first click opens the
+          two-option chooser (call-center agent call vs the manual intake
+          form); the call-center option never asks the patient for anything.
+          Secondary link to the consultation history (main, Nov 2026) so a
           returning patient can resume immediately. */}
       <div className="page-head-actions home-cta-row">
-        <Link href="/app/consult" className="btn btn-primary">
-          <Plus size={18} aria-hidden /> Kòmanse yon konsiltasyon
-        </Link>
+        <StartConsultation />
         {counts.total > 0 && (
           <Link href="/app/consultations" className="btn btn-ghost">
             <CalendarCheck size={17} aria-hidden /> Konsiltasyon mwen yo
@@ -310,9 +311,7 @@ export default function PatientDashboard() {
               title="Ou poko gen okenn konsiltasyon."
               description="Di nou sa w ap santi pou w kòmanse premye konsiltasyon ou ak yon doktè."
               action={
-                <Link href="/app/consult" className="btn btn-primary">
-                  <Plus size={16} aria-hidden /> Kòmanse yon konsiltasyon
-                </Link>
+                <StartConsultation compact />
               }
             />
           </div>

@@ -267,6 +267,114 @@ router.post('/consultations', authenticate, requireRole('patient'), async (req, 
   }
 });
 
+// ─── POST /api/consultations/call-center ─────────────────────────────────────
+//
+// Express "call center agent" intake (the New-consultation chooser). The
+// patient supplies NOTHING: no description, no specialty, no payment fields —
+// the request body is ignored entirely. The consultation is created on the
+// Medecine Generale defaults with channel='CALL_CENTER' (migration 016) and
+// enters the SAME doctor-routing queue as a regular request: the on-duty
+// call-center agent (a verified doctor account staffing the center) receives
+// the targeted offer and accepts it like any other consultation. Meanwhile
+// the patient is already sitting in the voice call screen
+// (/app/consultations/<id>/call?mode=voice), which calmly polls until the
+// token endpoint authorizes the session on EN_COURS.
+//
+// Payment is intentionally NOT gated here (unlike the manual path): a
+// payment wall between the patient and the agent would contradict the
+// zero-input contract of this flow. The conversation with the agent is the
+// billing context; channel='CALL_CENTER' keeps these rows distinguishable.
+router.post('/consultations/call-center', authenticate, requireRole('patient'), async (req, res, next) => {
+  try {
+    const id = 'cons_' + uuidv4().substring(0, 8);
+    const patient = await usersRepo.findById(req.user.id);
+    if (!patient) return res.status(401).json({ error: 'Invalid token' });
+
+    // Same one-active invariant as the manual path (issue #60) — a patient
+    // with an open consultation is pointed back to it, never double-booked.
+    const existingActive = await consultationsRepo.findActiveForPatient(req.user.id);
+    if (existingActive) {
+      return res.status(409).json({
+        error: 'Ou gen deja yon konsiltasyon aktif. Fini oswa tann li anvan w kreye yon lòt.',
+        existing_id: existingActive.id,
+        existing_status: existingActive.status,
+      });
+    }
+
+    let consultation;
+    try {
+      consultation = await consultationsRepo.create({
+        id,
+        patient_id: req.user.id,
+        patient_name: patient.name,
+        description: '',
+        specialty_needed: 'Medecine Generale',
+        urgency_level: 'Moyenne',
+        channel: 'CALL_CENTER',
+      });
+    } catch (err) {
+      // The partial unique indexes are the authoritative referee (issue #60):
+      // a concurrent creation won the patient's slot between the pre-check
+      // and this INSERT — typed 409, never a 500.
+      if (err && err.code === '23505' && err.constraint_scope === 'patient') {
+        const winner = await consultationsRepo.findActiveForPatient(req.user.id);
+        if (winner) {
+          return res.status(409).json({
+            error: 'Ou gen deja yon konsiltasyon aktif. Fini oswa tann li anvan w kreye yon lòt.',
+            existing_id: winner.id,
+            existing_status: winner.status,
+          });
+        }
+      }
+      throw err;
+    }
+
+    // Same post-commit routing contract as the manual path (issue #79): a
+    // routing failure must NEVER turn the persisted call request into a 500 —
+    // fall back to the waiting state, which the deadline processor retries on
+    // every list read, and still return the honest 201.
+    let routed;
+    try {
+      routed = await lifecycle.routeNewConsultation(consultation, { patientChoiceDoctorId: null });
+    } catch (routingErr) {
+      console.error('[consultations] call-center routing failed:', id, routingErr.code || routingErr.constructor?.name);
+      try {
+        routed = await lifecycle.parkInWaiting(id);
+      } catch (parkErr) {
+        console.error('[consultations] call-center waiting fallback failed:', id, parkErr.code || parkErr.constructor?.name);
+        routed = { consultation, waiting: true, events: [] };
+      }
+    }
+
+    const api = consultationsRepo.consToApi(routed.consultation);
+    const hub = req.app.locals.hub;
+    if (hub) {
+      const newNotif = { type: 'consultation:new', id, patientName: patient.name, description: '', specialtyNeeded: 'Medecine Generale', urgencyLevel: 'Moyenne' };
+      hub.publishToUser(req.user.id, newNotif);
+      // Targeted offer — goes ONLY to the committed offer holder (the agent
+      // on duty), exactly like the manual path.
+      if (routed.offeredTo) hub.publishToUser(routed.offeredTo.id, newNotif);
+    }
+    notifications.emit({
+      userId: req.user.id,
+      eventType: 'consultation:submitted',
+      idempotencyKey: `consultation:${id}:submitted`,
+      ...notifications.COPY.consultationSubmitted,
+    });
+    if (routed.offeredTo) {
+      notifications.emit({
+        userId: routed.offeredTo.id,
+        eventType: 'consultation:offer',
+        idempotencyKey: `consultation:${id}:offer:${routed.offeredTo.id}`,
+        ...notifications.COPY.consultationOffer,
+      });
+    }
+    res.status(201).json(api);
+  } catch (err) {
+    next(err);
+  }
+});
+
 /**
  * Resolve + verify a payment for consultation creation.
  * Order of operations mirrors the Android flow (orderId authoritative, with
