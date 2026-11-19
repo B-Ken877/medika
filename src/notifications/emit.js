@@ -28,6 +28,9 @@
 const { query } = require('../db');
 
 const CATEGORY_FOR_EVENT = {
+  // Agent operations (contact center).
+  'agent:assignment': 'consultations',
+  'assist:connected': 'consultations',
   'consultation:submitted': 'consultations',
   'consultation:offer': 'consultations',
   'consultation:accepted': 'consultations',
@@ -138,6 +141,18 @@ async function emit({ userId, eventType, idempotencyKey, title, body, url = null
 // ─── Privacy-safe copy (Haitian Creole, generic — no medical data) ──────────
 
 const COPY = {
+  // Agent operations: a patient is waiting and the offer went to THIS agent.
+  agentAssignment: {
+    title: 'Medika — Ajan',
+    body: 'Yon pasyan ap chèche èd. Aksepte demann an nan espas ajan ou.',
+    url: '/app/agent',
+  },
+  // Patient: an agent accepted — the audio connection is ready.
+  patientConnected: {
+    title: 'Medika',
+    body: 'Yon ajan Medika reponn ou. Konekte kounye a nan aplikasyon an.',
+    url: '/app/assist',
+  },
   // Patient: request submitted / waiting.
   consultationSubmitted: {
     title: 'Medika',

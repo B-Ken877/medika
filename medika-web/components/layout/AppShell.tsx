@@ -11,7 +11,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Bell, CalendarDays, ChevronDown, Home, LogOut, Stethoscope, User, Wallet } from "lucide-react";
+import { Bell, CalendarDays, ChevronDown, Home, LogOut, Phone, Stethoscope, User, Wallet } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
 import { useSocket } from "@/lib/ws/socket-context";
 import { Avatar, Spinner } from "@/components/ui/primitives";
@@ -19,7 +19,7 @@ import { initialsOf } from "@/lib/format";
 import { UnreadProvider, useUnread } from "@/components/notifications/UnreadProvider";
 import { PermissionBootstrap } from "@/components/pwa/PermissionBootstrap";
 
-function navItems(role: "patient" | "doctor") {
+function navItems(role: "patient" | "doctor" | "agent") {
   if (role === "doctor") {
     // Issue #34: concise one-line labels — five destinations must fit cleanly
     // on narrow phones (no wrapping inside the fixed bottom bar).
@@ -28,6 +28,18 @@ function navItems(role: "patient" | "doctor") {
       { href: "/app/consultations", label: "Demann", icon: CalendarDays },
       { href: "/app/wallet", label: "Revni", icon: Wallet },
       { href: "/app/notifications", label: "Alèt", icon: Bell },
+      { href: "/app/profile", label: "Pwofil", icon: User },
+    ];
+  }
+
+  if (role === "agent") {
+    // Contact-center roles (agent / agent_supervisor / admin): the operational
+    // workspace is the product for them (brief #17). Kept AFTER the doctor and
+    // patient branches — source-contract tests slice the first two returns.
+    return [
+      { href: "/app/agent", label: "Espas", icon: Home, exact: true },
+      { href: "/app/agent/callbacks", label: "Callbacks", icon: Phone },
+      { href: "/app/agent/ops", label: "Superviz", icon: Bell },
       { href: "/app/profile", label: "Pwofil", icon: User },
     ];
   }
@@ -143,7 +155,11 @@ function AppShellInner({ children }: { children: ReactNode }) {
     );
   }
 
-  const items = navItems(user.role === "doctor" ? "doctor" : "patient");
+  const items = navItems(
+    user.role === "doctor" ? "doctor"
+      : ["agent", "agent_supervisor", "admin"].includes(user.role) ? "agent"
+      : "patient",
+  );
   const onCallPage = pathname?.startsWith("/app/consultations/") && pathname.endsWith("/call");
   const isConsultationChat =
     /^\/app\/consultations\/[^/]+$/.test(pathname ?? "");
