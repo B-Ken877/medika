@@ -165,6 +165,10 @@ function CallScreen() {
       for (let poll = 0; ; poll++) {
         if (disposed || endedRef.current) return;
         let status: string | null = null;
+        // Call-center express calls (channel='CALL_CENTER', migration 014):
+        // the patient typed NOTHING and is waiting for the on-duty AGENT to
+        // pick up — the waiting copy says so, never "waiting for a doctor".
+        let callCenter = false;
         let hardFailure: string | null = null;
         try {
           const c = await getConsultation(token, consultationId);
@@ -174,6 +178,7 @@ function CallScreen() {
               "Nou pa jwenn konsiltasyon sa a, oswa ou pa gen aksè pou w fè apèl la.";
           } else {
             status = c.status;
+            callCenter = c.channel === "CALL_CENTER";
           }
         } catch (err) {
           if (disposed || endedRef.current) return;
@@ -204,7 +209,9 @@ function CallScreen() {
         dispatch({ type: "waiting-for-eligibility" });
         setStatusText(
           status === "RECHERCHE_MEDECIN"
-            ? "N ap tann doktè a konekte…"
+            ? callCenter
+              ? "N ap rele ajant sant apèl la…"
+              : "N ap tann doktè a konekte…"
             : "N ap tann enfòmasyon konsiltasyon an…",
         );
         if (poll + 1 >= MAX_ELIGIBILITY_ATTEMPTS) {
@@ -213,7 +220,9 @@ function CallScreen() {
           // that will connect the moment the server allows it).
           dispatch({ type: "connect-failed", kind: "generic" });
           setStatusText(
-            "Doktè a poko aksepte konsiltasyon an. Ou ka tann isit la ankò oswa retounen nan konvèsasyon an.",
+            callCenter
+              ? "Ajan an poko reponn apèl la. Ou ka tann isit la ankò oswa retounen nan konvèsasyon an."
+              : "Doktè a poko aksepte konsiltasyon an. Ou ka tann isit la ankò oswa retounen nan konvèsasyon an.",
           );
           return;
         }

@@ -1,0 +1,15 @@
+-- Issue: "New consultation → call center agent" express flow.
+--
+-- Records WHICH path produced a consultation:
+--   'SELF'        — the patient filled the symptom-intake form themselves
+--                   (the manual process, unchanged).
+--   'CALL_CENTER' — created by POST /api/consultations/call-center: the
+--                   patient typed NOTHING (no description, no specialty, no
+--                   payment). The request enters the same doctor-routing
+--                   queue — the on-duty call-center agent (a verified doctor
+--                   account) accepts it like any other offer — and the
+--                   patient is already waiting in the voice call screen.
+--
+-- Additive and defaulted: every pre-existing row is 'SELF', so the manual
+-- flow, the routing engine and all existing clients are untouched.
+ALTER TABLE consultations ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'SELF';

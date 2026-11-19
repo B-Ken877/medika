@@ -33,6 +33,10 @@ function consToApi(row) {
     // 'pending_timeout' (bounded unanswered-request expiry). NULL for every
     // normal transition and all legacy rows. Additive; older clients ignore it.
     close_reason: row.close_reason ?? null,
+    // Which intake path produced the consultation (migration 014):
+    // 'SELF' = patient-typed form, 'CALL_CENTER' = express agent call
+    // (patient typed nothing). Additive; older clients ignore it.
+    channel: row.channel ?? 'SELF',
     created_at: toEpoch(row.created_at),
     updated_at: toEpoch(row.updated_at),
     // Lifecycle deadlines (issue #25, additive). offer_deadline = acceptance
@@ -97,17 +101,18 @@ const DOCTOR_LIST_LEGACY_SQL = `SELECT * FROM consultations
  *  wasteful; the flag flips only when the schema is actually missing). */
 let doctorListSchemaDrifted = false;
 
-async function create({ id, patient_id, patient_name, patient_age, doctor_id, description, specialty_needed, urgency_level, ai_summary, ai_explanation }) {
+async function create({ id, patient_id, patient_name, patient_age, doctor_id, description, specialty_needed, urgency_level, ai_summary, ai_explanation, channel }) {
   try {
     const { rows } = await query(
       `INSERT INTO consultations
          (id, patient_id, patient_name, patient_age, doctor_id, description,
-          specialty_needed, urgency_level, ai_summary, ai_explanation, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'RECHERCHE_MEDECIN')
+          specialty_needed, urgency_level, ai_summary, ai_explanation, channel, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'RECHERCHE_MEDECIN')
        RETURNING *`,
       [id, patient_id, patient_name, patient_age ?? null, doctor_id ?? null,
        description || '', specialty_needed || 'Medecine Generale',
-       urgency_level || 'Moyenne', ai_summary || '', ai_explanation || '']
+       urgency_level || 'Moyenne', ai_summary || '', ai_explanation || '',
+       channel || 'SELF']
     );
     return rows[0];
   } catch (err) {

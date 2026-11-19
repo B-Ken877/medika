@@ -368,10 +368,19 @@ describe('issue #82 — assignment rules', () => {
     expect(res.body.success).toBe(true);
 
     // Patient was notified (generic French copy, no medical content).
-    const notifs = await db.query(
-      `SELECT body FROM notifications WHERE user_id = $1 AND event_type = 'medication:delivery-assigned'`,
-      [patient.id]
-    );
+    // The delivery-assigned notification is emitted asynchronously after the
+    // assignment commits — under a fully loaded suite (a 44th concurrent test
+    // file is enough) a single-shot read can race the emit. Poll briefly for
+    // the notification to land, then keep the STRICT assertions below.
+    let notifs;
+    for (let waited = 0; ; waited += 250) {
+      notifs = await db.query(
+        `SELECT body FROM notifications WHERE user_id = $1 AND event_type = 'medication:delivery-assigned'`,
+        [patient.id]
+      );
+      if (notifs.rows.length > 0 || waited >= 5000) break;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
     expect(notifs.rows.length).toBe(1);
     expect(notifs.rows[0].body).toMatch(/vendredi/i);
     expect(notifs.rows[0].body).not.toMatch(/Parac|Ibupro|douleur/i);

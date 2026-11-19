@@ -17,7 +17,6 @@ import {
   FolderOpen,
   HeartPulse,
   Moon,
-  Plus,
   Salad,
   Stethoscope,
   Sun,
@@ -29,6 +28,7 @@ import type { Consultation } from "@/lib/api/types";
 import { relativeTime } from "@/lib/format";
 import { specialtyLabel } from "@/lib/labels";
 import { EmptyState, ErrorAlert, SkeletonRows, StatusBadge } from "@/components/ui/primitives";
+import StartConsultation from "@/components/consultation/StartConsultation";
 
 const HEALTH_TIPS: { icon: typeof Droplets; title: string; text: string }[] = [
   { icon: Droplets, title: "Bwè dlo", text: "Bwè omwen 8 vè dlo chak jou pou w kenbe kò w anfòm." },
@@ -119,11 +119,12 @@ export default function PatientDashboard() {
       </section>
 
       {/* Primary action — full-width, single-line, directly below the hero
-          (approved reference composition). Same destination/behavior. */}
+          (approved reference composition). It is a BUTTON, not a link: the
+          first click opens the two-option chooser (call-center agent call vs
+          the manual intake form); the call-center option never asks the
+          patient for anything. */}
       <div className="page-head-actions home-cta-row">
-        <Link href="/app/consult" className="btn btn-primary">
-          <Plus size={18} aria-hidden /> Kòmanse yon konsiltasyon
-        </Link>
+        <StartConsultation />
       </div>
 
       {/* Summary metrics (real counts) */}
@@ -213,9 +214,7 @@ export default function PatientDashboard() {
               title="Ou poko gen okenn konsiltasyon."
               description="Di nou sa w ap santi pou w kòmanse premye konsiltasyon ou ak yon doktè."
               action={
-                <Link href="/app/consult" className="btn btn-primary">
-                  <Plus size={16} aria-hidden /> Kòmanse yon konsiltasyon
-                </Link>
+                <StartConsultation compact />
               }
             />
           </div>

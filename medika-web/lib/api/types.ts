@@ -76,6 +76,10 @@ export interface Consultation {
    * 'pending_timeout' (bounded unanswered-request expiry). Absent/null for
    * normal transitions. */
   close_reason?: string | null;
+  /** Which intake path produced it (migration 014): 'SELF' = the patient
+   * filled the symptom form; 'CALL_CENTER' = express agent call — the
+   * patient typed nothing and is waiting in the voice call screen. */
+  channel?: "SELF" | "CALL_CENTER" | string;
 }
 
 // ─── Doctor wallet (issue #24) ─────────────────────────────────────────────
