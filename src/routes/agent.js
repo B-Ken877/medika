@@ -110,6 +110,9 @@ router.post('/agent/presence/heartbeat', authenticate, requireRole(...AGENT_ROLE
 // ─── Offers + queue ──────────────────────────────────────────────────────────
 
 router.get('/agent/queue', authenticate, requireRole(...AGENT_ROLES), guard(async (req, res) => {
+  // Lazy self-healing sweep (brief #7): expired offers + waiting re-routes
+  // happen on the agent's own 15s poll — no scheduled job is required.
+  await lifecycle.sweepWaiting({ hub: hub(req) });
   const { rows } = await require('../db').query(
     `SELECT a.id AS assignment_id, a.session_id, a.offered_at, a.expires_at, s.language, s.specialty, s.reason
        FROM agent_assignments a JOIN agent_sessions s ON s.id = a.session_id
@@ -326,6 +329,8 @@ router.post('/agent/callbacks/:id/result', authenticate, requireRole(...AGENT_RO
 // ─── Dashboard (brief #17 — metrics derived ONLY from persisted records) ────
 
 router.get('/agent/dashboard', authenticate, requireRole(...AGENT_ROLES), guard(async (req, res) => {
+  // Lazy self-healing sweep (see /agent/queue).
+  await lifecycle.sweepWaiting({ hub: hub(req) });
   const since = new Date();
   since.setHours(0, 0, 0, 0);
   const [stats, queueSize, pending, active, presence] = await Promise.all([
