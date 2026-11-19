@@ -33,7 +33,7 @@ function consToApi(row) {
     // 'pending_timeout' (bounded unanswered-request expiry). NULL for every
     // normal transition and all legacy rows. Additive; older clients ignore it.
     close_reason: row.close_reason ?? null,
-    // Which intake path produced the consultation (migration 014):
+    // Which intake path produced the consultation (migration 016):
     // 'SELF' = patient-typed form, 'CALL_CENTER' = express agent call
     // (patient typed nothing). Additive; older clients ignore it.
     channel: row.channel ?? 'SELF',

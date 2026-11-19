@@ -182,7 +182,7 @@ function CallScreen() {
       for (let poll = 0; ; poll++) {
         if (disposed || endedRef.current) return;
         let status: string | null = null;
-        // Call-center express calls (channel='CALL_CENTER', migration 014):
+        // Call-center express calls (channel='CALL_CENTER', migration 016):
         // the patient typed NOTHING and is waiting for the on-duty AGENT to
         // pick up — the waiting copy says so, never "waiting for a doctor".
         let callCenter = false;

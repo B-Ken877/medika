@@ -4,7 +4,7 @@
  *
  * The contract: the patient supplies NOTHING. No body fields are read, no
  * payment is required, the consultation is created on the Medecine Generale
- * defaults with channel='CALL_CENTER' (migration 014) and enters the SAME
+ * defaults with channel='CALL_CENTER' (migration 016) and enters the SAME
  * routing queue as a manual request. The one-active invariant (issue #60)
  * applies identically.
  */

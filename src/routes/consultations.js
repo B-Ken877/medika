@@ -272,7 +272,7 @@ router.post('/consultations', authenticate, requireRole('patient'), async (req, 
 // Express "call center agent" intake (the New-consultation chooser). The
 // patient supplies NOTHING: no description, no specialty, no payment fields —
 // the request body is ignored entirely. The consultation is created on the
-// Medecine Generale defaults with channel='CALL_CENTER' (migration 014) and
+// Medecine Generale defaults with channel='CALL_CENTER' (migration 016) and
 // enters the SAME doctor-routing queue as a regular request: the on-duty
 // call-center agent (a verified doctor account staffing the center) receives
 // the targeted offer and accepts it like any other consultation. Meanwhile

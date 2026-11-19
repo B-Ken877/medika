@@ -1036,7 +1036,7 @@
    value in the panel comes from the server; the layout invents none.
    ================================================================== */
 
-.doctor-profile {
+.app-shell .doctor-profile {
   gap: 14px;
 }
 
@@ -1058,7 +1058,7 @@
 }
 
 /* Decorative mint glow in the top corner */
-.dp-hero::before {
+.app-shell .dp-hero::before {
   content: "";
   position: absolute;
   top: -70px;
@@ -1070,7 +1070,7 @@
   pointer-events: none;
 }
 
-.dp-hero-top {
+.app-shell .dp-hero-top {
   position: relative;
   z-index: 1;
   display: flex;
@@ -1080,7 +1080,7 @@
 }
 
 /* Circular back button (reference uses an icon button in the panel corner) */
-.dp-back {
+.app-shell .dp-back {
   width: 38px;
   height: 38px;
   display: inline-flex;
@@ -1093,13 +1093,13 @@
   box-shadow: 0 2px 8px rgba(16, 72, 63, 0.08);
 }
 
-.dp-back:hover {
+.app-shell .dp-back:hover {
   background: #ffffff;
 }
 
 /* The photo is the anchor: oversized disc with a white ring and a
    layered mint shadow so it reads as the centerpiece of the panel. */
-.dp-avatar {
+.app-shell .dp-avatar {
   position: relative;
   z-index: 1;
   display: flex;
@@ -1107,7 +1107,7 @@
   margin-top: 12px;
 }
 
-.dp-avatar .avatar {
+.app-shell .dp-avatar .avatar {
   width: 124px;
   height: 124px;
   font-size: 42px;
@@ -1120,13 +1120,13 @@
   background: #ffffff;
 }
 
-.dp-avatar .avatar img {
+.app-shell .dp-avatar .avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.dp-name {
+.app-shell .dp-name {
   position: relative;
   z-index: 1;
   margin-top: 14px;
@@ -1136,7 +1136,7 @@
   color: var(--green-700);
 }
 
-.dp-specialty-chip {
+.app-shell .dp-specialty-chip {
   position: relative;
   z-index: 1;
   display: inline-flex;
@@ -1152,14 +1152,14 @@
   border: 1px solid rgba(20, 91, 80, 0.12);
 }
 
-.dp-availability {
+.app-shell .dp-availability {
   position: relative;
   z-index: 1;
   margin-top: 8px;
 }
 
 /* Stat strip — rating / price / verification, separated by hairlines */
-.dp-stats {
+.app-shell .dp-stats {
   position: relative;
   z-index: 1;
   display: flex;
@@ -1170,17 +1170,17 @@
   border: 1px solid rgba(20, 91, 80, 0.1);
 }
 
-.dp-stat {
+.app-shell .dp-stat {
   flex: 1;
   min-width: 0;
   padding: 0 6px;
 }
 
-.dp-stat + .dp-stat {
+.app-shell .dp-stat + .dp-stat {
   border-left: 1px solid rgba(20, 91, 80, 0.14);
 }
 
-.dp-stat strong {
+.app-shell .dp-stat strong {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1190,7 +1190,7 @@
   white-space: nowrap;
 }
 
-.dp-stat span {
+.app-shell .dp-stat span {
   display: block;
   margin-top: 2px;
   font-size: 11px;
@@ -1198,23 +1198,23 @@
 }
 
 /* About — plain section on the page background, like "About Doctor" */
-.doctor-profile .dp-about {
+.app-shell .doctor-profile .dp-about {
   padding: 2px 6px;
 }
 
-.doctor-profile .dp-about > p {
+.app-shell .doctor-profile .dp-about > p {
   font-size: 14px;
   line-height: 1.6;
   color: var(--text-primary);
 }
 
-.dp-facts {
+.app-shell .dp-facts {
   display: grid;
   gap: 8px;
   margin-top: 12px;
 }
 
-.dp-fact {
+.app-shell .dp-fact {
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -1222,13 +1222,13 @@
   color: var(--text-secondary);
 }
 
-.dp-fact svg {
+.app-shell .dp-fact svg {
   flex-shrink: 0;
   margin-top: 2px;
   color: var(--green-500);
 }
 
-.dp-fact strong {
+.app-shell .dp-fact strong {
   color: var(--text-primary);
 }
 
@@ -1237,7 +1237,7 @@
   border-radius: 20px;
 }
 
-.dp-consult-row {
+.app-shell .dp-consult-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -1245,7 +1245,7 @@
   flex-wrap: wrap;
 }
 
-.dp-consult-price {
+.app-shell .dp-consult-price {
   font-size: 22px;
   font-weight: 800;
   color: var(--green-700);
