@@ -31,6 +31,7 @@ const express = require('express');
 const lifecycle = require('../consultation-lifecycle');
 const walletRepo = require('../repos/wallet');
 const medicationOrdersRepo = require('../repos/medication-orders');
+const agentLifecycle = require('../agent-lifecycle');
 const dispatch = require('../notifications/dispatch');
 const { authenticateAdmin } = require('../auth');
 
@@ -112,5 +113,34 @@ async function processNotifications(req, res, next) {
 }
 router.get('/crons/notification-dispatch', authorizeCron, processNotifications);
 router.post('/crons/notification-dispatch', authorizeCron, processNotifications);
+
+/**
+ * GET/POST /api/crons/agent-ops — agent contact-center sweeps (briefs #7, #5,
+ * #8), all idempotent:
+ *   * expired agent offers → the request returns to the queue and re-routes
+ *     to the next eligible agent (assignment timeout);
+ *   * stale presence heartbeats → the agent drops to OFFLINE (a disconnected
+ *     browser never stays falsely routable);
+ *   * due callback windows → marked due (the honest due state agents see).
+ * The same sweeps also run lazily on relevant reads where practical.
+ */
+async function processAgentOps(req, res, next) {
+  try {
+    const hub = req.app.locals.hub;
+    const offers = await agentLifecycle.processExpiredOffers({ hub });
+    const presence = await agentLifecycle.processStalePresence();
+    const callbacks = await agentLifecycle.processDueCallbacks({ hub });
+    res.json({
+      ok: true,
+      offersExpired: offers.expired,
+      offersRerouted: offers.rerouted,
+      presenceDropped: presence.dropped,
+      callbacksDue: callbacks.due,
+      ranAt: new Date().toISOString(),
+    });
+  } catch (err) { next(err); }
+}
+router.get('/crons/agent-ops', authorizeCron, processAgentOps);
+router.post('/crons/agent-ops', authorizeCron, processAgentOps);
 
 module.exports = router;

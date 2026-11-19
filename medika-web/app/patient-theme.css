@@ -80,6 +80,18 @@
     radial-gradient(40rem 28rem at -10% 96%, rgba(233, 246, 239, 0.6) 0 99%, transparent 100%);
 }
 
+/* Owner request: each role's main destinations back their content with the
+   uploaded mint medical-wave artwork instead of the gradient field —
+   patient: Akèy / Doktè yo / Konsiltasyon list / Pwofil; doctor: Akèy /
+   Demann / Revni / Alèt / Pwofil. The fixed ::after layer keeps its
+   geometry (inset 0, z-index -1, pointer-events none) and only swaps its
+   paint for the image; cover crops per-viewport from the 941×1672 portrait
+   master (35 KB webp). AppShell adds .pages-wallpaper on exact routes only,
+   so detail pages and the chat room keep their own treatments. */
+.app-shell.pages-wallpaper::after {
+  background: url("/pages-wallpaper-mint.webp") center / cover no-repeat;
+}
+
 /* ── 2. Glass header + bottom navigation ──────────────────────────────────── */
 
 .app-shell .app-header {
@@ -237,11 +249,11 @@
 
 /* Doctor-artwork stage — anchored to the screen's right edge (cropped there
    in the reference), fixed 4/5 aspect + radius so the artwork cannot shift
-   layout while loading. Issue #109: the stage now holds the generated
-   Medika doctor artwork; its PNG carries mint-matched feathered edges so
-   it melts into the wave field like the reference cut-out — no rectangular
-   image boundary. The stage gradient stays as the landing color for the
-   feathered rim. */
+   layout while loading. Issue #109: the stage holds the generated Medika
+   doctor artwork as a background-free cut-out (RGBA PNG, feathered rim).
+   Owner request (Nov 2026): the stage itself paints nothing — with the
+   uploaded medical-wave wallpaper behind the page, the doctor must float
+   directly on it, so the former mint landing gradient is gone. */
 .hero-art {
   position: relative;
   flex: 0 0 auto;
@@ -252,7 +264,7 @@
   aspect-ratio: 4 / 5;
   border: none;
   border-radius: 20px 0 0 0;
-  background: linear-gradient(180deg, rgba(233, 246, 239, 0) 0%, var(--pt-mint-100) 78%);
+  background: transparent;
   display: grid;
   place-items: end center;
   overflow: hidden;
@@ -373,11 +385,869 @@
   display: none;
 }
 
-.app-shell.patient-shell .app-main {
+/* :not(.chat-mode): the consultation room hides the bottom nav entirely
+   (visual-polish .chat-mode sets .app-main padding: 0). Without this guard,
+   the rule below ties it on specificity (0,3,0) and, loading later in the
+   bundle, wins — leaving a transparent strip under the room's composer where
+   neither the wallpaper nor any surface paints (seen as a blank gap). */
+.app-shell.patient-shell:not(.chat-mode) .app-main {
   padding-bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom, 0px) + 64px);
 }
 
 @media (min-width: 900px) {
   .app-shell.patient-shell .bottom-nav { display: none; }
-  .app-shell.patient-shell .app-main { padding-bottom: 48px; }
+  .app-shell.patient-shell:not(.chat-mode) .app-main { padding-bottom: 48px; }
 }
+
+/* ── 7. Nov 2026 homepage redesign — journey + split layout ────────────────
+   The home page now carries a 3-step journey (consult → price → deliver) so
+   a first-time visitor understands what Medika does beyond the consult, and
+   the active consultation + quick links sit side by side on desktop instead
+   of stacked under a long history list. All rules are scoped to the patient
+   shell so doctor/admin surfaces are untouched. */
+
+/* Hero eyebrow chip — a small uppercase tag above the greeting that names
+   the platform category (Telemedicine · Haiti). Quiet, not a button. */
+.app-shell .hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(207, 234, 219, 0.55);
+  color: var(--green-700);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid rgba(30, 91, 70, 0.12);
+}
+.app-shell .hero-eyebrow svg { color: var(--green-600); }
+
+/* CTA row: keep the primary full-width on mobile, allow two-up on desktop. */
+.app-shell .home-cta-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.app-shell .home-cta-row .btn { flex: 1 1 auto; }
+@media (min-width: 720px) {
+  .app-shell .home-cta-row .btn-primary { flex: 1 1 auto; }
+  .app-shell .home-cta-row .btn-ghost { flex: 0 0 auto; }
+}
+
+/* 3-step journey grid. Mobile: stacked cards; desktop: 3 across. */
+.app-shell .home-journey { margin-top: 8px; }
+.app-shell .journey-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+@media (min-width: 720px) {
+  .app-shell .journey-grid { grid-template-columns: repeat(3, 1fr); gap: 14px; }
+}
+.app-shell .journey-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--pt-card-border);
+  border-radius: 18px;
+  padding: 18px 18px 16px;
+  box-shadow: var(--pt-shadow-card);
+  overflow: hidden;
+}
+.app-shell .journey-card::before {
+  /* Subtle top accent — the same mint gradient family as the hero, never
+     a strong color block (keeps the calm institutional tone). */
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--green-500), var(--pt-mint-100, #d9f3e6));
+}
+.app-shell .journey-step-no {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--green-700);
+  letter-spacing: 0.08em;
+  opacity: 0.6;
+}
+.app-shell .journey-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--green-100, #d9f3e6);
+  color: var(--green-700);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.app-shell .journey-title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 6px;
+}
+.app-shell .journey-text {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* Stat-card accent variants. The base .stat-card styles from section 5b
+   remain; these add a colored top stripe + a faint matching tint so the
+   four tiles read as distinct categories at a glance. */
+.app-shell .stat-card.stat-gray::before,
+.app-shell .stat-card.stat-yellow::before,
+.app-shell .stat-card.stat-green::before,
+.app-shell .stat-card.stat-blue::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  border-radius: 18px 18px 0 0;
+}
+.app-shell .stat-card.stat-gray::before { background: #b8b8b8; }
+.app-shell .stat-card.stat-yellow::before { background: #e0a93a; }
+.app-shell .stat-card.stat-green::before { background: var(--green-500); }
+.app-shell .stat-card.stat-blue::before { background: #3b82f6; }
+
+/* Desktop two-column split: active consultation (left) + quick links (right).
+   On mobile collapses to a single stack (default block flow). */
+.app-shell .home-split {
+  display: block;
+}
+@media (min-width: 900px) {
+  .app-shell .home-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+  }
+  /* In the split, the quick-links grid drops to a single column so the
+     three links sit in a tidy vertical stack on the right. */
+  .app-shell .home-split .quick-links { grid-template-columns: 1fr !important; }
+}
+
+/* ── 6. Jwenn yon doktè — directory hero, search, chips, cards ──────────────
+   Same premium-mint language as the Akèy hero (§5): open composition on the
+   wallpaper, big deep-green greeting, translucent white surfaces with fine
+   mint borders. Everything here is scoped under .app-shell (governance). ── */
+
+/* Hero band: same open composition as .home-hero, minus the artwork stage —
+   a soft translucent plus-mark keeps the medical motif behind the copy. */
+.app-shell .doc-hero {
+  position: relative;
+  margin-inline: calc(-1 * var(--content-pad));
+  padding: 4px var(--content-pad) 6px;
+}
+
+.app-shell .doc-hero::before {
+  content: "";
+  position: absolute;
+  right: 8%;
+  top: 6%;
+  width: 84px;
+  height: 84px;
+  transform: rotate(9deg);
+  background:
+    linear-gradient(rgba(207, 234, 219, 0.9), rgba(207, 234, 219, 0.9)) center / 100% 30% no-repeat,
+    linear-gradient(rgba(207, 234, 219, 0.9), rgba(207, 234, 219, 0.9)) center / 30% 100% no-repeat;
+  border-radius: 16px;
+  filter: blur(6px);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.app-shell .doc-hero .doc-hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: inset 0 0 0 1px var(--pt-card-border);
+  color: var(--green-700);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.app-shell .doc-hero .page-title {
+  font-size: clamp(30px, 8.4vw, 40px);
+  line-height: 1.12;
+  color: var(--green-700);
+  max-width: 12ch;
+}
+
+.app-shell .doc-hero .page-desc {
+  margin-top: 10px;
+  max-width: 34ch;
+}
+
+/* Search: glass pill with mint border and a calm focus ring. */
+.app-shell .doc-search {
+  position: relative;
+}
+
+.app-shell .doc-search .doc-search-icon {
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--green-500);
+  pointer-events: none;
+}
+
+.app-shell .doc-search .input {
+  height: 54px;
+  min-height: 54px;
+  padding-left: 50px;
+  padding-right: 50px;
+  border-radius: var(--radius-full);
+  border-color: var(--pt-card-border);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--pt-shadow-card);
+  font-size: 15px;
+}
+
+.app-shell .doc-search .input:focus {
+  border-color: var(--green-500);
+  box-shadow: 0 0 0 4px rgba(25, 117, 104, 0.1), var(--pt-shadow-card);
+}
+
+.app-shell .doc-search .toggle-btn {
+  right: 10px;
+  left: auto;
+}
+
+/* Specialty chips: white pills on the mint field; selected = deep green. */
+.app-shell .spec-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: 8px 15px;
+  border: 1px solid var(--pt-card-border);
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--green-800);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+  box-shadow: var(--pt-shadow-card);
+}
+
+.app-shell .spec-chip:hover { border-color: var(--pt-mint-200); }
+
+.app-shell .spec-chip.spec-chip-active {
+  background: var(--green-600);
+  border-color: var(--green-600);
+  color: #fff;
+  box-shadow: 0 6px 16px -8px rgba(16, 72, 63, 0.55);
+}
+
+.app-shell .spec-chip .spec-chip-price {
+  font-weight: 500;
+  font-size: 11px;
+  opacity: 0.78;
+}
+
+.app-shell .spec-chip.spec-chip-active .spec-chip-price { opacity: 0.9; }
+
+/* Result count line under the filters. */
+.app-shell .doc-count strong { color: var(--green-700); font-weight: 700; }
+
+/* Doctor cards: translucent white, 20px radius, mint border, layered shadow.
+   The avatar carries a double ring (white gap + mint halo). */
+.app-shell .doc-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--pt-card-border);
+  border-radius: var(--pt-radius-lg);
+  box-shadow: var(--pt-shadow-card);
+  text-decoration: none;
+  color: inherit;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-shell .doc-card {
+    transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+  }
+  .app-shell .doc-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--pt-mint-200);
+    box-shadow: var(--pt-shadow-float);
+  }
+}
+
+.app-shell .doc-card .avatar {
+  width: 56px;
+  height: 56px;
+  font-size: 17px;
+  box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--pt-mint-200);
+  align-self: flex-start;
+}
+
+.app-shell .doc-card .doc-card-body { flex: 1; min-width: 0; }
+
+.app-shell .doc-card .doc-card-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 21px;
+  color: var(--text-primary);
+}
+
+/* Availability: calm status dot instead of a boxy badge. */
+.app-shell .doc-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.app-shell .doc-status .doc-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.app-shell .doc-status-on {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.app-shell .doc-status-on .doc-status-dot { background: var(--success); }
+
+.app-shell .doc-status-off {
+  background: var(--gray-100);
+  color: var(--text-secondary);
+}
+
+.app-shell .doc-status-off .doc-status-dot { background: var(--gray-400); }
+
+.app-shell .doc-card .doc-card-spec {
+  margin-top: 3px;
+  color: var(--green-600);
+  font-weight: 650;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.app-shell .doc-card .doc-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 7px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.app-shell .doc-card .doc-card-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.app-shell .doc-card .doc-card-meta svg { color: var(--green-400); flex-shrink: 0; }
+
+/* Right rail: price over the pill CTA, visually anchored to the card. */
+.app-shell .doc-card .doc-card-side {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 7px;
+  align-self: center;
+}
+
+.app-shell .doc-price {
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  font-size: 15px;
+  line-height: 20px;
+  color: var(--green-700);
+  white-space: nowrap;
+}
+
+.app-shell .doc-price-unit {
+  display: block;
+  font-weight: 500;
+  font-size: 10px;
+  line-height: 13px;
+  color: var(--text-tertiary);
+}
+
+.app-shell .doc-cta {
+  border-radius: var(--radius-full);
+  min-height: 40px;
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+/* ── 7. Gade pwofil — doctor profile identity card + fact rows ────────────── */
+
+/* Identity card: deep-green banner bleeding to the card's top corners, the
+   avatar overlapping it with the mint double ring, identity + chips below. */
+.app-shell .doc-idcard {
+  position: relative;
+  overflow: hidden;
+  padding: 0 18px 18px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--pt-card-border);
+  border-radius: var(--pt-radius-lg);
+  box-shadow: var(--pt-shadow-card);
+}
+
+.app-shell .doc-idcard .doc-idcard-banner {
+  margin-inline: -18px;
+  height: 76px;
+  background:
+    radial-gradient(24rem 12rem at 88% -40%, rgba(166, 240, 201, 0.38), transparent 62%),
+    linear-gradient(115deg, var(--green-900) 0%, var(--green-600) 58%, #1b8471 100%);
+}
+
+.app-shell .doc-idcard .doc-idcard-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  margin-top: -34px;
+}
+
+.app-shell .doc-idcard .avatar {
+  width: 84px;
+  height: 84px;
+  font-size: 24px;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px var(--pt-mint-200), var(--pt-shadow-card);
+}
+
+.app-shell .doc-idcard .doc-idcard-id { flex: 1; min-width: 0; padding-bottom: 2px; }
+
+.app-shell .doc-idcard .doc-idcard-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0;
+  font-size: 19px;
+  font-weight: 750;
+  line-height: 25px;
+  color: var(--text-primary);
+}
+
+.app-shell .doc-idcard .doc-idcard-spec {
+  margin-top: 2px;
+  color: var(--green-600);
+  font-weight: 650;
+  font-size: 14px;
+  line-height: 19px;
+}
+
+.app-shell .doc-idcard .doc-idcard-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* Rating chip shares the status-chip language. */
+.app-shell .doc-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: var(--pt-mint-100);
+  box-shadow: inset 0 0 0 1px var(--pt-card-border-soft);
+  color: var(--green-700);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 17px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Section cards: shared card surface, mint icon medallions for facts. */
+.app-shell .doc-section .section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+}
+
+.app-shell .doc-section .section-title svg { color: var(--green-500); }
+
+.app-shell .doc-bio {
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  line-height: 21px;
+}
+
+.app-shell .doc-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.app-shell .doc-fact {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.app-shell .doc-fact .doc-fact-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: var(--pt-mint-100);
+  box-shadow: inset 0 0 0 1px var(--pt-card-border-soft);
+  color: var(--green-600);
+}
+
+.app-shell .doc-fact .doc-fact-text { flex: 1; min-width: 0; }
+
+.app-shell .doc-fact .doc-fact-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  line-height: 15px;
+}
+
+.app-shell .doc-fact .doc-fact-value {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 19px;
+}
+
+/* Price card: the price is the hero of the section. */
+.app-shell .doc-price-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.app-shell .doc-price-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.app-shell .doc-price-big {
+  margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 36px;
+  color: var(--green-700);
+}
+
+.app-shell .doc-price-missing {
+  margin-top: 3px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  line-height: 19px;
+}
+
+.app-shell .doc-specialty-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border-radius: var(--radius-full);
+  background: var(--pt-mint-100);
+  box-shadow: inset 0 0 0 1px var(--pt-card-border-soft);
+  color: var(--green-800);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 17px;
+}
+
+.app-shell .doc-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 12px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.app-shell .doc-note svg { flex-shrink: 0; margin-top: 2px; color: var(--green-400); }
+
+/* The big CTA reads as the same pill language as the directory cards. */
+.app-shell .doctor-profile .doc-continue {
+  margin-top: 14px;
+  border-radius: 16px;
+  box-shadow: 0 10px 24px -12px rgba(16, 72, 63, 0.5);
+}
+
+@media (min-width: 900px) {
+  .app-shell .doc-card { padding: 18px 20px; }
+  .app-shell .doc-idcard { padding: 0 24px 22px; }
+  .app-shell .doc-idcard .doc-idcard-banner { margin-inline: -24px; }
+}
+
+/* ==================================================================
+   Gade profil (doctor profile) — mint clinic-card hero redesign
+   Reference layout: rounded mint hero panel with the PHOTO as the
+   anchor of the page (large centered disc, white ring, layered
+   shadow), name, specialty chip, a small stat strip, then a plain
+   "About" section and a bold dark-green consultation CTA. Every
+   value in the panel comes from the server; the layout invents none.
+   ================================================================== */
+
+.doctor-profile {
+  gap: 14px;
+}
+
+/* Hero panel — soft mint gradient card, like the reference's green plate */
+.app-shell .doctor-profile .dp-hero {
+  position: relative;
+  padding: 18px 18px 16px;
+  border-radius: 24px;
+  text-align: center;
+  overflow: hidden;
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.94) 8%,
+    #e7f3ec 62%,
+    #d9ecdf 100%
+  );
+  border: 1px solid rgba(20, 91, 80, 0.1);
+  box-shadow: 0 12px 32px rgba(16, 72, 63, 0.08);
+}
+
+/* Decorative mint glow in the top corner */
+.dp-hero::before {
+  content: "";
+  position: absolute;
+  top: -70px;
+  right: -50px;
+  width: 190px;
+  height: 190px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(25, 117, 104, 0.12), transparent 70%);
+  pointer-events: none;
+}
+
+.dp-hero-top {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+}
+
+/* Circular back button (reference uses an icon button in the panel corner) */
+.dp-back {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--green-700);
+  border: 1px solid rgba(20, 91, 80, 0.14);
+  box-shadow: 0 2px 8px rgba(16, 72, 63, 0.08);
+}
+
+.dp-back:hover {
+  background: #ffffff;
+}
+
+/* The photo is the anchor: oversized disc with a white ring and a
+   layered mint shadow so it reads as the centerpiece of the panel. */
+.dp-avatar {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.dp-avatar .avatar {
+  width: 124px;
+  height: 124px;
+  font-size: 42px;
+  border-radius: 50%;
+  border: 4px solid #ffffff;
+  box-shadow:
+    0 14px 30px -6px rgba(16, 72, 63, 0.28),
+    0 0 0 6px rgba(255, 255, 255, 0.45),
+    0 0 0 7px rgba(20, 91, 80, 0.08);
+  background: #ffffff;
+}
+
+.dp-avatar .avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dp-name {
+  position: relative;
+  z-index: 1;
+  margin-top: 14px;
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  color: var(--green-700);
+}
+
+.dp-specialty-chip {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--green-600);
+  font-size: 13px;
+  font-weight: 700;
+  border: 1px solid rgba(20, 91, 80, 0.12);
+}
+
+.dp-availability {
+  position: relative;
+  z-index: 1;
+  margin-top: 8px;
+}
+
+/* Stat strip — rating / price / verification, separated by hairlines */
+.dp-stats {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  margin-top: 14px;
+  padding: 12px 6px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(20, 91, 80, 0.1);
+}
+
+.dp-stat {
+  flex: 1;
+  min-width: 0;
+  padding: 0 6px;
+}
+
+.dp-stat + .dp-stat {
+  border-left: 1px solid rgba(20, 91, 80, 0.14);
+}
+
+.dp-stat strong {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 16px;
+  color: var(--green-700);
+  white-space: nowrap;
+}
+
+.dp-stat span {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* About — plain section on the page background, like "About Doctor" */
+.doctor-profile .dp-about {
+  padding: 2px 6px;
+}
+
+.doctor-profile .dp-about > p {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.dp-facts {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.dp-fact {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+}
+
+.dp-fact svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--green-500);
+}
+
+.dp-fact strong {
+  color: var(--text-primary);
+}
+
+/* Consultation card — prominent price + full-width dark-green CTA */
+.app-shell .doctor-profile .dp-consult {
+  border-radius: 20px;
+}
+
+.dp-consult-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dp-consult-price {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--green-700);
+}
+

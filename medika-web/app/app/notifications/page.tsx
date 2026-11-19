@@ -1,14 +1,16 @@
 "use client";
 
 /**
- * In-app notification center (issue #36 upgrade).
+ * In-app notification center (issue #36 upgrade; restructured per owner
+ * feedback: "notifications first, settings on a specific page").
  *
- * Previously this page held only live WS events in browser memory. Now it is
- * backed by the SERVER-PERSISTED history (GET /api/notifications) with
- * unread/read state, mark-read/mark-all-read, pagination — plus:
- *   - Web Push enable/disable (explicit user action; honest unsupported /
- *     blocked / denied / server-disabled states);
- *   - per-category preferences (consultations, messages, calls, wallet).
+ * This page is now a pure INBOX:
+ *   - SERVER-PERSISTED history (GET /api/notifications) with unread/read
+ *     state, mark-read/mark-all-read and pagination — always FIRST on the
+ *     page;
+ *   - all configuration (device push subscription + category preferences)
+ *     moved to the dedicated /app/settings/notifications page, reachable
+ *     from the header action button below.
  *
  * Live WS events still stream in as a supplement while the page is open; the
  * server record is the source of truth. No medical data is ever displayed
@@ -23,6 +25,7 @@ import {
   CalendarCheck,
   CheckCheck,
   Phone,
+  Settings,
   Stethoscope,
   Wallet,
 } from "lucide-react";
@@ -30,17 +33,13 @@ import { useAuth } from "@/lib/auth/context";
 import { useSocket } from "@/lib/ws/socket-context";
 import { ApiError } from "@/lib/api/client";
 import {
-  getNotificationPreferences,
   getNotifications,
   markAllNotificationsRead,
   markNotificationsRead,
-  updateNotificationPreferences,
   type AppNotification,
-  type NotificationPreferences,
 } from "@/lib/api/endpoints";
 import { EmptyState, ErrorAlert, SkeletonRows } from "@/components/ui/primitives";
 import { relativeTime } from "@/lib/format";
-import { enablePush, disablePush, probePushSupport, hasPushSubscription, type PushSupport } from "@/lib/push";
 import { useUnread } from "@/components/notifications/UnreadProvider";
 
 const CATEGORY_ICON = {
@@ -57,22 +56,6 @@ const CATEGORY_LABEL: Record<string, string> = {
   wallet: "Revni",
 };
 
-const SUPPORT_COPY: Record<PushSupport, string> = {
-  supported: "",
-  "unsupported-browser": "Navigatè sa a pa sipòte notifikasyon push.",
-  "insecure-context": "Notifikasyon push bezwen yon koneksyon sekirize (HTTPS).",
-  "no-service-worker": "Sèvis travay la pa disponib sou aparèy sa a.",
-  "no-push-manager": "Navigatè a pa gen jesyon push.",
-  denied: "Ou bloke notifikasyon yo nan paramèt navigatè a. Louvri paramèt yo pou pèmèt yo.",
-  "server-disabled": "Sèvis push la pa konfigure kounye a — notifikasyon nan aplikasyon an ap kontinye mache.",
-  // Issue #50 health signal: server/network failures are distinct from
-  // browser limitations — the user (and any report) can tell them apart.
-  "server-unreachable":
-    "Nou pa t kapab tache ak sèvis notifikasyon yo. Verifye koneksyon ou, epi eseye ankò.",
-  "registration-failed":
-    "Sèvè a pa t aksepte enskripsyon notifikasyon an. Dekonekte epi konekte ankò, Lè sa a eseye ankò.",
-};
-
 export default function NotificationsPage() {
   const { token, user } = useAuth();
   const { socket } = useSocket();
@@ -86,13 +69,6 @@ export default function NotificationsPage() {
   const [error, setError] = useState<unknown>(null);
   const [liveCount, setLiveCount] = useState(0);
 
-  const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
-  const [prefsBusy, setPrefsBusy] = useState(false);
-
-  const [pushSupport] = useState<PushSupport>(() => probePushSupport());
-  const [pushEnabled, setPushEnabled] = useState<boolean | null>(null);
-  const [pushBusy, setPushBusy] = useState(false);
-  const [pushNotice, setPushNotice] = useState<string | null>(null);
   const beforeRef = useRef<number | null>(null);
 
   const load = useCallback(() => {
@@ -120,12 +96,6 @@ export default function NotificationsPage() {
     const cleanup = load();
     return () => cleanup?.();
   }, [load]);
-
-  useEffect(() => {
-    if (!token) return;
-    getNotificationPreferences(token).then(setPrefs).catch(() => setPrefs(null));
-    hasPushSubscription().then(setPushEnabled).catch(() => setPushEnabled(false));
-  }, [token]);
 
   // Live events supplement the persisted history while the page is open.
   // Issue #72: message:new MUST also refresh — a new chat message creates a
@@ -185,41 +155,6 @@ export default function NotificationsPage() {
     }
   };
 
-  const togglePref = async (key: keyof NotificationPreferences) => {
-    if (!token || !prefs || prefsBusy) return;
-    const next = { ...prefs, [key]: !prefs[key] };
-    setPrefsBusy(true);
-    setPrefs(next); // optimistic
-    try {
-      setPrefs(await updateNotificationPreferences(token, { [key]: next[key] }));
-    } catch {
-      setPrefs(prefs); // revert on failure
-    } finally {
-      setPrefsBusy(false);
-    }
-  };
-
-  const onEnablePush = async () => {
-    if (!token || pushBusy) return;
-    setPushBusy(true);
-    setPushNotice(null);
-    const state = await enablePush(token);
-    setPushEnabled(state.enabled);
-    if (!state.enabled && state.support !== "supported") {
-      setPushNotice(SUPPORT_COPY[state.support]);
-    }
-    setPushBusy(false);
-  };
-
-  const onDisablePush = async () => {
-    if (!token || pushBusy) return;
-    setPushBusy(true);
-    setPushNotice(null);
-    await disablePush(token);
-    setPushEnabled(false);
-    setPushBusy(false);
-  };
-
   return (
     <div className="stack">
       <div className="page-head">
@@ -230,6 +165,11 @@ export default function NotificationsPage() {
           </p>
         </div>
         <div className="page-head-actions">
+          {/* Settings live on their own dedicated page (owner request) — the
+              notification center itself stays a pure inbox. */}
+          <Link href="/app/settings/notifications" className="btn btn-secondary btn-sm">
+            <Settings size={14} aria-hidden /> Paramèt
+          </Link>
           <button className="btn btn-secondary btn-sm" onClick={load} disabled={items === null}>
             <BellRing size={14} aria-hidden /> Refrèchi
           </button>
@@ -250,84 +190,8 @@ export default function NotificationsPage() {
         onRetry={load}
       />
 
-      {/* Push subscriptions (explicit user action only) */}
-      <section className="panel" aria-labelledby="push-title">
-        <div className="panel-head">
-          <h2 id="push-title" className="panel-title">
-            Notifikasyon push
-          </h2>
-        </div>
-        <div className="panel-row">
-          <div className="row-body">
-            <div className="row-title">
-              <span>Alert sou aparèy ou a</span>
-            </div>
-            <div className="row-meta">
-              {pushSupport === "supported"
-                ? pushEnabled
-                  ? "Ou ap resevwa notifikasyon push sou aparèy sa a."
-                  : "Aktive notifikasyon push pou w konnen le gen yon mizajou, menm lè aplikasyon an fèmen."
-                : SUPPORT_COPY[pushSupport]}
-            </div>
-          </div>
-          <div className="row-actions">
-            {pushSupport === "supported" && pushEnabled !== null && (
-              <button
-                className={`btn btn-sm ${pushEnabled ? "btn-secondary" : "btn-primary"}`}
-                onClick={pushEnabled ? onDisablePush : onEnablePush}
-                disabled={pushBusy}
-              >
-                {pushEnabled ? "Dezaktive" : "Aktive"}
-              </button>
-            )}
-          </div>
-        </div>
-        {pushNotice && (
-          <div className="alert alert-warning" role="status" style={{ margin: 12 }}>
-            {pushNotice}
-          </div>
-        )}
-      </section>
-
-      {/* Category preferences */}
-      {prefs && (
-        <section className="panel" aria-labelledby="prefs-title">
-          <div className="panel-head">
-            <h2 id="prefs-title" className="panel-title">
-              Preferans
-            </h2>
-          </div>
-          {(["consultations", "messages", "calls", "wallet"] as const).map((key) => (
-            <div className="panel-row" key={key}>
-              <div className="row-body">
-                <div className="row-title">
-                  <span>{CATEGORY_LABEL[key]}</span>
-                </div>
-                <div className="row-meta">
-                  {key === "wallet" && user?.role !== "doctor"
-                    ? "Pou doktè yo."
-                    : "Konnen lè evènman sa yo rive."}
-                </div>
-              </div>
-              <div className="row-actions">
-                <button
-                  role="switch"
-                  className="switch"
-                  aria-checked={prefs[key]}
-                  aria-label={CATEGORY_LABEL[key]}
-                  onClick={() => togglePref(key)}
-                  disabled={prefsBusy || (key === "wallet" && user?.role !== "doctor")}
-                />
-              </div>
-            </div>
-          ))}
-          <p className="tiny muted" style={{ padding: "0 16px 12px" }}>
-            Preferans yo sèlman kontròle VWA push la — istwa notifikasyon nan aplikasyon an konsève toujou.
-          </p>
-        </section>
-      )}
-
-      {/* Persisted history */}
+      {/* Persisted history — the FIRST thing on the page (owner request:
+          settings used to sit above it). */}
       <section className="panel" aria-labelledby="history-title">
         <div className="panel-head">
           <h2 id="history-title" className="panel-title">

@@ -71,7 +71,7 @@
   --surface-dim: #f0f3f2;
   --text-primary: #172b3a;
   --text-secondary: #52656d;
-  --text-tertiary: #788990;
+  --text-tertiary: #5b6c74;
   --on-primary: #ffffff;
   --divider: #eaf0ee;
 
@@ -902,7 +902,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 }
 
 .auth-login-shell .auth-brand-tagline {
-  color: #6c7d78;
+  color: #55655f; /* was #6c7d78 — 4.34:1 on white, below the 4.5:1 WCAG AA threshold */
   font-size: 11px;
   line-height: 16px;
   font-weight: 500;
@@ -1123,7 +1123,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   justify-content: center;
   gap: 7px;
   margin-top: 24px;
-  color: #788982;
+  color: #5a6b64; /* was #788982 — 3.68:1, below WCAG AA */
   font-size: 11px;
   line-height: 17px;
   text-align: center;
@@ -1142,7 +1142,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   max-width: 440px;
   margin: auto auto 0;
   padding-top: 35px;
-  color: #84918c;
+  color: #5f6d68; /* was #84918c — 3.28:1, below WCAG AA */
   font-size: 10px;
   line-height: 16px;
 }
@@ -1554,7 +1554,13 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   flex: 1;
   overflow-y: auto;
   padding: 18px 14px;
-  background: var(--gray-50);
+  /* Chat wallpaper: the owner-provided mint healthcare background, used
+     as-is. `center / cover` fills the scroll region on every breakpoint —
+     mobile containers are nearly the image's native portrait aspect (whole
+     design visible), desktop containers cover-crop to the decorated middle
+     band. `scroll` (default) anchors it to the scroll region so messages
+     glide over a steady backdrop; gray-50 stays as the loading fallback. */
+  background: var(--gray-50) url("/chat-wallpaper-mint.webp") center / cover no-repeat;
   scroll-behavior: smooth;
 }
 .chat-day {
@@ -1677,6 +1683,18 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 
 /* Presence dot + avatar wrapper */
 .presence-avatar { position: relative; display: inline-flex; flex-shrink: 0; }
+
+/* ── WhatsApp-style conversation header identity (owner request, Nov 2026) ─
+   Compact two-line identity block: bold name over a muted status line
+   (specialty · presence). Keeps Medika's green-and-white header surface. */
+.chat-peer { min-width: 0; flex: 1; }
+.chat-peer-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+.chat-peer-sub { line-height: 1.3; color: var(--text-secondary); }
 .presence-dot {
   position: absolute;
   right: -1px;
@@ -2152,7 +2170,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   align-items: center;
   justify-content: center;
 }
-.empty-state h3 { color: var(--text-primary); margin-bottom: 4px; font-size: 15px; font-weight: 600; }
+.empty-state h2 { color: var(--text-primary); margin-bottom: 4px; font-size: 15px; font-weight: 600; }
 .empty-state p { font-size: 13px; line-height: 20px; max-width: 380px; margin: 0 auto 16px; }
 
 .skeleton {
@@ -2198,6 +2216,13 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   flex-direction: column;
   gap: 8px;
   width: min(92vw, 420px);
+  /* Toasts are status indicators, not interactive surfaces: the stack must
+     never swallow clicks aimed at what sits beneath it (it floats exactly
+     over bottom-edge form CTAs, and a flaky navigator.onLine report kept
+     the offline toast blocking the consultation form's Kontinye button
+     until it disappeared). Children inherit none — no toast currently
+     carries interactive controls; revisit if one ever does. */
+  pointer-events: none;
 }
 @media (min-width: 900px) { .toast-stack { bottom: 20px; } }
 .toast {
@@ -2343,7 +2368,7 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
   justify-content: center;
   margin-bottom: 10px;
 }
-.tip-card h4 { font-size: 13px; margin-bottom: 4px; }
+.tip-card h3 { font-size: 13px; margin-bottom: 4px; }
 .tip-card p { font-size: 12px; line-height: 18px; color: var(--text-secondary); }
 
 /* ── Video call ─────────────────────────────────────────────────────────── */
@@ -2612,6 +2637,33 @@ a.row:hover, button.row:hover { border-color: var(--gray-400); box-shadow: var(-
 body.has-install-banner .app-main { padding-bottom: calc(var(--bottomnav-h) + 110px); }
 @media (min-width: 900px) {
   body.has-install-banner .app-main { padding-bottom: 120px; }
+}
+
+/* ── First-login permission bootstrap card ──────────────────────────────── */
+
+/* Same fixed-slot treatment as the install banner: floats above the bottom
+   nav, one card, never covers the composer (hidden on chat/call routes). */
+.perm-bootstrap-card {
+  position: fixed;
+  bottom: calc(var(--bottomnav-h) + 12px);
+  left: 12px;
+  right: 12px;
+  z-index: 60;
+  background: var(--surface);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 480px;
+  margin: 0 auto;
+}
+@media (min-width: 900px) { .perm-bootstrap-card { bottom: 16px; } }
+body.has-perm-card .app-main { padding-bottom: calc(var(--bottomnav-h) + 110px); }
+@media (min-width: 900px) {
+  body.has-perm-card .app-main { padding-bottom: 120px; }
 }
 
 /* ── Utility ─────────────────────────────────────────────────────────────── */
@@ -2967,3 +3019,189 @@ body.has-install-banner .app-main { padding-bottom: calc(var(--bottomnav-h) + 11
   /* Small brand chips keep their exact ink (text colors already print). */
   .ordonnance-doc * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ── Auth screens: premium-mint polish (Nov 2026 round) ───────────────────
+   The institutional palette stays untouched; this round brings the auth
+   pages into the same visual language as the authenticated app ("Premium
+   Mint"): warm wash, flowing mint field, refined surfaces and motion.
+   Purely additive rules — the flex layout system and markup contracts of
+   issues #14/#43 are unchanged. */
+
+/* Shared shell: warm white → light mint vertical wash instead of flat #fff
+   (register shows it around the centered form; login desktop pans keep
+   painting over it, which is fine). */
+.auth-login-shell,
+.auth-register-shell {
+  background: linear-gradient(180deg, #fdfffe 0%, #f7fbf9 52%, #f1f8f4 100%);
+  position: relative;
+  isolation: isolate;
+}
+
+/* Flowing mint field, fixed and non-interactive — the same decorative
+   language as the app shell's ::after field. */
+.auth-login-shell::before,
+.auth-register-shell::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(52rem 38rem at 112% -8%, rgba(166, 240, 201, 0.26), transparent 58%),
+    radial-gradient(44rem 32rem at -16% 92%, rgba(166, 240, 201, 0.16), transparent 56%);
+}
+
+/* Mobile (≤639px): the form pane carries the field itself — soft mint
+   radials over the warm wash. Tablet/desktop keep their existing card and
+   split-screen treatments untouched. */
+@media (max-width: 639px) {
+  .auth-login-shell .auth-form-pane,
+  .auth-register-shell .auth-form-pane {
+    background:
+      radial-gradient(38rem 26rem at 116% -6%, rgba(166, 240, 201, 0.22), transparent 60%),
+      radial-gradient(30rem 22rem at -14% 96%, rgba(166, 240, 201, 0.16), transparent 58%),
+      linear-gradient(180deg, #fdfffe 0%, #f6fbf8 100%);
+  }
+}
+
+/* Glass-tinted mobile brand bar. */
+.auth-login-shell .auth-mobile-brand,
+.auth-register-shell .auth-mobile-brand {
+  background: rgba(253, 255, 254, 0.9);
+  border-bottom-color: var(--brand-pill-border);
+}
+
+/* Inputs and selects: softer corners, tinted surface, gentle hover. */
+.auth-login-shell .auth-form .input,
+.auth-register-shell .auth-form .input,
+.auth-register-shell .auth-form .select {
+  border-radius: 12px;
+  background: var(--brand-input-bg);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.auth-login-shell .auth-form .input:hover:not(:focus):not([aria-invalid="true"]),
+.auth-register-shell .auth-form .input:hover:not(:focus):not([aria-invalid="true"]),
+.auth-register-shell .auth-form .select:hover:not(:focus) {
+  border-color: var(--brand-input-border);
+  box-shadow: 0 1px 4px rgba(23, 43, 58, 0.05);
+}
+
+/* Native select: custom mint-green chevron, no browser chrome. */
+.auth-register-shell .auth-form .select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 42px;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23197568' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 15px center;
+}
+
+/* Submit CTAs: quiet lift on hover (motion-gated). */
+@media (prefers-reduced-motion: no-preference) {
+  .auth-login-shell .auth-submit:hover:not(:disabled),
+  .auth-register-shell .auth-submit:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 26px -12px rgba(7, 90, 72, 0.6);
+  }
+  .auth-login-shell .auth-submit:active:not(:disabled),
+  .auth-register-shell .auth-submit:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: none;
+  }
+}
+
+/* Context pill reads as a soft mint capsule. */
+.auth-login-shell .auth-context-pill,
+.auth-register-shell .auth-context-pill {
+  border-radius: var(--radius-full);
+}
+
+/* Registration section headers: mint accent bar on the divider. */
+.auth-register-shell .form-section-title {
+  position: relative;
+}
+
+.auth-register-shell .form-section-title::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 44px;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--green-500), var(--brand-mint));
+}
+
+/* Calm entrance for the form content (motion-gated globally already). */
+@media (prefers-reduced-motion: no-preference) {
+  .auth-login-shell .auth-form,
+  .auth-register-shell .auth-form {
+    animation: auth-form-rise 0.45s cubic-bezier(0.22, 0.8, 0.36, 1) both;
+  }
+}
+
+@keyframes auth-form-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ─── Agent workspace (contact center) ────────────────────────────────────── */
+.agent-workspace .workspace-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+@media (min-width: 900px) {
+  .agent-workspace .workspace-grid { grid-template-columns: 1fr 1fr; }
+  .agent-workspace .zone-c { grid-column: 1 / -1; }
+}
+.stage-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+.stage-bar li {
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  border: 1px solid var(--border, #e2e8e0);
+  color: var(--muted, #6b7280);
+  background: var(--surface, #fff);
+}
+.stage-bar li.done { border-color: var(--ok-border, #b7d8b7); color: var(--ok, #2e7d32); background: var(--ok-bg, #f0f7f0); }
+.stage-bar li.current { border-color: var(--accent, #8bc34a); color: #245b26; background: var(--accent-bg, #f2f8e8); font-weight: 600; }
+.offer-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  border: 1px solid var(--border, #e2e8e0);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+}
+.btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.status-line { font-weight: 600; }
+.status-line.ok { color: var(--ok, #2e7d32); }
+.status-line.warn { color: var(--warn, #92600a); }
+.warn-text { color: var(--warn, #92600a); }
+.call-controls { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.call-timer {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  background: var(--accent-bg, #f2f8e8);
+  border: 1px solid var(--accent, #8bc34a);
+  color: #245b26;
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+}
+.badge.ok { color: var(--ok, #2e7d32); border-color: var(--ok-border, #b7d8b7); background: var(--ok-bg, #f0f7f0); }
+.badge.warn { color: var(--warn, #92600a); border-color: #e6cf9a; background: #fdf6e3; }
+ol.events { padding-left: 1.25rem; }
+ol.events li { padding: 0.15rem 0; font-size: 0.9rem; color: var(--muted, #6b7280); }
+.hidden-audio { display: none; }
+.wrapup { border-top: 1px dashed var(--border, #e2e8e0); padding-top: 0.75rem; }

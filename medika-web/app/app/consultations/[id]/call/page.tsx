@@ -83,8 +83,25 @@ function CallScreen() {
   const params = useSearchParams();
   const mode = params.get("mode") === "voice" ? "voice" : "video";
   const { token, user } = useAuth();
-  const { socket } = useSocket();
+  const { socket, status: socketStatus } = useSocket();
   const router = useRouter();
+
+  // ── Read-aware push suppression (owner request) ───────────────────────────
+  // The call page hosts the SAME consultation conversation (InCallChat), so
+  // it announces active viewing exactly like the conversation page — an
+  // in-call chat message must not page the other participant who is sitting
+  // in the call. Same contract: viewing arms the grace window, the server-
+  // side read receipt does the actual suppression.
+  useEffect(() => {
+    if (!socket || !consultationId) return;
+    const announce = () => socket.sendViewing(consultationId);
+    announce();
+    const refresh = setInterval(announce, 60_000);
+    return () => {
+      clearInterval(refresh);
+      socket.sendViewing(null);
+    };
+  }, [socket, socketStatus, consultationId]);
 
   const [state, dispatch] = useReducer(reduceCallState, INITIAL_CALL_STATE);
   const [statusText, setStatusText] = useState("N ap konekte ak apèl la...");

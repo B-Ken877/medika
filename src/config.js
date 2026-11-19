@@ -85,6 +85,13 @@ const config = {
   moncashClientId: env('MONCASH_CLIENT_ID', ''),
   moncashClientSecret: env('MONCASH_CLIENT_SECRET', ''),
   paymentSimulation: bool('PAYMENT_SIMULATION', false),
+  // Open beta simulation: when true, EVERY authenticated user may run the
+  // isolated simulated payment in ANY deployment stage (including production).
+  // Explicit server-side switch — nothing client-side can enable it, and it
+  // still refuses to run when the real MonCash production mode is configured.
+  // Intended for the beta period ("all accounts are beta testers"); unset it
+  // to fall back to the allowlist-gated behavior (no code change needed).
+  paymentSimulationOpen: bool('PAYMENT_SIMULATION_OPEN', false),
   // Exact username resolved from the authenticated DB user; never trust client input.
   paymentSimulationTestUsername: env('PAYMENT_SIMULATION_TEST_USERNAME', '').trim(),
   // Issue #77 — explicit, reversible BETA allowlist: comma-separated exact
@@ -111,6 +118,20 @@ const config = {
 
   // ─── Business ──────────────────────────────────────────────────────────────
   platformFee: parseInt(env('PLATFORM_FEE', '250'), 10),
+
+  // ─── Agent operations (consultation assistance contact center) ────────────
+  // Targeted agent offer window; expired offers return the request to the
+  // queue for the next eligible agent (assignment timeout, brief #7).
+  agentOfferWindowSeconds: parseInt(env('AGENT_OFFER_WINDOW_SECONDS', '45'), 10),
+  // A presence row older than this is stale — the agent is NOT routable
+  // until the next heartbeat (a disconnected browser never stays routable).
+  agentPresenceStaleSeconds: parseInt(env('AGENT_PRESENCE_STALE_SECONDS', '45'), 10),
+  // Default scheduled shift length; shifts may run later (an active session
+  // is never force-terminated at shift end, brief #5).
+  agentShiftHours: parseInt(env('AGENT_SHIFT_HOURS', '6'), 10),
+  // Callback retry policy (configurable, never hardcoded — brief #8).
+  callbackMaxAttempts: parseInt(env('CALLBACK_MAX_ATTEMPTS', '3'), 10),
+  callbackRetryMinutes: parseInt(env('CALLBACK_RETRY_MINUTES', '30'), 10),
 
   // ─── Consultation request lifecycle (issue #25) ────────────────────────────
   // Server-authoritative deadlines. Values are minutes/hours so tests and
@@ -159,17 +180,19 @@ function assertProductionSafety() {
     problems.push('DATABASE_URL is required');
   }
   if (
-    config.paymentSimulation &&
+    (config.paymentSimulation || config.paymentSimulationOpen) &&
     isProductionDeployment() &&
+    !config.paymentSimulationOpen &&
     !config.paymentSimulationTestUsername &&
     config.paymentSimulationBetaUsernames.length === 0
   ) {
-    // Production simulation is permitted only when bound to explicit
-    // server-verified usernames (the legacy single test username and/or the
-    // issue #77 beta allowlist). Routes must call simulationAllowed(req.user),
-    // never the global form.
+    // Production simulation must be scoped explicitly: either OPEN to every
+    // authenticated user (PAYMENT_SIMULATION_OPEN — the beta period), or
+    // bound to server-verified usernames (the legacy single test username
+    // and/or the issue #77 beta allowlist). Routes must call
+    // simulationAllowed(req.user), never the global form.
     problems.push(
-      'PAYMENT_SIMULATION on production requires PAYMENT_SIMULATION_TEST_USERNAME or PAYMENT_SIMULATION_BETA_USERNAMES'
+      'Payment simulation on production requires PAYMENT_SIMULATION_OPEN (beta: everyone) or PAYMENT_SIMULATION_TEST_USERNAME/PAYMENT_SIMULATION_BETA_USERNAMES'
     );
   }
   if (config.seedDemo) {
@@ -192,16 +215,22 @@ function moncashConfigured() {
  * Deployment stage comes from isProductionDeployment() — VERCEL_ENV-aware so
  * Vercel Preview deployments (NODE_ENV=production, VERCEL_ENV=preview) can
  * run the isolated simulation for everyone, while true production fails
- * closed EXCEPT for explicitly allowlisted accounts (issue #77): the legacy
- * single test username (PAYMENT_SIMULATION_TEST_USERNAME) and/or the
- * reversible beta allowlist (PAYMENT_SIMULATION_BETA_USERNAMES). The username
- * always comes from the authenticated DB user — client input can never
- * assert membership, and removing a username revokes access immediately. */
+ * closed EXCEPT for explicitly scoped accounts: the open-beta switch
+ * (PAYMENT_SIMULATION_OPEN — every authenticated user), the legacy single
+ * test username (PAYMENT_SIMULATION_TEST_USERNAME) and/or the reversible
+ * beta allowlist (PAYMENT_SIMULATION_BETA_USERNAMES) (issue #77). The
+ * username always comes from the authenticated DB user — client input can
+ * never assert membership, and removing a username revokes access
+ * immediately. Open mode never runs against real MonCash (mode=production). */
 function simulationAllowed(user) {
-  if (!config.paymentSimulation || config.moncashMode === 'production') return false;
+  const simulationEnabled = config.paymentSimulation || config.paymentSimulationOpen;
+  if (!simulationEnabled || config.moncashMode === 'production') return false;
   if (!isProductionDeployment()) return true;
   const username = user && typeof user.username === 'string' ? user.username : null;
   if (!username) return false;
+  // Open beta: an explicit server-side switch lets every authenticated user
+  // run the isolated simulation — no per-user allowlist during the beta.
+  if (config.paymentSimulationOpen) return true;
   if (config.paymentSimulationTestUsername && username === config.paymentSimulationTestUsername) {
     return true;
   }

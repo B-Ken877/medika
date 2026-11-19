@@ -18,6 +18,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
+import { requestStartupPermissionsAfterLogin } from "@/lib/permissions";
 import { ApiError } from "@/lib/api/client";
 import { ErrorAlert } from "@/components/ui/primitives";
 
@@ -64,6 +65,12 @@ function LoginForm() {
     setSubmitting(true);
     try {
       await login(username.trim(), password);
+      // Owner request: on the first login on a device, automatically ask for
+      // camera, mic and push permission. Fired from THIS submit click so the
+      // browser treats the prompts as user-initiated; fire-and-forget — a
+      // blocked or denied permission never blocks the redirect (the shell's
+      // PermissionBootstrap card is the fallback).
+      void requestStartupPermissionsAfterLogin();
       // Redirect happens via the existing auth status effect.
     } catch (err) {
       setError(
@@ -134,7 +141,10 @@ function LoginForm() {
         </span>
       </header>
 
-      <section className="auth-form-pane" aria-labelledby="login-title">
+      {/* Form panel — plain div (NOT a titled <section>: a titled section is a
+          region landmark, and <main> nested inside a landmark fails
+          axe `landmark-main-is-top-level`. Same pattern as register. */}
+      <div className="auth-form-pane">
         <main className="auth-form">
           <div className="auth-form-topline">
             <span className="auth-context-pill">KONT PASYAN</span>
@@ -221,7 +231,7 @@ function LoginForm() {
           <span>Medika</span>
           <span>Swen sante pi pre w.</span>
         </footer>
-      </section>
+      </div>
     </div>
   );
 }

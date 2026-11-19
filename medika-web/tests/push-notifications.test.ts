@@ -64,7 +64,9 @@ describe("lib/push.ts — subscription client", () => {
 
 describe("lib/push.ts — honest server health states (issue #50)", () => {
   const src = read("../lib/push.ts");
-  const page = read("../app/app/notifications/page.tsx");
+  // Owner restructure: the push panel (with its honest failure copy) moved
+  // from the notification center to the dedicated settings component.
+  const settings = read("../components/notifications/NotificationSettings.tsx");
 
   it("server/network failures are distinct states, never misreported as browser limits", () => {
     // The states exist and are typed.
@@ -92,11 +94,11 @@ describe("lib/push.ts — honest server health states (issue #50)", () => {
     expect(fn.match(/support: "unsupported-browser"/g)?.length).toBe(3);
   });
 
-  it("the notification center copy distinguishes every server state from device states", () => {
-    expect(page).toContain('"server-unreachable":');
-    expect(page).toContain('"registration-failed":');
+  it("the notification settings copy distinguishes every server state from device states", () => {
+    expect(settings).toContain('"server-unreachable":');
+    expect(settings).toContain('"registration-failed":');
     // The pre-existing unconfigured copy stays (the rollout-switch message).
-    expect(page).toContain("Sèvis push la pa konfigure kounye a");
+    expect(settings).toContain("Sèvis push la pa konfigure kounye a");
   });
 });
 
@@ -171,7 +173,7 @@ describe("service worker push handlers (issue #36)", () => {
   });
 });
 
-describe("notification center page (issue #36)", () => {
+describe("notification center page — pure inbox (owner restructure)", () => {
   const page = read("../app/app/notifications/page.tsx");
 
   it("loads the SERVER-PERSISTED history with unread state", () => {
@@ -190,25 +192,55 @@ describe("notification center page (issue #36)", () => {
     expect(page).toContain("Chaje plis");
   });
 
-  it("exposes category preferences with optimistic toggles + revert", () => {
-    expect(page).toContain("getNotificationPreferences(token)");
-    expect(page).toContain("updateNotificationPreferences(token, { [key]:");
-    expect(page).toContain("setPrefs(prefs); // revert on failure");
+  it("history is the FIRST content section — no settings panels above it", () => {
+    // The inbox contract: the history panel comes directly after the page
+    // head, and NO push/preference panels remain on this page.
+    const historyIdx = page.indexOf('aria-labelledby="history-title"');
+    expect(historyIdx).toBeGreaterThan(-1);
+    expect(page).not.toContain('aria-labelledby="push-title"');
+    expect(page).not.toContain('aria-labelledby="prefs-title"');
+    // The history section is the very FIRST <section> rendered on the page
+    // (only the page head + the error alert may precede it).
+    const historySectionStart = page.lastIndexOf("<section", historyIdx);
+    expect(page.indexOf("<section")).toBe(historySectionStart);
   });
 
-  it("push enable/disable is an explicit user action with honest states", () => {
-    expect(page).toContain('onClick={pushEnabled ? onDisablePush : onEnablePush}');
-    expect(page).toContain("SUPPORT_COPY[pushSupport]");
-    expect(page).toContain("Notifikasyon push bezwen yon koneksyon sekirize (HTTPS).");
-    expect(page).toContain("Sèvis push la pa konfigure kounye a");
-  });
-
-  it("preferences copy documents the suppress-delivery-only policy", () => {
-    expect(page).toContain("Preferans yo sèlman kontròle VWA push la");
+  it("links to the dedicated settings page with one header button", () => {
+    expect(page).toContain('href="/app/settings/notifications"');
+    expect(page).toContain("Paramèt");
+    expect(page).toContain("<Settings");
   });
 
   it("keeps the privacy note (no medical data on-device)", () => {
     expect(page).toContain("pa gen done medikal ki kenbe sou aparèy ou a");
+  });
+});
+
+describe("dedicated notification settings page (owner restructure)", () => {
+  const component = read("../components/notifications/NotificationSettings.tsx");
+  const page = read("../app/app/settings/notifications/page.tsx");
+
+  it("the page renders the settings component and links back to the inbox", () => {
+    expect(page).toContain("<NotificationSettings />");
+    expect(page).toContain('href="/app/notifications"');
+    expect(page).toContain("Paramèt notifikasyon");
+  });
+
+  it("exposes category preferences with optimistic toggles + revert", () => {
+    expect(component).toContain("getNotificationPreferences(token)");
+    expect(component).toContain("updateNotificationPreferences(token, { [key]:");
+    expect(component).toContain("setPrefs(prefs); // revert on failure");
+  });
+
+  it("push enable/disable is an explicit user action with honest states", () => {
+    expect(component).toContain('onClick={pushEnabled ? onDisablePush : onEnablePush}');
+    expect(component).toContain("SUPPORT_COPY[pushSupport]");
+    expect(component).toContain("Notifikasyon push bezwen yon koneksyon sekirize (HTTPS).");
+    expect(component).toContain("Sèvis push la pa konfigure kounye a");
+  });
+
+  it("preferences copy documents the suppress-delivery-only policy", () => {
+    expect(component).toContain("Preferans yo sèlman kontròle VWA push la");
   });
 });
 

@@ -244,6 +244,19 @@ export class MedikaSocket {
     return this.send({ type: "recording", consultationId, isRecording });
   }
 
+  /**
+   * Read-aware push suppression (owner request): announce which conversation
+   * this client is ACTIVELY viewing (`consultationId`) or that it left one /
+   * all of them (`null`). Membership is validated server-side; the state
+   * lives on the socket and dies with it. The server only uses this to time
+   * a push-suppression grace window around reads — the message must STILL be
+   * marked read (POST /read) before any push is suppressed. Send on chat
+   * mount, on unmount, on socket (re)connect and periodically while open.
+   */
+  sendViewing(consultationId: string | null): boolean {
+    return this.send({ type: "consultation:viewing", consultationId });
+  }
+
   /** Ask the server for the counterpart's CURRENT presence in one
    *  consultation (membership-checked server-side; reply arrives as a
    *  presence:update event). Used when a chat view mounts after the socket

@@ -134,7 +134,9 @@ export default function DossierPage() {
       <div>
         <h1 className="page-title">Dosisye medikal mwen</h1>
         <p className="muted small">
-          {history?.patient_name ?? user?.name}
+          {/* Live profile identity (owner request): the saved profile is the
+              source of truth; the history snapshot is only a fallback. */}
+          {user?.name ?? history?.patient_name}
           {history?.last_updated ? ` · Mete ajou ${formatDateTime(history.last_updated)}` : ""}
         </p>
       </div>

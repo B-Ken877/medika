@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Eye, EyeOff, UserPlus } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
+import { requestStartupPermissionsAfterLogin } from "@/lib/permissions";
 import { ApiError } from "@/lib/api/client";
 import { ErrorAlert } from "@/components/ui/primitives";
 
@@ -72,6 +73,10 @@ export default function RegisterPage() {
         age: ageNum,
         gender,
       });
+      // Owner request: a freshly created account is a first login — ask for
+      // camera, mic and push permission from THIS submit click; fire-and-
+      // forget, never blocks the redirect (PermissionBootstrap is fallback).
+      void requestStartupPermissionsAfterLogin();
       // Redirect happens via auth status effect.
     } catch (err) {
       setError(

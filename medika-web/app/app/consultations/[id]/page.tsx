@@ -14,11 +14,14 @@ import {
   ArrowDown,
   ArrowLeft,
   ClipboardList,
-  Info,
+  Clock,
+  FileText,
+  MessagesSquare,
   MonitorPlay,
   NotebookPen,
   Phone,
   Send,
+  ShieldCheck,
   Smile,
   Video,
 } from "lucide-react";
@@ -28,7 +31,7 @@ import { getConsultation, getMessages, markConsultationRead, sendConsultationMes
 import type { Consultation, ServerMessage } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
 import { fileSizeLabel, formatDaySeparator, formatTime } from "@/lib/format";
-import { specialtyLabel, urgencyLabel } from "@/lib/labels";
+import { specialtyLabel } from "@/lib/labels";
 import { wsEventToServerMessage } from "@/lib/ws/socket";
 import { PartnerTypingTracker, TypingNotifier } from "@/lib/ws/typing";
 import { PartnerRecordingTracker, RecordingSignaler } from "@/lib/ws/recording";
@@ -98,6 +101,11 @@ export default function ConsultationChatPage() {
   const [uploadProgress, setUploadProgress] = useState<{ name: string; pct: number } | null>(null);
   const [showEmoji, setShowEmoji] = useState(false);
   const [showRx, setShowRx] = useState(false);
+  /** Finished-consultation view (owner request, Nov 2026): opening a finished
+   *  consultation lands on the PRESCRIPTION PAGE (ordonnance + medication
+   *  flow) — the chat history is one button away, not the default surface.
+   *  Active consultations always render the chat room as before. */
+  const [finishedView, setFinishedView] = useState<"docs" | "chat">("docs");
   /** Authoritative voice-composer mode — replaces the normal composer while
    *  recording / previewing / uploading a voice message. */
   const [voiceMode, setVoiceMode] = useState<VoiceMode>("idle");
@@ -349,6 +357,25 @@ export default function ConsultationChatPage() {
     document.addEventListener("visibilitychange", markNow);
     return () => document.removeEventListener("visibilitychange", markNow);
   }, [messages, token, consultationId, user]);
+
+  // ── Read-aware push suppression (owner request) ───────────────────────────
+  // Announce that THIS conversation is actively viewed so the server can
+  // arm its push-suppression grace window around new messages. The push is
+  // only suppressed when the mark-read above ALSO succeeds (server-side
+  // read receipt) — viewing alone never suppresses. Announced on mount, on
+  // every socket (re)connect, and refreshed periodically so the server-side
+  // cross-instance copy never goes stale while the page is open; cleared on
+  // unmount (a closed tab must not keep suppressing).
+  useEffect(() => {
+    if (!socket || !consultationId) return;
+    const announce = () => socket.sendViewing(consultationId);
+    announce();
+    const refresh = setInterval(announce, 60_000);
+    return () => {
+      clearInterval(refresh);
+      socket.sendViewing(null);
+    };
+  }, [socket, socketStatus, consultationId]);
 
   // ── Composer ──────────────────────────────────────────────────────────────
   const notifyTyping = useCallback((text: string) => {
@@ -751,7 +778,19 @@ export default function ConsultationChatPage() {
   // a destination (the /room route now only redirects here). ───────────
   const callHref = `/app/consultations/${encodeURIComponent(consultationId)}/call?mode=video`;
 
-  const partnerName = isDoctor ? consultation.patient_name : null;
+  // Live profile identity (owner request, Nov 2026): the consultation row's
+  // patient_name is a creation-time snapshot; the API enriches rows with
+  // live identities read from the users table, so a profile update shows up
+  // here on the next fetch — no staleness, no extra request. Fallbacks keep
+  // legacy rows rendering.
+  const partnerIdentity = isDoctor ? consultation.patient_identity : consultation.doctor_identity;
+  const partnerName =
+    partnerIdentity?.name ?? (isDoctor ? consultation.patient_name : null);
+  const partnerAvatarUrl = partnerIdentity?.avatar_url ?? null;
+  const partnerDesignation =
+    partnerIdentity?.role === "doctor"
+      ? [partnerIdentity.specialty, partnerIdentity.hospital].filter(Boolean).join(" · ") || null
+      : null;
   const canChat = consultation.status === "EN_COURS";
   const waiting = consultation.status === "RECHERCHE_MEDECIN";
   const refused = consultation.status === "REFUSE";
@@ -761,12 +800,15 @@ export default function ConsultationChatPage() {
   // the PATIENT viewer only; doctors keep the clinical document view.
   const isPatientViewer = user?.role !== "doctor" && user?.id === consultation.patient_id;
 
+  // WhatsApp-style subtitle: designation (doctor) + presence, typing wins.
   const subtitle = canChat
     ? partnerTyping
       ? "Ap ekri..."
       : presence !== "unknown" && partnerId
-        ? presenceLabel(presence)
-        : "Konsiltasyon an ap dewoule"
+        ? partnerDesignation
+          ? `${partnerDesignation} · ${presenceLabel(presence)}`
+          : presenceLabel(presence)
+        : partnerDesignation ?? "Konsiltasyon an ap dewoule"
     : waiting
       ? "N ap tann doktè a."
       : finished
@@ -891,7 +933,12 @@ export default function ConsultationChatPage() {
           <ArrowLeft size={20} />
         </button>
         <span className="presence-avatar">
-          <Avatar name={partnerName ?? user?.name} size="sm" alt={`Foto pwofil ${partnerName ?? "lòt moun nan"}`} />
+          <Avatar
+            name={partnerName ?? user?.name}
+            src={partnerAvatarUrl}
+            size="md"
+            alt={`Foto pwofil ${partnerName ?? "lòt moun nan"}`}
+          />
           {canChat && presence !== "unknown" && partnerId && (
             <span
               className={`presence-dot ${presence}`}
@@ -899,11 +946,11 @@ export default function ConsultationChatPage() {
             />
           )}
         </span>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontWeight: 700, fontSize: "0.95rem" }} className="nowrap">
+        <div className="chat-peer">
+          <div className="chat-peer-name nowrap">
             {partnerName ?? specialtyLabel(consultation.specialty_needed)}
           </div>
-          <div className="tiny muted nowrap" aria-live="polite">
+          <div className="chat-peer-sub tiny muted nowrap" aria-live="polite">
             {subtitle}
             {canChat && presence !== "unknown" && partnerId && (
               <span className="sr-only">{presence === "online" ? " — Sou entènèt" : " — Pa sou entènèt"}</span>
@@ -948,64 +995,6 @@ export default function ConsultationChatPage() {
           surface is the video call; chat is the supporting tool.
           The acceptance transition above already auto-navigates; this bar
           is the fallback (e.g. if navigation was interrupted). */}
-      {canChat && justAccepted && (
-        <div className="alert alert-success room-entry-bar" role="status">
-          <MonitorPlay size={17} aria-hidden />
-          <span style={{ flex: 1 }}>Doktè a aksepte demann lan — konsiltasyon an kòmanse!</span>
-          <Link href={callHref} className="btn btn-primary btn-sm">
-            Antre nan apèl videyo a
-          </Link>
-        </div>
-      )}
-      {canChat && !justAccepted && (
-        <div className="room-entry-bar quiet" role="presentation">
-          <MonitorPlay size={15} aria-hidden />
-          <span style={{ flex: 1 }} className="tiny">Konsiltasyon an ap dewoule nan apèl videyo a.</span>
-          <Link href={callHref} className="btn btn-secondary btn-sm">
-            Ouvri apèl videyo a
-          </Link>
-        </div>
-      )}
-
-      {/* Context strip */}
-      <div
-        className="flex"
-        style={{
-          gap: 8,
-          padding: "10px 16px",
-          background: "var(--gray-50)",
-          borderBottom: "1px solid var(--gray-200)",
-          fontSize: "0.8rem",
-          color: "var(--text-secondary)",
-          flexWrap: "wrap",
-        }}
-      >
-        <Info size={14} aria-hidden style={{ flexShrink: 0 }} />
-        <span className="nowrap">{specialtyLabel(consultation.specialty_needed)}</span>
-        <span>·</span>
-        <span>Ijans: {urgencyLabel(consultation.urgency_level)}</span>
-        {consultation.patient_age != null && consultation.patient_age !== "" && (
-          <>
-            <span>·</span>
-            <span>{consultation.patient_age} an</span>
-          </>
-        )}
-      </div>
-
-      {waiting && (
-        <div className="alert alert-warning" style={{ margin: 12, marginBottom: 0 }} role="status">
-          N ap tann doktè a. Ou ap resevwa yon notifikasyon le li aksepte demann lan.
-        </div>
-      )}
-      {canChat && consultation.expires_at != null && (
-        <div className="alert alert-info" style={{ margin: 12, marginBottom: 0 }} role="status">
-          {/* Issue #71: calm static copy instead of a ticking countdown. The
-              deadline itself stays server-authoritative (expires_at enforced
-              by the lifecycle engine); a durable pre-expiration reminder is
-              delivered through the notification system near the end. */}
-          Konsiltasyon sa a disponib jiska 5 èdtan apre doktè a aksepte. Istorik mesaj yo ap konsève.
-        </div>
-      )}
       {refused && (
         <div className="alert alert-error" style={{ margin: 12, marginBottom: 0 }} role="status">
           Demann sa a refize. Ou ka{" "}
@@ -1025,20 +1014,108 @@ export default function ConsultationChatPage() {
         </div>
       )}
 
-      {/* Prescription document (issue #82 — patient AND issuing doctor, when
-          finished; the panel itself falls back to legacy free-text records). */}
-      {finished && <PrescriptionPanel consultation={consultation} token={token} />}
-
-      {/* Medication order + pharmacy quote (issue #83 — PATIENT viewer only;
-          doctors keep the clinical document view without the ordering flow).
-          The panel hides itself for legacy free-text prescriptions. */}
-      {finished && isPatientViewer && (
-        <MedicationOrderPanel consultation={consultation} token={token} />
+      {/* Finished consultation — prescription-first (owner request, Nov 2026):
+          opening a finished consultation lands on the ordonnance page; the
+          chat history is one toggle away. The toggle sits under the header so
+          it is always reachable, in both directions. */}
+      {finished && (
+        <div className="rx-view-toggle" role="tablist" aria-label="Chwazi sa w vle gade">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={finishedView === "docs"}
+            className={finishedView === "docs" ? "active" : ""}
+            onClick={() => setFinishedView("docs")}
+          >
+            <FileText size={15} aria-hidden /> Òrdònans lan
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={finishedView === "chat"}
+            className={finishedView === "chat" ? "active" : ""}
+            onClick={() => setFinishedView("chat")}
+          >
+            <MessagesSquare size={15} aria-hidden /> Istwa konvèsasyon an
+          </button>
+        </div>
       )}
 
-      {/* Chat log */}
-      <div className="chat-log" ref={logRef} role="log" aria-label="Mesaj konsiltasyon an" aria-live="polite">
-       <div className="chat-log-inner">
+      {/* Prescription page — the DEFAULT surface of a finished consultation:
+          the ordonnance document (issue #82 — patient AND issuing doctor) and
+          the medication-order / quote panel (issue #83 — patient viewer only;
+          hides itself for legacy free-text prescriptions) render in their own
+          scroll region, visually separated from the chat. */}
+      {finished && finishedView === "docs" && (
+        <div className="chat-log rx-docs-view">
+          {finished && <PrescriptionPanel consultation={consultation} token={token} />}
+
+          {finished && isPatientViewer && (
+            <MedicationOrderPanel consultation={consultation} token={token} />
+          )}
+        </div>
+      )}
+
+      {/* Chat log — the live room's scroll region. For a finished consultation
+          it stays MOUNTED but hidden while the prescription page is shown: the
+          scroll controller keeps its element (callback ref + ResizeObserver),
+          and the moment the patient opens the chat history the observer fires
+          and re-pins a bottom-pinned user to the latest message. */}
+      <div
+        className="chat-log"
+        ref={logRef}
+        role="log"
+        aria-label="Mesaj konsiltasyon an"
+        aria-live="polite"
+        style={finished && finishedView === "docs" ? { display: "none" } : undefined}
+      >
+       {/* Call entry: a sticky glass card pinned over the wallpapered chat
+          (owner feedback: "not a bar but something better"). It stays
+          reachable while the conversation scrolls under it. */}
+      {canChat && justAccepted && (
+        <div className="room-call-card accent" role="status">
+          <span className="room-call-card-icon" aria-hidden>
+            <MonitorPlay size={19} />
+          </span>
+          <span className="room-call-card-body">
+            <span className="room-call-card-title">Doktè a aksepte demann lan — konsiltasyon an kòmanse!</span>
+          </span>
+          <Link href={callHref} className="btn btn-primary btn-sm">
+            Antre nan apèl videyo a
+          </Link>
+        </div>
+      )}
+      {canChat && !justAccepted && (
+        <div className="room-call-card" role="presentation">
+          <span className="room-call-card-icon" aria-hidden>
+            <MonitorPlay size={19} />
+          </span>
+          <span className="room-call-card-body">
+            <span className="room-call-card-title">Apèl videyo</span>
+            <span className="room-call-card-sub tiny">Konsiltasyon an ap dewoule nan apèl videyo a.</span>
+          </span>
+          <Link href={callHref} className="btn btn-secondary btn-sm">
+            Ouvri apèl videyo a
+          </Link>
+        </div>
+      )}
+      <div className="chat-log-inner">
+        {waiting && (
+          <div className="room-system-chip" role="status">
+            <Clock size={13} aria-hidden />
+            <span>N ap tann doktè a. Ou ap resevwa yon notifikasyon le li aksepte demann lan.</span>
+          </div>
+        )}
+        {canChat && consultation.expires_at != null && (
+          <div className="room-system-chip" role="status">
+            {/* Issue #71: calm static copy instead of a ticking countdown. The
+                deadline itself stays server-authoritative (expires_at enforced
+                by the lifecycle engine); a durable pre-expiration reminder is
+                delivered through the notification system near the end. */}
+            <ShieldCheck size={13} aria-hidden />
+            <span>Konsiltasyon sa a disponib jiska 5 èdtan apre doktè a aksepte. Istorik mesaj yo ap konsève.</span>
+          </div>
+        )}
         {messages === null && <Spinner />}
         {messages !== null && (messages ?? []).length === 0 && pending.length === 0 && (
           <div className="empty-state">
@@ -1279,7 +1356,7 @@ export default function ConsultationChatPage() {
             </>
           )}
         </form>
-      ) : (
+      ) : finished && finishedView === "docs" ? null : (
         <div
           className="chat-composer"
           style={{ justifyContent: "center", color: "var(--text-secondary)", fontSize: "0.85rem" }}

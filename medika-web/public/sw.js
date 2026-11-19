@@ -4,16 +4,35 @@
  *   NEVER cached:  /api/*, /ws, /uploads/*  (auth responses, medical data,
  *                  chat media, tokens — always hit the network)
  *   Precached:     /offline (the offline fallback page), manifest, icons
- *   Cache-first:   /_next/static/*, /icons/*  (versioned, immutable assets)
+ *   Cache-first:   /_next/static/* ONLY (content-hashed, truly immutable —
+ *                  a new deploy always means a new URL)
+ *   Stale-while-   every other static-looking fixed-URL asset (public/
+ *   revalidate:    icons, images incl. .webp, css/js, fonts, manifest):
+ *                  served instantly from cache, then refreshed from the
+ *                  network in the background so content changes on the
+ *                  server reach users by their NEXT visit at the latest.
+ *                  Cache-first here was a bug: /public assets keep the same
+ *                  URL across deploys, so the old policy pinned stale
+ *                  artwork forever (owner report, Nov 2026).
  *   Network-first: navigations (fresh app shell), falling back to /offline
  *                  only when the network is unreachable — never a stale
  *                  authenticated page after logout.
  *
  * There is intentionally NO runtime caching of HTML documents: after logout
  * nothing sensitive can resurface from Cache Storage.
+ *
+ * VERSION must reflect the policy/content generation: activation deletes
+ * every cache that does not start with it, so clients drop poisoned
+ * entries on their first visit after the deploy.
+ *
+ * The VERSION value is generated at build time by
+ * scripts/build-sw-version.mjs — a content hash of every file in public/
+ * plus the sw.js policy itself (VERSION line stripped). NEVER edit it by
+ * hand: change an asset or the policy and the version bumps itself; a
+ * hand-edited value is overwritten on the next build.
  */
 
-const VERSION = "medika-v1";
+const VERSION = "medika-v924c6c23a03e";
 const STATIC_CACHE = `${VERSION}-static`;
 const PRECACHE = `${VERSION}-precache`;
 
@@ -53,6 +72,13 @@ function isNeverCached(url) {
   );
 }
 
+function isImmutableAsset(url) {
+  // Only content-hashed build output may be served cache-first: the URL
+  // itself changes whenever the content does, so a cached copy can never
+  // go stale. Everything else with a fixed URL must self-refresh (SWR).
+  return url.pathname.startsWith("/_next/static/");
+}
+
 function isStaticAsset(url) {
   return (
     url.pathname.startsWith("/_next/static/") ||
@@ -61,6 +87,8 @@ function isStaticAsset(url) {
     url.pathname.endsWith(".js") ||
     url.pathname.endsWith(".woff2") ||
     url.pathname.endsWith(".png") ||
+    url.pathname.endsWith(".webp") ||
+    url.pathname.endsWith(".jpg") ||
     url.pathname.endsWith(".svg") ||
     url.pathname.endsWith(".webmanifest")
   );
@@ -89,8 +117,8 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Versioned static assets: cache-first.
-  if (isStaticAsset(url)) {
+  // Content-hashed build output: cache-first (immutable by construction).
+  if (isImmutableAsset(url)) {
     event.respondWith(
       caches.open(STATIC_CACHE).then(async (cache) => {
         const cached = await cache.match(request);
@@ -102,6 +130,32 @@ self.addEventListener("fetch", (event) => {
         } catch (err) {
           return cached || Response.error();
         }
+      }),
+    );
+    return;
+  }
+
+  // Fixed-URL static assets (public icons, artwork, fonts, css/js, manifest):
+  // stale-while-revalidate. A cached copy answers instantly; the network is
+  // contacted in the background and the cache is refreshed, so server-side
+  // content changes reach the user by their next visit at the latest.
+  if (isStaticAsset(url)) {
+    event.respondWith(
+      caches.open(STATIC_CACHE).then(async (cache) => {
+        const precache = await caches.open(PRECACHE);
+        const cached = (await cache.match(request)) || (await precache.match(request));
+        const refresh = fetch(request)
+          .then((response) => {
+            if (response && response.ok) cache.put(request, response.clone());
+            return response;
+          })
+          .catch(() => undefined);
+        if (cached) {
+          event.waitUntil(refresh);
+          return cached;
+        }
+        const fresh = await refresh;
+        return fresh || Response.error();
       }),
     );
     return;

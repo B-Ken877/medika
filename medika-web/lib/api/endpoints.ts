@@ -699,3 +699,222 @@ export function getVapidPublicKey(token: string, signal?: AbortSignal) {
 export function health(signal?: AbortSignal) {
   return apiFetch<{ status: string; time: string }>("/api/health", { signal, timeoutMs: 8_000 });
 }
+
+// ─── Agent operations (human contact center) ─────────────────────────────────
+
+export interface AssistStatus {
+  sessionId?: string;
+  status: "none" | "waiting" | "connecting" | "connected" | "wrap_up";
+  position?: number | null;
+  agentName?: string | null;
+  agentsAvailable?: number;
+  existing?: boolean;
+  createdAt?: string;
+}
+
+export interface AssistCallback {
+  callbackId: string;
+  status: string;
+  phoneNumber: string;
+  phoneVerified?: boolean;
+  retryCount?: number;
+  maxRetries?: number;
+  nextAttemptAt?: string | null;
+  attempts?: { result: string; at: string }[];
+  createdAt?: string;
+}
+
+export interface AgentOffer {
+  assignmentId: string;
+  sessionId: string;
+  offeredAt: string;
+  expiresAt: string;
+  language?: string;
+  specialty?: string | null;
+  reason?: string;
+}
+
+export interface AgentDashboard {
+  presence: string;
+  shift: { id: string; status: string; scheduledEnd?: string | null } | null;
+  offers: AgentOffer[];
+  queueWaiting: number;
+  callbacksPending: AssistCallbackView[];
+  activeSession: { sessionId: string; status: string } | null;
+  today: { callsHandled: number; consultRequests: number; callbackOutcomes: number; unresolved: number; avgSessionSeconds: number | null };
+}
+
+export interface AssistCallbackView {
+  callbackId: string;
+  patientName: string;
+  patientId: string;
+  phoneNumber: string;
+  phoneVerified: boolean;
+  status: string;
+  reason?: string;
+  language?: string;
+  retryCount?: number;
+  maxRetries?: number;
+  nextAttemptAt?: string | null;
+  windowStart?: string | null;
+  windowEnd?: string | null;
+}
+
+export interface AgentSessionDetail {
+  session: {
+    sessionId: string; status: string; source: string; language: string;
+    reason: string; specialty: string | null; chosenDoctorId: string | null;
+    consultationId: string | null; consultState: string;
+    consultation: { id: string; status: string; doctorId: string | null; specialty: string; createdAt: number } | null;
+    startedAt: string | null; callStartedAt: string | null; callEndedAt: string | null;
+    outcome: string | null; outcomeNote: string; createdAt: string; queuePosition: number | null;
+  };
+  patient: { id: string; name: string; phone: string | null; language?: string } | null;
+  events: { type: string; at: string; actor: string | null }[];
+  notes: { id: string; content: string; agent: string; at: string }[];
+  calls: { id: string; channel: string; state: string; startedAt: string; endedAt: string | null; failureReason: string }[];
+}
+
+export function requestAssistance(token: string, language = "ht") {
+  return apiFetch<AssistStatus>("/api/assist/requests", { method: "POST", body: { language }, token });
+}
+
+export function getAssistStatus(token: string, signal?: AbortSignal) {
+  return apiFetch<AssistStatus>("/api/assist/requests/current", { token, signal });
+}
+
+export function cancelAssistance(token: string) {
+  return apiFetch<{ status: string }>("/api/assist/requests/current/cancel", { method: "POST", token });
+}
+
+export function requestCallback(token: string, input: { phoneNumber: string; reason?: string; windowStart?: string; windowEnd?: string }) {
+  return apiFetch<AssistCallback>("/api/assist/callbacks", { method: "POST", body: input, token });
+}
+
+export function getCurrentCallback(token: string, signal?: AbortSignal) {
+  return apiFetch<AssistCallback | { status: "none" }>("/api/assist/callbacks/current", { token, signal });
+}
+
+export function linkAssistConsultation(token: string, sessionId: string, consultationId: string) {
+  return apiFetch<{ linked: boolean }>(`/api/assist/sessions/${encodeURIComponent(sessionId)}/link-consultation`, {
+    method: "POST", body: { consultationId }, token,
+  });
+}
+
+export function getAssistCallToken(token: string, sessionId: string) {
+  return apiFetch<CallTokenResponse & { audioOnly?: boolean }>(`/api/assist/sessions/${encodeURIComponent(sessionId)}/call-token`, { token });
+}
+
+export function endAssistCall(token: string, sessionId: string, failureReason = "") {
+  return apiFetch<{ status: string }>(`/api/assist/sessions/${encodeURIComponent(sessionId)}/call-end`, {
+    method: "POST", body: { failureReason }, token,
+  });
+}
+
+export function getAgentMe(token: string, signal?: AbortSignal) {
+  return apiFetch<{ role: string; agent: { employeeRef: string | null; status: string } | null; presence: { availability: string; lastHeartbeat?: string; connectionState?: string }; shift: { id: string; status: string; startedAt?: string; scheduledEnd?: string | null } | null; activeSession: { sessionId: string; status: string } | null }>(
+    "/api/agent/me", { token, signal },
+  );
+}
+
+export function agentShiftStart(token: string) {
+  return apiFetch<{ shift: { id: string; status: string; scheduledEnd?: string | null }; existing: boolean }>("/api/agent/shift/start", { method: "POST", token });
+}
+
+export function agentShiftEnd(token: string) {
+  return apiFetch<{ shift: { id: string; status: string } }>("/api/agent/shift/end", { method: "POST", token });
+}
+
+export function agentBreakStart(token: string) {
+  return apiFetch<{ availability: string }>("/api/agent/shift/break/start", { method: "POST", token });
+}
+
+export function agentBreakEnd(token: string) {
+  return apiFetch<{ availability: string }>("/api/agent/shift/break/end", { method: "POST", token });
+}
+
+export function agentPresence(token: string, availability: string) {
+  return apiFetch<{ availability: string }>("/api/agent/presence", { method: "POST", body: { availability }, token });
+}
+
+export function agentHeartbeat(token: string, connectionState = "connected") {
+  return apiFetch<{ heartbeat: string }>("/api/agent/presence/heartbeat", { method: "POST", body: { connectionState }, token, timeoutMs: 8_000 });
+}
+
+export function agentAcceptOffer(token: string, assignmentId: string) {
+  return apiFetch<{ sessionId: string; status: string }>(`/api/agent/assignments/${encodeURIComponent(assignmentId)}/accept`, { method: "POST", token });
+}
+
+export function agentDeclineOffer(token: string, assignmentId: string) {
+  return apiFetch<{ declined: boolean; rerouted: boolean }>(`/api/agent/assignments/${encodeURIComponent(assignmentId)}/decline`, { method: "POST", token });
+}
+
+export function agentDashboard(token: string, signal?: AbortSignal) {
+  return apiFetch<AgentDashboard>("/api/agent/dashboard", { token, signal });
+}
+
+export function agentSession(token: string, sessionId: string, signal?: AbortSignal) {
+  return apiFetch<AgentSessionDetail>(`/api/agent/sessions/${encodeURIComponent(sessionId)}`, { token, signal });
+}
+
+export function agentSessionSpecialty(token: string, sessionId: string, specialty: string) {
+  return apiFetch<{ specialty: string; price: number }>(`/api/agent/sessions/${encodeURIComponent(sessionId)}/specialty`, { method: "POST", body: { specialty }, token });
+}
+
+export function agentSessionDoctor(token: string, sessionId: string, doctorId: string) {
+  return apiFetch<{ doctorId: string; doctorName: string }>(`/api/agent/sessions/${encodeURIComponent(sessionId)}/doctor`, { method: "POST", body: { doctorId }, token });
+}
+
+export function agentSessionNote(token: string, sessionId: string, content: string) {
+  return apiFetch<{ id: string }>(`/api/agent/sessions/${encodeURIComponent(sessionId)}/notes`, { method: "POST", body: { content }, token });
+}
+
+export function agentCallStart(token: string, sessionId: string) {
+  return apiFetch<CallTokenResponse & { attemptId?: string; audioOnly?: boolean }>(`/api/agent/sessions/${encodeURIComponent(sessionId)}/call/start`, { method: "POST", token });
+}
+
+export function agentCallEnd(token: string, sessionId: string, failureReason = "") {
+  return apiFetch<{ status: string }>(`/api/agent/sessions/${encodeURIComponent(sessionId)}/call/end`, { method: "POST", body: { failureReason }, token });
+}
+
+export function agentSessionComplete(token: string, sessionId: string, outcome: string, outcomeNote = "") {
+  return apiFetch<{ sessionId: string; status: string; outcome: string }>(`/api/agent/sessions/${encodeURIComponent(sessionId)}/complete`, {
+    method: "POST", body: { outcome, outcomeNote }, token,
+  });
+}
+
+export function agentSpecialties(token: string, signal?: AbortSignal) {
+  return apiFetch<SpecialtyPrice[]>("/api/agent/specialties", { token, signal });
+}
+
+export function agentCallbacks(token: string, signal?: AbortSignal) {
+  return apiFetch<{ mine: AssistCallbackView[]; pool: AssistCallbackView[] }>("/api/agent/callbacks", { token, signal });
+}
+
+export function agentClaimCallback(token: string, callbackId: string) {
+  return apiFetch<{ callbackId: string; status: string }>(`/api/agent/callbacks/${encodeURIComponent(callbackId)}/claim`, { method: "POST", token });
+}
+
+export function agentCallbackResult(token: string, callbackId: string, result: string, note = "") {
+  return apiFetch<{ connected: boolean; sessionId?: string; retryCount?: number }>(`/api/agent/callbacks/${encodeURIComponent(callbackId)}/result`, {
+    method: "POST", body: { result, note }, token,
+  });
+}
+
+export function agentOpsOverview(token: string, signal?: AbortSignal) {
+  return apiFetch<{ metrics: Record<string, number>; agents: { agentId: string; name: string; availability: string; shiftStatus: string | null; lastHeartbeat: string; connectionState: string }[] }>(
+    "/api/agent/ops/overview", { token, signal },
+  );
+}
+
+export function agentOpsSessions(token: string, signal?: AbortSignal) {
+  return apiFetch<{ sessionId: string; status: string; source: string; outcome: string | null; specialty: string | null; consultationId: string | null; patientName: string; agentName: string | null; createdAt: string; startedAt: string | null; endedAt: string | null }[]>(
+    "/api/agent/ops/sessions", { token, signal },
+  );
+}
+
+export function agentOpsReports(token: string, signal?: AbortSignal) {
+  return apiFetch<{ since: string; metrics: Record<string, number>; perAgent: { agentId: string; name: string; employeeRef: string | null; completed: number; consultRequests: number; unresolved: number; avgSessionSeconds: number | null }[] }>(
+    "/api/agent/ops/reports", { token, signal },
+  );
+}

@@ -520,6 +520,92 @@ describe('outbox dispatcher', () => {
     expect(admin.body.ok).toBe(true);
     expect(admin.body.counts).toBeTruthy();
   });
+
+  // ── Opportunistic drain on authenticated reads (no scheduler needed) ──
+
+  it('maybeDispatchOpportunistic is throttled per process (force bypasses it)', async () => {
+    const dispatch = await import('../src/notifications/dispatch');
+    dispatch._resetOpportunisticThrottle();
+    await subscribe(token.patient);
+    await new Promise((res) => setTimeout(res, 400)); // settle the subscribe route's async drain
+    const send = vi.spyOn(webpush, 'sendNotification').mockResolvedValue({ statusCode: 201 });
+    const emit = await import('../src/notifications/emit');
+
+    await emit.emit({
+      userId: users.patient.id, eventType: 'message:new',
+      idempotencyKey: 'opp-t1', title: 'T', body: 'B', url: '/app',
+    });
+    await dispatch.maybeDispatchOpportunistic({});
+    let row = (await outboxRows(users.patient.id)).find((x) => x.idempotency_key === 'opp-t1');
+    expect(row.status).toBe('delivered');
+
+    // Within the throttle window a second call is a NO-OP: the new row
+    // stays queued (hot reads must not become a hammering worker).
+    await emit.emit({
+      userId: users.patient.id, eventType: 'message:new',
+      idempotencyKey: 'opp-t2', title: 'T', body: 'B', url: '/app',
+    });
+    await dispatch.maybeDispatchOpportunistic({});
+    row = (await outboxRows(users.patient.id)).find((x) => x.idempotency_key === 'opp-t2');
+    expect(row.status).toBe('queued');
+
+    // force bypasses the throttle (tests / admin runs).
+    await dispatch.maybeDispatchOpportunistic({ force: true });
+    row = (await outboxRows(users.patient.id)).find((x) => x.idempotency_key === 'opp-t2');
+    expect(row.status).toBe('delivered');
+    expect(send).toHaveBeenCalled(); // actual count varies with earlier active subs
+    dispatch._resetOpportunisticThrottle();
+  });
+
+  it('the unread read drains the outbox end to end (cron absent)', async () => {
+    const dispatch = await import('../src/notifications/dispatch');
+    dispatch._resetOpportunisticThrottle(); // shared global state — also un-throttles the route's copy
+    const send = vi.spyOn(webpush, 'sendNotification').mockResolvedValue({ statusCode: 201 });
+    const emit = await import('../src/notifications/emit');
+    await emit.emit({
+      userId: users.patient.id, eventType: 'message:new',
+      idempotencyKey: 'opp-e2e', title: 'Medika', body: 'Test', url: '/app',
+    });
+    // Only the authenticated read happens — no cron, no subscription POST.
+    const unread = await r.get('/api/notifications/unread').set('Authorization', `Bearer ${token.patient}`);
+    expect(unread.status).toBe(200); // the response never waits on the drain
+    let row = null;
+    const start = Date.now();
+    for (;;) {
+      row = (await outboxRows(users.patient.id)).find((x) => x.idempotency_key === 'opp-e2e');
+      // Terminal states only — 'processing' means the drain is mid-flight.
+      const terminal = row && ['delivered', 'suppressed', 'revoked', 'dead'].includes(row.status);
+      if (terminal) break;
+      if (Date.now() - start > 3000) break;
+      await new Promise((res) => setTimeout(res, 50));
+    }
+    expect(row.status).toBe('delivered');
+    expect(send).toHaveBeenCalled();
+  });
+
+  it('the history read drains the outbox too (same opportunistic path)', async () => {
+    const dispatch = await import('../src/notifications/dispatch');
+    dispatch._resetOpportunisticThrottle();
+    vi.spyOn(webpush, 'sendNotification').mockResolvedValue({ statusCode: 201 });
+    const emit = await import('../src/notifications/emit');
+    await emit.emit({
+      userId: users.patient.id, eventType: 'message:new',
+      idempotencyKey: 'opp-hist', title: 'Medika', body: 'Test', url: '/app',
+    });
+    const history = await r.get('/api/notifications').set('Authorization', `Bearer ${token.patient}`);
+    expect(history.status).toBe(200);
+    let row = null;
+    const start = Date.now();
+    for (;;) {
+      row = (await outboxRows(users.patient.id)).find((x) => x.idempotency_key === 'opp-hist');
+      const terminal = row && ['delivered', 'suppressed', 'revoked', 'dead'].includes(row.status);
+      if (terminal) break;
+      if (Date.now() - start > 3000) break;
+      await new Promise((res) => setTimeout(res, 50));
+    }
+    expect(row.status).toBe('delivered');
+    dispatch._resetOpportunisticThrottle();
+  });
 });
 
 // ─── Rollout switch: VAPID unconfigured ──────────────────────────────────────

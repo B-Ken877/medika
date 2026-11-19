@@ -31,6 +31,22 @@ const { createPresence } = require('./presence');
 
 const MAX_CATCHUP = 50;
 
+/**
+ * Read-aware push suppression (owner request): how long the CROSS-INSTANCE
+ * copy of "user X is viewing consultation Y" stays trusted without a
+ * refresh. The web client re-sends the viewing frame every 60s while the
+ * conversation is open (and on open/close/reconnect); the TTL only bounds
+ * stale copies when an instance never hears the leave/reconnect. Expiry
+ * degrades to a POSSIBLY-redundant push, never to a lost one.
+ */
+const VIEWING_REMOTE_TTL_MS = 120_000;
+
+/** Grace window for message rows queued while the recipient is actively
+ * viewing the exact conversation (see notifications/emit.js): the read
+ * receipt has this long to suppress the queued row; otherwise the row
+ * dispatches normally ("send if it remains unread"). */
+const MESSAGE_PUSH_GRACE_SECONDS = 30;
+
 /** Persisted message creation time → milliseconds (exactly one conversion).
  * Accepts both shapes that reach the envelope: raw DB rows (created_at is a
  * Date) and msgToApi-mapped rows (created_at is epoch SECONDS). A safe
@@ -84,8 +100,17 @@ class RealtimeHub {
     // detect transitions (and, on heartbeat, to catch lease-expired users
     // whose owning instance died without a clean disconnect).
     this.presenceState = new Map(); // userId -> boolean
+    // Cross-instance viewing state (read-aware suppression): userId ->
+    // Map<consultationId, expiresAtMs>. Fed by the viewing echo other
+    // instances publish through the bus; THIS instance's own sockets carry
+    // the live state on the socket object itself (authoritative, no TTL).
+    this.viewingRemote = new Map();
     this.bus.onMessage(({ userId, event, originInstance }) => {
       if (originInstance === this.instanceId) return; // already delivered locally
+      if (event && event.__viewing) {
+        this.recordRemoteViewing(userId, event);
+        return; // control event — never delivered to client sockets
+      }
       this.deliverLocal(userId, event);
     });
   }
@@ -152,6 +177,9 @@ class RealtimeHub {
             await this.handleEphemeral(user, data, () => ({
               type: 'call:ended', from: user.id, consultationId: data.consultationId, timestamp: Date.now(),
             }));
+            break;
+          case 'consultation:viewing':
+            await this.handleConsultationViewing(user, data, ws);
             break;
           default:
             break; // unknown types ignored (legacy behavior)
@@ -249,27 +277,102 @@ class RealtimeHub {
     });
 
     const envelope = messageEnvelope(msg, { clientMsgId });
-    this.publishToUser(user.id, envelope);
+    // Read-aware suppression (owner request): the durable notification is
+    // enqueued BEFORE any live delivery, and the emit is awaited (it never
+    // throws, so it cannot break the send) — a recipient who is viewing this
+    // conversation reads within moments of the WS envelope, and their read
+    // receipt must find the outbox row already present to suppress it.
+    // "Actively viewing" is per-CONVERSATION (any live socket of the
+    // recipient currently inside THIS consultation); generic connectivity is
+    // NOT proof of reading and no longer suppresses push by itself. The row
+    // carries a grace window: a read receipt marks it suppressed, otherwise
+    // it dispatches normally — unread messages are never silently lost.
     const recipientId =
       consultation.patient_id === user.id ? consultation.doctor_id : consultation.patient_id;
     if (recipientId) {
-      this.publishToUser(recipientId, envelope);
-      // Issue #36: durable notification for the RECIPIENT after the message
-      // is PERSISTED (never before). Push is suppressed when the recipient
-      // is connected (they just received the live delivery); the in-app
-      // record is always kept. Fire-and-forget: delivery issues can never
-      // break chat persistence.
-      const recipientOnline = (this.sockets.get(recipientId)?.size ?? 0) > 0;
-      notifications.emit({
+      const viewingExact = this.isUserViewingConsultation(recipientId, String(consultationId));
+      await notifications.emit({
         userId: recipientId,
         eventType: 'message:new',
         idempotencyKey: `message:${Number(msg.id)}`,
         title: notifications.COPY.messageNew.title,
         body: notifications.COPY.messageNew.body,
         url: `/app/consultations/${consultationId}`,
-        push: !recipientOnline,
+        push: true,
+        pushDelaySeconds: viewingExact ? MESSAGE_PUSH_GRACE_SECONDS : 0,
       });
+      this.publishToUser(user.id, envelope);
+      this.publishToUser(recipientId, envelope);
     }
+  }
+
+  // ─── consultation:viewing (read-aware suppression) ───────────────────────
+
+  /**
+   * The authenticated client announces which conversation it is actively
+   * viewing ({consultationId}) or that it left one / all of them
+   * ({consultationId: null}). Membership is validated server-side (a client
+   * cannot mark itself as viewing a conversation it does not participate
+   * in); the state lives on the SOCKET (dies with the connection — stale
+   * sessions can never keep suppressing) and is echoed to the other
+   * instances through the bus for multi-instance deployments.
+   */
+  async handleConsultationViewing(user, data, ws) {
+    const raw = data && typeof data.consultationId === 'string' ? data.consultationId : null;
+    if (!raw) {
+      // Leaving (conversation switch or tab close): drop THIS socket's state.
+      const previous = ws.activeConsultationId || null;
+      ws.activeConsultationId = null;
+      if (previous) this.echoViewing(user.id, previous, 0);
+      return;
+    }
+    const consultation = await consultationsRepo.findById(raw);
+    if (!consultation ||
+        (consultation.patient_id !== user.id && consultation.doctor_id !== user.id)) {
+      return; // silent drop: no existence leak, no state change
+    }
+    ws.activeConsultationId = String(raw);
+    this.echoViewing(user.id, ws.activeConsultationId, Date.now() + VIEWING_REMOTE_TTL_MS);
+  }
+
+  /** Tell every OTHER instance what this instance now knows about `userId`'s
+   *  viewing state (expiresAt 0 = stopped viewing that consultation). */
+  echoViewing(userId, consultationId, expiresAt) {
+    try {
+      this.bus.publish(userId, { __viewing: true, consultationId, expiresAt }, this.instanceId);
+    } catch { /* local bus: nothing to echo */ }
+  }
+
+  /** Bus control-event receiver: update THIS instance's cross-instance view. */
+  recordRemoteViewing(userId, event) {
+    const consultationId = typeof event.consultationId === 'string' ? event.consultationId : null;
+    const expiresAt = Number.isFinite(event.expiresAt) ? event.expiresAt : 0;
+    if (!consultationId || expiresAt <= Date.now()) {
+      if (consultationId) this.viewingRemote.get(userId)?.delete(consultationId);
+      else this.viewingRemote.delete(userId);
+      return;
+    }
+    if (!this.viewingRemote.has(userId)) this.viewingRemote.set(userId, new Map());
+    this.viewingRemote.get(userId).set(consultationId, expiresAt);
+  }
+
+  /**
+   * True when the user is ACTIVELY VIEWING the exact conversation right now:
+   * any live socket of theirs on this instance currently inside it, or a
+   * fresh cross-instance echo. Deliberately NOT "has any connection" — an
+   * online user on another page must still receive push (owner requirement).
+   */
+  isUserViewingConsultation(userId, consultationId) {
+    const id = String(consultationId);
+    for (const ws of this.sockets.get(userId) ?? []) {
+      if (ws.activeConsultationId === id) return true;
+    }
+    const remote = this.viewingRemote.get(userId);
+    if (!remote) return false;
+    for (const [cid, expiresAt] of remote) {
+      if (expiresAt <= Date.now()) remote.delete(cid); // lazy TTL prune
+    }
+    return remote.has(id);
   }
 
   /** typing — membership-checked relay to the other participant, gated on the
@@ -383,10 +486,19 @@ class RealtimeHub {
   }
 
   unregister(userId, ws) {
+    const wasViewing = ws.activeConsultationId || null;
     const set = this.sockets.get(userId);
     if (!set) return;
     set.delete(ws);
     if (set.size === 0) this.sockets.delete(userId);
+    // Read-aware suppression hygiene: a disconnect must not leave a stale
+    // cross-instance viewing state behind (expired TTLs degrade to a
+    // possibly-redundant push, but an explicit stop keeps it accurate).
+    if (wasViewing) {
+      const stillViewing = [...(this.sockets.get(userId) ?? [])]
+        .some((s) => s.activeConsultationId === wasViewing);
+      if (!stillViewing) this.echoViewing(userId, wasViewing, 0);
+    }
     this.updatePresenceAndNotify(userId, ws.__connId, false);
   }
 
@@ -524,4 +636,4 @@ function attachRealtime(server, opts = {}) {
   return hub;
 }
 
-module.exports = { attachRealtime, RealtimeHub, messageEnvelope };
+module.exports = { attachRealtime, RealtimeHub, messageEnvelope, MESSAGE_PUSH_GRACE_SECONDS };

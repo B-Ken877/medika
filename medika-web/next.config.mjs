@@ -23,8 +23,13 @@ const nextConfig = {
   output: "standalone",
   async rewrites() {
     // Local development proxy — mirrors the production nginx routes.
+    // The payment routes are served by the same backend process as /api
+    // (src/create-app.js mounts them), so the default matches DEV_BACKEND
+    // (:3000). The old :9998 default pointed at the retired standalone
+    // payment server and made every local run fail payment create with
+    // "service unreachable" until DEV_PAYMENT_ORIGIN was set by hand.
     const backend = process.env.DEV_BACKEND_ORIGIN || "http://localhost:3000";
-    const payment = process.env.DEV_PAYMENT_ORIGIN || "http://localhost:9998";
+    const payment = process.env.DEV_PAYMENT_ORIGIN || backend;
     return [
       { source: "/api/:path*", destination: `${backend}/api/:path*` },
       { source: "/uploads/:path*", destination: `${backend}/uploads/:path*` },
