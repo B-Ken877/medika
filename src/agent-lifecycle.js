@@ -204,6 +204,19 @@ async function processExpiredOffers({ hub = null } = {}) {
       if (result.routed) rerouted += 1;
     }
   }
+  rerouted += await sweepWaiting({ hub });
+  return { expired: expired.length, rerouted };
+}
+
+/**
+ * Lazy sweep for WAITING sessions with no open offer. Called on agent
+ * dashboard/queue reads (15s polling) so routing self-heals WITHOUT any
+ * scheduled job being configured — the cron endpoint remains the
+ * belt-and-braces path (correctness never depends on it, never depends on
+ * the patient re-clicking either).
+ */
+async function sweepWaiting({ hub = null } = {}) {
+  let rerouted = 0;
   const waiting = await ops.waitingSessions();
   for (const s of waiting) {
     if (s.status !== 'waiting') continue;
@@ -212,7 +225,7 @@ async function processExpiredOffers({ hub = null } = {}) {
     const result = await routeSession(s.id, { hub });
     if (result.routed) rerouted += 1;
   }
-  return { expired: expired.length, rerouted };
+  return rerouted;
 }
 
 // ─── Presence + shifts ───────────────────────────────────────────────────────
@@ -496,7 +509,7 @@ async function liveSessionForAgent(agentId) {
 
 module.exports = {
   canTransition,
-  requestAssistance, routeSession, acceptOffer, declineOffer, processExpiredOffers,
+  requestAssistance, routeSession, acceptOffer, declineOffer, processExpiredOffers, sweepWaiting,
   heartbeat, setAvailability, startShift, endShift, startBreak, endBreak, liveSessionForAgent,
   callStarted, callEnded, completeSession, cancelByPatient, OUTCOMES,
   createCallback, claimCallback, recordCallbackResult, processDueCallbacks, processStalePresence,
