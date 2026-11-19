@@ -26,7 +26,11 @@ async function setup() {
 /** Wipe user data between tests/files (specialties + migrations preserved). */
 async function resetDb() {
   const { query } = await importCjs('../src/db.js');
-  await query(`TRUNCATE messages, ticket_messages, tickets, consultation_notes,
+  await query(`TRUNCATE agent_session_notes, agent_session_events, agent_call_attempts,
+               agent_callback_attempts, agent_callback_requests, agent_assignments,
+               agent_queue_entries, agent_sessions, agent_shift_breaks, agent_shifts,
+               agent_presence, agent_profiles,
+               messages, ticket_messages, tickets, consultation_notes,
                prescription_documents,
                medication_delivery_events, medication_delivery_expenses,
                medication_deliveries, medication_delivery_budgets,
@@ -90,12 +94,20 @@ async function createFixtureUsers() {
   await mk('doctor_t2', 't.doctor2', 'doctor', { name: 'Dr Deux', specialty: 'Cardiologie' });
   await mk('patient_t1', 't.patient', 'patient', { name: 'Pat Test', email: 'pat@test.ht', phone: '+509 1' });
   await mk('patient_t2', 't.patient2', 'patient', { name: 'Pat Deux' });
+  await mk('patient_t3', 't.patient3', 'patient', { name: 'Pat Twa' });
+  await mk('agent_t1', 't.agent', 'agent', { name: 'Ajan Test' });
+  await mk('agent_t2', 't.agent2', 'agent', { name: 'Ajan Deux' });
+  await mk('agent_sup1', 't.supervisor', 'agent_supervisor', { name: 'Supèvizè Test' });
   return {
     admin: { id: 'admin_t1', username: 't.admin' },
     doctor: { id: 'doctor_t1', username: 't.doctor' },
     doctor2: { id: 'doctor_t2', username: 't.doctor2' },
     patient: { id: 'patient_t1', username: 't.patient' },
     patient2: { id: 'patient_t2', username: 't.patient2' },
+    agent: { id: 'agent_t1', username: 't.agent' },
+    agent2: { id: 'agent_t2', username: 't.agent2' },
+    supervisor: { id: 'agent_sup1', username: 't.supervisor' },
+    patient3: { id: 'patient_t3', username: 't.patient3' },
   };
 }
 

@@ -3145,3 +3145,63 @@ body.has-perm-card .app-main { padding-bottom: calc(var(--bottomnav-h) + 110px);
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: none; }
 }
+
+/* ─── Agent workspace (contact center) ────────────────────────────────────── */
+.agent-workspace .workspace-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+@media (min-width: 900px) {
+  .agent-workspace .workspace-grid { grid-template-columns: 1fr 1fr; }
+  .agent-workspace .zone-c { grid-column: 1 / -1; }
+}
+.stage-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+.stage-bar li {
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  border: 1px solid var(--border, #e2e8e0);
+  color: var(--muted, #6b7280);
+  background: var(--surface, #fff);
+}
+.stage-bar li.done { border-color: var(--ok-border, #b7d8b7); color: var(--ok, #2e7d32); background: var(--ok-bg, #f0f7f0); }
+.stage-bar li.current { border-color: var(--accent, #8bc34a); color: #245b26; background: var(--accent-bg, #f2f8e8); font-weight: 600; }
+.offer-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  border: 1px solid var(--border, #e2e8e0);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+}
+.btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.status-line { font-weight: 600; }
+.status-line.ok { color: var(--ok, #2e7d32); }
+.status-line.warn { color: var(--warn, #92600a); }
+.warn-text { color: var(--warn, #92600a); }
+.call-controls { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.call-timer {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  background: var(--accent-bg, #f2f8e8);
+  border: 1px solid var(--accent, #8bc34a);
+  color: #245b26;
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+}
+.badge.ok { color: var(--ok, #2e7d32); border-color: var(--ok-border, #b7d8b7); background: var(--ok-bg, #f0f7f0); }
+.badge.warn { color: var(--warn, #92600a); border-color: #e6cf9a; background: #fdf6e3; }
+ol.events { padding-left: 1.25rem; }
+ol.events li { padding: 0.15rem 0; font-size: 0.9rem; color: var(--muted, #6b7280); }
+.hidden-audio { display: none; }
+.wrapup { border-top: 1px dashed var(--border, #e2e8e0); padding-top: 0.75rem; }

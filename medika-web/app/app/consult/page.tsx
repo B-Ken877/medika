@@ -36,7 +36,7 @@ import {
   Stethoscope,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
-import { createConsultation, getConsultations, getDoctors, getSpecialtyPrices } from "@/lib/api/endpoints";
+import { createConsultation, getConsultations, getDoctors, getSpecialtyPrices, getAssistStatus, linkAssistConsultation } from "@/lib/api/endpoints";
 import type { Consultation, SpecialtyPrice, User } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
 import { buildOrderId, createPayment, fetchPaymentMode, openPaymentGateway, verifyPayment, PaymentError } from "@/lib/payment";
@@ -411,6 +411,15 @@ function ConsultFlow() {
         paymentAmount: priceOf(selectedDoctor.specialty ?? specialty),
         orderId: orderIdRef.current || null,
       });
+      // Assisted-booking loop closure: when this consultation came out of the
+      // HUMAN contact-center flow, link it back to the assistance session so
+      // the agent sees the authoritative result (patient-authorized linkage).
+      try {
+        const assist = await getAssistStatus(token);
+        if (assist.sessionId && ["connected", "wrap_up"].includes(assist.status)) {
+          await linkAssistConsultation(token, assist.sessionId, consultation.id);
+        }
+      } catch { /* linkage is best-effort; the consultation itself is done */ }
       router.replace(`/app/consultations/${encodeURIComponent(consultation.id)}`);
     } catch (err) {
       setSubmitting(false);
@@ -516,6 +525,18 @@ function ConsultFlow() {
         <div>
           <h1 className="page-title">Jwenn yon doktè</h1>
           <p className="muted small">Di nou sa w ap santi epi chwazi kalite swen ou bezwen an.</p>
+        </div>
+
+        {/* Brief #6 — the human entry point: a real Medika agent can guide the
+            patient through specialty, doctor choice and MonCash payment. */}
+        <div className="alert alert-info" role="note">
+          <span>
+            Ou pa konnen ki doktè w bezwen?{" "}
+            <Link href="/app/assist" className="nowrap">
+              Pale ak yon ajan Medika
+            </Link>{" "}
+            — yon vrè moun ap gide w etap pa etap.
+          </span>
         </div>
 
         <ErrorAlert error={error} />

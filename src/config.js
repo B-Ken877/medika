@@ -119,6 +119,20 @@ const config = {
   // ─── Business ──────────────────────────────────────────────────────────────
   platformFee: parseInt(env('PLATFORM_FEE', '250'), 10),
 
+  // ─── Agent operations (consultation assistance contact center) ────────────
+  // Targeted agent offer window; expired offers return the request to the
+  // queue for the next eligible agent (assignment timeout, brief #7).
+  agentOfferWindowSeconds: parseInt(env('AGENT_OFFER_WINDOW_SECONDS', '45'), 10),
+  // A presence row older than this is stale — the agent is NOT routable
+  // until the next heartbeat (a disconnected browser never stays routable).
+  agentPresenceStaleSeconds: parseInt(env('AGENT_PRESENCE_STALE_SECONDS', '45'), 10),
+  // Default scheduled shift length; shifts may run later (an active session
+  // is never force-terminated at shift end, brief #5).
+  agentShiftHours: parseInt(env('AGENT_SHIFT_HOURS', '6'), 10),
+  // Callback retry policy (configurable, never hardcoded — brief #8).
+  callbackMaxAttempts: parseInt(env('CALLBACK_MAX_ATTEMPTS', '3'), 10),
+  callbackRetryMinutes: parseInt(env('CALLBACK_RETRY_MINUTES', '30'), 10),
+
   // ─── Consultation request lifecycle (issue #25) ────────────────────────────
   // Server-authoritative deadlines. Values are minutes/hours so tests and
   // staged rollouts can tune them; the product defaults are exactly the
