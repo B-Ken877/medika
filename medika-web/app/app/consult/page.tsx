@@ -476,7 +476,7 @@ function ConsultFlow() {
     const detailHref = `/app/consultations/${encodeURIComponent(activeConsultation.id)}`;
     const callHref = `${detailHref}/call?mode=video`;
     return (
-      <div className="stack" style={{ maxWidth: 640, margin: "0 auto" }}>
+      <div className="stack cf" style={{ maxWidth: 640, margin: "0 auto" }}>
         <Link href="/app" className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start" }}>
           <ArrowLeft size={16} aria-hidden /> Retounen
         </Link>
@@ -518,7 +518,7 @@ function ConsultFlow() {
 
   if (step === "intake") {
     return (
-      <div className="stack consult-intake" style={{ maxWidth: 640, margin: "0 auto" }}>
+      <div className="stack consult-intake cf" style={{ maxWidth: 640, margin: "0 auto" }}>
         <Link href="/app" className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start" }}>
           <ArrowLeft size={16} aria-hidden /> Retounen
         </Link>
@@ -633,7 +633,7 @@ function ConsultFlow() {
   if (step === "doctors") {
     const list = doctors ?? [];
     return (
-      <div className="stack" style={{ maxWidth: 640, margin: "0 auto" }}>
+      <div className="stack cf" style={{ maxWidth: 640, margin: "0 auto" }}>
         <button className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => setStep("intake")}>
           <ArrowLeft size={16} aria-hidden /> Modifye sa m ap santi
         </button>
@@ -691,7 +691,7 @@ function ConsultFlow() {
   const amount = priceOf(selectedDoctor?.specialty ?? specialty);
   const amountValid = amount != null && amount > 0;
   return (
-    <div className="stack" style={{ maxWidth: 640, margin: "0 auto" }}>
+    <div className="stack cf" style={{ maxWidth: 640, margin: "0 auto" }}>
       <button className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start" }} onClick={backToDoctors}>
         <ArrowLeft size={16} aria-hidden /> Chwazi yon lòt doktè
       </button>
