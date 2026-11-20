@@ -84,7 +84,13 @@ describe("register page structure mirrors login (issue #43)", () => {
     // in their own portal when no explicit destination was requested
     // (consolidated issue #82 §7).
     expect(loginPage).toContain("useAuth()");
-    expect(loginPage).toContain('user?.role === "delivery" ? "/livreur" : next');
+    // Owner brief: delivery → /livreur, contact-center agents → /app/agent,
+    // a specific ?next= always wins (behavior contract with the login page).
+    expect(loginPage).toContain('user?.role === "delivery"');
+    expect(loginPage).toContain('? "/livreur"');
+    expect(loginPage).toContain('["agent", "agent_supervisor"].includes(user?.role ?? "")');
+    expect(loginPage).toContain('? "/app/agent"');
+    expect(loginPage).toContain('!params.get("next")');
   });
 });
 

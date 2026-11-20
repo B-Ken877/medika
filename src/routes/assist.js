@@ -15,7 +15,15 @@ const { v4: uuidv4 } = require('uuid');
 const { authenticate } = require('../auth');
 const ops = require('../repos/agent-ops');
 const lifecycle = require('../agent-lifecycle');
-const { config } = require('../config');
+const consultLifecycle = require('../consultation-lifecycle');
+const paymentRequestsRepo = require('../repos/agent-payment-requests');
+const paymentsRepo = require('../repos/payments');
+const consultationsRepo = require('../repos/consultations');
+const usersRepo = require('../repos/users');
+const specialtiesRepo = require('../repos/specialties');
+const notifications = require('../notifications/emit');
+const { simulatedTransactionId, simulatedRetrieveByOrderId } = require('../simulated-payment');
+const { config, simulationAllowed } = require('../config');
 
 const router = express.Router();
 const hub = (req) => req.app.locals.hub;
@@ -139,6 +147,266 @@ router.get('/assist/callbacks/current', authenticate, async (req, res, next) => 
       attempts: attempts.map((a) => ({ result: a.result, at: a.attempted_at })),
       createdAt: callback.created_at,
     });
+  } catch (err) { next(err); }
+});
+
+/**
+ * GET /api/assist/payment-requests/current — the member's payment popup
+ * source of truth (poll + WS `payment:*`). Returns the pending request, or
+ * a recently PAID one (bounded window) so a refresh mid-success still shows
+ * the confirmation instead of an empty state. No operational internals
+ * beyond what the popup needs.
+ */
+router.get('/assist/payment-requests/current', authenticate, async (req, res, next) => {
+  try {
+    if (req.user.role !== 'patient') {
+      return res.status(403).json({ error: 'Se pasyan yo ki resevwa demann peman' });
+    }
+    await paymentRequestsRepo.expireDue();
+    const row = await paymentRequestsRepo.latestRelevantForPatient(req.user.id);
+    if (!row) return res.json({ status: 'none' });
+    const session = await ops.sessionById(row.session_id);
+    const { rows: doctorRows } = row.doctor_id
+      ? await require('../db').query(`SELECT name FROM users WHERE id = $1`, [row.doctor_id])
+      : { rows: [] };
+    const agentName = session && session.agent_id ? await agentNameFor(session) : null;
+    return res.json({
+      id: row.id,
+      sessionId: row.session_id,
+      status: row.status,
+      amount: row.amount,
+      currency: row.currency,
+      specialty: row.specialty,
+      doctorName: doctorRows[0] ? doctorRows[0].name : null,
+      agentName: agentName || null,
+      consultationId: row.consultation_id,
+      createdAt: row.created_at,
+      paidAt: row.paid_at,
+      expiresAt: row.expires_at,
+    });
+  } catch (err) { next(err); }
+});
+
+/**
+ * POST /api/assist/payment-requests/:id/confirm — the MEMBER pays the
+ * agent-raised request on their own device (owner brief): phone number +
+ * 4-digit PIN, MonCash-style. SIMULATION ONLY for now (no MonCash API —
+ * the real provider plugs in here later): the payments row is verified
+ * through the strictly isolated simulation path, then the consultation is
+ * created FOR THE MEMBER from the agent-captured intake, linked to the
+ * assistance session, and BOTH sides are notified in realtime. The call is
+ * never touched — the member stays in the audio room, and nobody is
+ * redirected: the consultation simply appears on their dashboard.
+ */
+router.post('/assist/payment-requests/:id/confirm', authenticate, async (req, res, next) => {
+  try {
+    if (req.user.role !== 'patient') {
+      return res.status(403).json({ error: 'Se pasyan an ki peye demann lan' });
+    }
+    const request = await paymentRequestsRepo.byId(req.params.id);
+    if (!request || request.patient_id !== req.user.id) {
+      return res.status(404).json({ error: 'Demann peman pa jwenn' });
+    }
+    const phoneNumber = String(req.body?.phoneNumber || '').trim();
+    const pin = String(req.body?.pin || '').trim();
+    if (!/^\d{4}$/.test(pin)) {
+      return res.status(400).json({ error: 'Kòd sekirite a dwe 4 chif' });
+    }
+    if (!/^[+0-9 ()-]{5,20}$/.test(phoneNumber)) {
+      return res.status(400).json({ error: 'Nimewo telefòn pa valab' });
+    }
+
+    // Idempotent replay: a double-tap on Pay (or a device retry) returns the
+    // SAME success answer — never a duplicate consultation, never a 500.
+    if (request.status === 'paid') {
+      return res.json({ success: true, consultationId: request.consultation_id, replayed: true });
+    }
+    if (request.status !== 'pending') {
+      return res.status(409).json({ error: 'Demann peman an pa disponib — mande ajan an voye l ankò', status: request.status });
+    }
+    if (new Date(request.expires_at).getTime() <= Date.now()) {
+      await paymentRequestsRepo.markStatus(request.id, 'expired');
+      return res.status(409).json({ error: 'Demann peman an ekspire — mande ajan an voye l ankò', status: 'expired' });
+    }
+
+    const patient = await usersRepo.findById(req.user.id);
+    if (!patient) return res.status(401).json({ error: 'Invalid token' });
+    // Fail-closed: this flow IS the simulation. Without simulation rights
+    // (per-user, resolved from the DB user — never client input) the
+    // payment can never complete here.
+    if (!simulationAllowed(patient)) {
+      return res.status(503).json({ error: 'Mòd peman tès la pa aktive sou deploieman sa a' });
+    }
+    const paymentRow = await paymentsRepo.findByOrderId(request.order_id);
+    if (!paymentRow || paymentRow.patient_id !== req.user.id) {
+      return res.status(404).json({ error: 'Peman an pa jwenn' });
+    }
+    if (paymentRow.consultation_id) {
+      // The payment already bought a consultation (self-service double-run):
+      // its consultation IS the authoritative result.
+      return res.status(409).json({ error: 'Peman an deja itilize pou yon lòt konsiltasyon', existing_id: paymentRow.consultation_id });
+    }
+    if (paymentRow.status === 'PENDING') {
+      if (!paymentRow.simulated) {
+        return res.status(409).json({ error: 'Peman an pa yon peman tès — sispann epi mande èd' });
+      }
+      const verified = simulatedRetrieveByOrderId(paymentRow.order_id);
+      if (!verified || verified.status !== 'completed') {
+        await paymentsRepo.markFailed(paymentRow.id, verified?.raw || null);
+        return res.status(409).json({ error: 'Peman an pa konfime' });
+      }
+      await paymentsRepo.markVerified(paymentRow.id, {
+        transaction_id: verified.transactionId,
+        verified_amount: paymentRow.amount,
+        provider_raw: { simulated: true, agentAssisted: true, paidPhone: phoneNumber },
+        simulated: true,
+      });
+    } else if (paymentRow.status !== 'PAID') {
+      return res.status(409).json({ error: 'Peman an pa konfime', status: paymentRow.status });
+    }
+
+    // ── Consultation creation FOR THE MEMBER (mirrors POST /api/consultations:
+    //    same one-active invariant, same payment consumption, same routing) ──
+    const session = await ops.sessionById(request.session_id);
+    const description = String((session && session.intake_description) || '').trim();
+    const urgencyLevel = (session && session.urgency_level) || 'Moyenne';
+    const specialty = request.specialty;
+    const id = 'cons_' + uuidv4().substring(0, 8);
+    const price = await specialtiesRepo.priceFor(specialty);
+    if (price && paymentRow.amount < price) {
+      return res.status(409).json({ error: `Montant paye insuffisant (requis: ${price} HTG)` });
+    }
+
+    const existingActive = await consultationsRepo.findActiveForPatient(req.user.id);
+    if (existingActive) {
+      // Payment verified but the member already has a blocking consultation.
+      // The request stays PENDING so the agent can cancel or re-raise it;
+      // the PAID payment is kept for reconciliation — never silently consumed.
+      if (session) {
+        await ops.recordEvent({ sessionId: session.id, eventType: 'payment_conflict', actorId: req.user.id, metadata: { requestId: request.id, existingId: existingActive.id } });
+      }
+      return res.status(409).json({
+        error: 'Ou gen deja yon konsiltasyon aktif. Fini oswa tann li anvan w kreye yon lòt.',
+        existing_id: existingActive.id,
+        existing_status: existingActive.status,
+      });
+    }
+    if (request.doctor_id) {
+      const doctorActive = await consultationsRepo.findActiveForDoctor(request.doctor_id);
+      if (doctorActive) {
+        if (session) {
+          await ops.recordEvent({ sessionId: session.id, eventType: 'payment_conflict', actorId: req.user.id, metadata: { requestId: request.id, existingId: doctorActive.id, scope: 'doctor' } });
+        }
+        return res.status(409).json({
+          error: 'Doktè sa a okipe deja yon konsiltasyon. Chwazi yon lòt doktè oswa eseye pi ta.',
+          existing_id: doctorActive.id,
+        });
+      }
+    }
+
+    let consultation;
+    try {
+      consultation = await consultationsRepo.create({
+        id,
+        patient_id: req.user.id,
+        patient_name: patient.name,
+        patient_age: typeof patient.age === 'number' ? patient.age : (parseInt(patient.age, 10) || null),
+        doctor_id: request.doctor_id || null,
+        description,
+        specialty_needed: specialty,
+        urgency_level: urgencyLevel,
+        ai_summary: '',
+        ai_explanation: '',
+        channel: 'AGENT', // migration 016 column — distinguish agent-assisted bookings
+      });
+    } catch (err) {
+      // The partial unique indexes are the authoritative referee (issue #60):
+      // a concurrent creation won the patient's slot — typed 409, never a 500.
+      if (err && err.code === '23505') {
+        const winner = await consultationsRepo.findActiveForPatient(req.user.id);
+        if (winner) {
+          return res.status(409).json({ error: 'Ou gen deja yon konsiltasyon aktif. Fini oswa tann li anvan w kreye yon lòt.', existing_id: winner.id, existing_status: winner.status });
+        }
+        return res.status(409).json({ error: 'Ou gen deja yon konsiltasyon aktif.' });
+      }
+      throw err;
+    }
+
+    const attached = await paymentsRepo.attachToConsultation(paymentRow.id, id);
+    if (!attached) {
+      // Lost the attach race → the payment already bought another consultation.
+      // Remove the duplicate and replay the winner (issue #40 semantics).
+      await consultationsRepo.adminDelete(id);
+      const winner = await paymentsRepo.findByOrderId(paymentRow.order_id);
+      if (winner && winner.consultation_id) {
+        const existing = await consultationsRepo.findById(winner.consultation_id);
+        if (existing && existing.patient_id === req.user.id) {
+          await paymentRequestsRepo.markPaid(request.id, { consultationId: winner.consultation_id, paidPhone: phoneNumber });
+          return res.json({ success: true, consultationId: winner.consultation_id, replayed: true });
+        }
+      }
+      return res.status(409).json({ error: 'Peman an deja itilize pou yon lòt konsiltasyon' });
+    }
+
+    await paymentRequestsRepo.markPaid(request.id, { consultationId: id, paidPhone: phoneNumber });
+
+    // Link the assistance session — same contract as the patient-driven
+    // link-consultation endpoint — and append the audit trail.
+    if (session) {
+      await ops.updateSession(session.id, {
+        consultation_id: id,
+        chosen_doctor_id: request.doctor_id || session.chosen_doctor_id,
+        specialty,
+      });
+      await ops.recordEvent({ sessionId: session.id, eventType: 'consultation_linked', actorId: req.user.id, metadata: { consultationId: id, specialty, viaPaymentRequest: request.id } });
+    }
+
+    // Same post-commit routing contract as the manual path (issue #79): a
+    // routing failure must NEVER turn the persisted booking into a 500.
+    let routed;
+    try {
+      routed = await consultLifecycle.routeNewConsultation(consultation, { patientChoiceDoctorId: request.doctor_id || null });
+    } catch (routingErr) {
+      console.error('[assist] payment-request routing failed:', id, routingErr.code || routingErr.constructor?.name);
+      try {
+        routed = await consultLifecycle.parkInWaiting(id);
+      } catch (parkErr) {
+        console.error('[assist] payment-request waiting fallback failed:', id, parkErr.code || parkErr.constructor?.name);
+        routed = { consultation, waiting: true, events: [] };
+      }
+    }
+
+    const hubInst = hub(req);
+    if (hubInst) {
+      const newNotif = { type: 'consultation:new', id, patientName: patient.name, description, specialtyNeeded: specialty, urgencyLevel };
+      hubInst.publishToUser(req.user.id, newNotif);
+      hubInst.publishToUser(req.user.id, { type: 'payment:confirmed', requestId: request.id, consultationId: id });
+      if (routed.offeredTo) hubInst.publishToUser(routed.offeredTo.id, newNotif);
+      if (session && session.agent_id) {
+        hubInst.publishToUser(session.agent_id, { type: 'agent:session-update', sessionId: session.id, consultationId: id, paymentRequestId: request.id, paid: true });
+      }
+    }
+    notifications.emit({
+      userId: req.user.id,
+      eventType: 'payment:confirmed',
+      idempotencyKey: `payment-request:${request.id}:confirmed`,
+      ...notifications.COPY.paymentConfirmed,
+    });
+    notifications.emit({
+      userId: req.user.id,
+      eventType: 'consultation:submitted',
+      idempotencyKey: `consultation:${id}:submitted`,
+      ...notifications.COPY.consultationSubmitted,
+    });
+    if (routed.offeredTo) {
+      notifications.emit({
+        userId: routed.offeredTo.id,
+        eventType: 'consultation:offer',
+        idempotencyKey: `consultation:${id}:offer:${routed.offeredTo.id}`,
+        ...notifications.COPY.consultationOffer,
+      });
+    }
+    return res.status(201).json({ success: true, consultationId: id, transactionId: simulatedTransactionId(paymentRow.order_id) });
   } catch (err) { next(err); }
 });
 

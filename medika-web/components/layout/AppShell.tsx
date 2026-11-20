@@ -18,6 +18,7 @@ import { Avatar, Spinner } from "@/components/ui/primitives";
 import { initialsOf } from "@/lib/format";
 import { UnreadProvider, useUnread } from "@/components/notifications/UnreadProvider";
 import { PermissionBootstrap } from "@/components/pwa/PermissionBootstrap";
+import { PaymentRequestWatcher } from "@/components/payment/PaymentRequestWatcher";
 
 function navItems(role: "patient" | "doctor" | "agent") {
   if (role === "doctor") {
@@ -245,6 +246,12 @@ function AppShellInner({ children }: { children: ReactNode }) {
       </header>
 
       <main className="app-main">{children}</main>
+
+      {/* Owner brief (migration 017): when the contact-center agent raises a
+          payment request during the call, the member sees the MonCash-style
+          popup HERE — whatever page they are on — without the call ever
+          being interrupted. Patient-only; agents never see it. */}
+      {user.role === "patient" && <PaymentRequestWatcher />}
 
       <nav className="bottom-nav" aria-label="Navigasyon prensipal">
         {items.map((item) => navLink(item, 21))}

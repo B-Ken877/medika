@@ -46,9 +46,17 @@ function LoginForm() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      // Delivery employees land in their own portal unless a specific
-      // destination was requested.
-      router.replace(!params.get("next") && user?.role === "delivery" ? "/livreur" : next);
+      // Delivery employees land in their own portal; contact-center agents
+      // land in the agent console (owner brief). A specific ?next= always
+      // wins over both defaults.
+      const roleFallback = !params.get("next")
+        ? user?.role === "delivery"
+          ? "/livreur"
+          : ["agent", "agent_supervisor"].includes(user?.role ?? "")
+            ? "/app/agent"
+            : next
+        : next;
+      router.replace(roleFallback);
     }
   }, [status, router, next, params, user?.role]);
 

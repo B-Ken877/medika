@@ -26,7 +26,8 @@ async function setup() {
 /** Wipe user data between tests/files (specialties + migrations preserved). */
 async function resetDb() {
   const { query } = await importCjs('../src/db.js');
-  await query(`TRUNCATE agent_session_notes, agent_session_events, agent_call_attempts,
+  await query(`TRUNCATE agent_payment_requests,
+               agent_session_notes, agent_session_events, agent_call_attempts,
                agent_callback_attempts, agent_callback_requests, agent_assignments,
                agent_queue_entries, agent_sessions, agent_shift_breaks, agent_shifts,
                agent_presence, agent_profiles,

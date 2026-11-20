@@ -766,13 +766,50 @@ export interface AgentSessionDetail {
     reason: string; specialty: string | null; chosenDoctorId: string | null;
     consultationId: string | null; consultState: string;
     consultation: { id: string; status: string; doctorId: string | null; specialty: string; createdAt: number } | null;
+    // Intake captured BY THE AGENT on behalf of the member (migration 017).
+    intake: { description: string; urgencyLevel: string; reason: string };
     startedAt: string | null; callStartedAt: string | null; callEndedAt: string | null;
     outcome: string | null; outcomeNote: string; createdAt: string; queuePosition: number | null;
   };
+  // The agent's own "Submit Payment" state; null when none raised yet.
+  paymentRequest: AgentPaymentRequestView | null;
   patient: { id: string; name: string; phone: string | null; language?: string } | null;
-  events: { type: string; at: string; actor: string | null }[];
+  events: { type: string; at: string; actor: string | null; metadata?: Record<string, unknown> }[];
   notes: { id: string; content: string; agent: string; at: string }[];
   calls: { id: string; channel: string; state: string; startedAt: string; endedAt: string | null; failureReason: string }[];
+}
+
+/** Agent-raised payment request (the member pays on their device while the
+ *  call keeps running — migration 017). */
+export interface AgentPaymentRequestView {
+  id: string;
+  sessionId: string;
+  patientId?: string;
+  doctorId: string | null;
+  specialty: string;
+  amount: number;
+  currency: string;
+  status: "pending" | "paid" | "failed" | "expired" | "cancelled";
+  consultationId: string | null;
+  createdAt?: string;
+  paidAt?: string | null;
+  expiresAt?: string;
+}
+
+/** The member-side view of the payment popup (no operational internals). */
+export interface MemberPaymentRequest {
+  id: string;
+  sessionId: string;
+  status: "pending" | "paid" | "failed" | "expired" | "cancelled";
+  amount: number;
+  currency: string;
+  specialty: string;
+  doctorName: string | null;
+  agentName: string | null;
+  consultationId: string | null;
+  createdAt?: string;
+  paidAt?: string | null;
+  expiresAt?: string;
 }
 
 export function requestAssistance(token: string, language = "ht") {
@@ -916,5 +953,55 @@ export function agentOpsSessions(token: string, signal?: AbortSignal) {
 export function agentOpsReports(token: string, signal?: AbortSignal) {
   return apiFetch<{ since: string; metrics: Record<string, number>; perAgent: { agentId: string; name: string; employeeRef: string | null; completed: number; consultRequests: number; unresolved: number; avgSessionSeconds: number | null }[] }>(
     "/api/agent/ops/reports", { token, signal },
+  );
+}
+
+// ─── Agent-initiated payment requests (migration 017, owner brief) ───────────
+
+/** Save the intake the agent fills ON BEHALF of the member during the call
+ *  (reason, what the member feels, urgency — raw internal values). */
+export function agentSessionIntake(token: string, sessionId: string, input: { reason?: string; description?: string; urgencyLevel?: string }) {
+  return apiFetch<{ intake: { description: string; urgencyLevel: string; reason: string } }>(
+    `/api/agent/sessions/${encodeURIComponent(sessionId)}/intake`, { method: "POST", body: input, token },
+  );
+}
+
+/** "Submit Payment" — push the simulated MonCash-style payment request to
+ *  the member's device. The call stays open; success means pending only. */
+export function agentCreatePaymentRequest(token: string, sessionId: string) {
+  return apiFetch<AgentPaymentRequestView>(
+    `/api/agent/sessions/${encodeURIComponent(sessionId)}/payment-request`, { method: "POST", body: {}, token },
+  );
+}
+
+export function agentCancelPaymentRequest(token: string, sessionId: string) {
+  return apiFetch<{ status: string }>(
+    `/api/agent/sessions/${encodeURIComponent(sessionId)}/payment-request/cancel`, { method: "POST", token },
+  );
+}
+
+/** Preferred-doctor search (owner brief): the member names a doctor, the
+ *  agent searches by name substring — across all specialties when no
+ *  specialty filter is given. */
+export function agentDoctors(token: string, params: { specialty?: string; q?: string }, signal?: AbortSignal) {
+  return apiFetch<User[]>("/api/agent/doctors", { token, params, signal });
+}
+
+// ─── Member-side payment popup (the agent-raised request) ────────────────────
+
+/** Poll + WS-refresh source of truth for the member's payment popup. */
+export function getMyPaymentRequest(token: string, signal?: AbortSignal) {
+  return apiFetch<MemberPaymentRequest | { status: "none" }>(
+    "/api/assist/payment-requests/current", { token, signal, timeoutMs: 10_000 },
+  );
+}
+
+/** Pay: phone + 4-digit PIN (SIMULATED MonCash — server-verified, clearly
+ *  labeled in the UI). Returns the created consultation id; nobody is
+ *  redirected — the consultation appears on the member's dashboard. */
+export function confirmMyPaymentRequest(token: string, requestId: string, input: { phoneNumber: string; pin: string }) {
+  return apiFetch<{ success: boolean; consultationId: string | null; replayed?: boolean; transactionId?: string }>(
+    `/api/assist/payment-requests/${encodeURIComponent(requestId)}/confirm`,
+    { method: "POST", body: input, token, timeoutMs: 25_000 },
   );
 }

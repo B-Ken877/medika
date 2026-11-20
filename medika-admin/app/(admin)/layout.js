@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   LayoutDashboard, Users, MessageSquare, DollarSign,
   LogOut, Menu, X, Stethoscope, Tag, Headphones, ChevronDown, Wallet, Pill, Truck,
+  PhoneCall,
 } from 'lucide-react';
 
 const navItems = [
@@ -14,6 +15,7 @@ const navItems = [
   { href: '/consultations', label: 'Consultations', icon: MessageSquare },
   { href: '/tarification', label: 'Tarification', icon: Tag },
   { href: '/customer-care', label: 'Service client', icon: Headphones },
+  { href: '/agents', label: 'Agents', icon: PhoneCall },
   { href: '/medicaments', label: 'Médicaments et pharmacies', icon: Pill },
   { href: '/livraisons', label: 'Livraisons', icon: Truck },
   { href: '/finance', label: 'Finance', icon: DollarSign },

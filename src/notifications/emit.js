@@ -31,6 +31,10 @@ const CATEGORY_FOR_EVENT = {
   // Agent operations (contact center).
   'agent:assignment': 'consultations',
   'assist:connected': 'consultations',
+  // Agent-initiated payment requests (migration 017): the member pays on
+  // their device while the call keeps running. 'wallet' — payment events.
+  'payment:request': 'wallet',
+  'payment:confirmed': 'wallet',
   'consultation:submitted': 'consultations',
   'consultation:offer': 'consultations',
   'consultation:accepted': 'consultations',
@@ -152,6 +156,20 @@ const COPY = {
     title: 'Medika',
     body: 'Yon ajan Medika reponn ou. Konekte kounye a nan aplikasyon an.',
     url: '/app/assist',
+  },
+  // Member: the agent raised a payment request during the assisted call —
+  // the popup opens on their device; the call stays open (owner brief).
+  paymentRequest: {
+    title: 'Medika — Peman',
+    body: 'Ajan Medika voye w yon demann peman. Ou ka peye kounye a.',
+    url: '/app',
+  },
+  // Member: simulated payment confirmed — the consultation is created and
+  // linked; nobody is redirected, it appears on the dashboard.
+  paymentConfirmed: {
+    title: 'Medika',
+    body: 'Peman an konfime. Konsiltasyon ou kreye — jwenn l nan tablodbò ou.',
+    url: '/app/consultations',
   },
   // Patient: request submitted / waiting.
   consultationSubmitted: {

@@ -17,7 +17,8 @@ const lifecycle = require('../agent-lifecycle');
 const usersRepo = require('../repos/users');
 const specialtiesRepo = require('../repos/specialties');
 const consultationsRepo = require('../repos/consultations');
-const { config } = require('../config');
+const paymentRequestsRepo = require('../repos/agent-payment-requests');
+const { config, simulationAllowed } = require('../config');
 
 const router = express.Router();
 const hub = (req) => req.app.locals.hub;
@@ -163,12 +164,13 @@ async function loadSessionForAgent(req, res) {
 router.get('/agent/sessions/:id', authenticate, requireRole(...AGENT_ROLES), guard(async (req, res) => {
   const session = await loadSessionForAgent(req, res);
   if (!session) return;
-  const [patient, events, notes, attempts, entry] = await Promise.all([
+  const [patient, events, notes, attempts, entry, prRow] = await Promise.all([
     ops.patientSummaryForAgent(session.patient_id),
     ops.eventsFor(session.id),
     ops.notesFor(session.id),
     ops.callAttemptsFor(session.id),
     ops.queueEntryFor(session.id),
+    paymentRequestsRepo.latestForSession(session.id),
   ]);
   const consultation = session.consultation_id ? await consultationsRepo.findById(session.consultation_id) : null;
   return res.json({
@@ -183,6 +185,12 @@ router.get('/agent/sessions/:id', authenticate, requireRole(...AGENT_ROLES), gua
       consultationId: session.consultation_id,
       consultState: consultationDisplayState(consultation),
       consultation: consultation ? { id: consultation.id, status: consultation.status, doctorId: consultation.doctor_id, specialty: consultation.specialty_needed, createdAt: consultation.created_at } : null,
+      // Intake captured BY THE AGENT on behalf of the member (migration 017).
+      intake: {
+        description: session.intake_description || '',
+        urgencyLevel: session.urgency_level || 'Moyenne',
+        reason: session.reason || '',
+      },
       startedAt: session.started_at,
       callStartedAt: session.call_started_at,
       callEndedAt: session.call_ended_at,
@@ -191,6 +199,9 @@ router.get('/agent/sessions/:id', authenticate, requireRole(...AGENT_ROLES), gua
       createdAt: session.created_at,
       queuePosition: entry ? entry.position : null,
     },
+    // The agent's own "Submit Payment" state (pending → the member is paying;
+    // paid → the consultation exists). Null when none was raised yet.
+    paymentRequest: prRow ? paymentRequestsRepo.toApi(prRow) : null,
     patient: patient ? { id: patient.id, name: patient.name, phone: patient.phone, language: patient.language } : null,
     events: events.map((e) => ({ type: e.event_type, at: e.created_at, actor: e.actor_name, metadata: e.metadata })),
     notes: notes.map((n) => ({ id: n.id, content: n.content, agent: n.agent_name, at: n.created_at })),
@@ -228,6 +239,159 @@ router.post('/agent/sessions/:id/notes', authenticate, requireRole(...AGENT_ROLE
   if (!content) return res.status(400).json({ error: 'Nòt vid' });
   const note = await ops.addNote({ id: uuidv4().substring(0, 18), sessionId: session.id, agentId: req.user.id, content });
   return res.status(201).json({ id: note.id, content: note.content, at: note.created_at });
+}));
+
+/**
+ * POST /agent/sessions/:id/intake — the agent fills the intake ON BEHALF of
+ * the member during the call (owner brief): the reason for the visit, what
+ * the member says they feel (the member's OWN words — the agent never
+ * diagnoses), and the urgency level (raw internal values only — display
+ * labels stay client-side, matching the manual flow's contract). Medical-
+ * history updates are captured as session notes; the clinical history
+ * workstream comes later.
+ */
+router.post('/agent/sessions/:id/intake', authenticate, requireRole(...AGENT_ROLES), guard(async (req, res) => {
+  const session = await loadSessionForAgent(req, res);
+  if (!session) return;
+  const reason = String(req.body?.reason ?? session.reason ?? '').trim().slice(0, 500);
+  const description = String(req.body?.description ?? '').trim().slice(0, 2000);
+  const urgencyLevel = String(req.body?.urgencyLevel || session.urgency_level || 'Moyenne');
+  if (!['Faible', 'Moyenne', 'Haute', 'Critique'].includes(urgencyLevel)) {
+    return res.status(400).json({ error: 'Nivo ijans pa valab' });
+  }
+  const updated = await ops.updateSession(session.id, {
+    reason,
+    intake_description: description,
+    urgency_level: urgencyLevel,
+  });
+  await ops.recordEvent({
+    sessionId: session.id, eventType: 'intake_recorded', actorId: req.user.id,
+    // No symptom content in the audit trail — it lives on the session row.
+    metadata: { hasDescription: description.length > 0, urgencyLevel, reasonLength: reason.length },
+  });
+  return res.json({
+    intake: {
+      description: updated.intake_description || '',
+      urgencyLevel: updated.urgency_level || 'Moyenne',
+      reason: updated.reason || '',
+    },
+  });
+}));
+
+// ─── Agent-initiated payment request (owner brief: "Submit Payment") ────────
+// The agent raises the request DURING the active call; the member's device
+// shows the payment popup while the call stays open. Simulation-only by
+// design (no MonCash API yet): the payments row is created PENDING +
+// simulated server-side, and the member's confirm (routes/assist.js)
+// verifies through the strictly isolated simulation path — fail-closed when
+// simulation is not allowed on the deployment.
+
+function paymentRequestView(row) {
+  const api = paymentRequestsRepo.toApi(row);
+  return {
+    id: api.id, sessionId: api.sessionId, patientId: api.patientId,
+    doctorId: api.doctorId, specialty: api.specialty, amount: api.amount,
+    currency: api.currency, status: api.status,
+    consultationId: api.consultationId,
+    createdAt: api.createdAt, paidAt: api.paidAt, expiresAt: api.expiresAt,
+  };
+}
+
+router.post('/agent/sessions/:id/payment-request', authenticate, requireRole(...AGENT_ROLES), guard(async (req, res) => {
+  const session = await loadSessionForAgent(req, res);
+  if (!session) return;
+  if (session.status !== 'active') {
+    return res.status(409).json({ error: 'Sesyon an pa aktif — peman mande pandan apèl la' });
+  }
+  if (!String(session.intake_description || '').trim()) {
+    return res.status(409).json({ error: 'Ranpli entèvyou a (sa pasyan an ap santi) anvan w voye demann peman an' });
+  }
+  const specialty = session.specialty;
+  if (!specialty) {
+    return res.status(409).json({ error: 'Chwazi espesyalite anvan w voye demann peman an' });
+  }
+  const price = await specialtiesRepo.priceFor(specialty);
+  if (!price || price <= 0) {
+    return res.status(409).json({ error: 'Pri espesyalite sa a pa disponib kounye a' });
+  }
+  const patient = await usersRepo.findById(session.patient_id);
+  if (!patient || patient.role !== 'patient') {
+    return res.status(404).json({ error: 'Pasyan pa jwenn' });
+  }
+  // The MEMBER is the one who pays — the simulation authorization is theirs
+  // (resolved from the DB user, never client input). Fail-closed: on a
+  // deployment without simulation there is no agent-assisted payment.
+  if (!simulationAllowed(patient)) {
+    return res.status(503).json({ error: 'Mòd peman tès la pa aktive sou deploieman sa a' });
+  }
+  const pending = await paymentRequestsRepo.pendingForPatient(session.patient_id);
+  if (pending) {
+    return res.status(409).json({ error: 'Pasyan an gen yon demann peman an atann deja — anile l anvan w voye yon lòt', requestId: pending.id });
+  }
+  const requestId = 'apr_' + uuidv4().substring(0, 12);
+  const orderId = `APR_${Date.now()}_${requestId}`;
+  const expiresAt = new Date(Date.now() + config.agentPaymentRequestTtlSeconds * 1000);
+  try {
+    // The payments row the member's confirm will verify + consume (PENDING
+    // + simulated — created first; a losing race below only leaves a
+    // harmless never-verified PENDING row, exactly like the self-service flow).
+    const payment = await require('../repos/payments').create({
+      order_id: orderId, patient_id: session.patient_id, amount: price, simulated: true,
+    });
+    if (!payment) throw Object.assign(new Error('order_id collision'), { code: '23505' });
+    await paymentRequestsRepo.create({
+      id: requestId, sessionId: session.id, patientId: session.patient_id,
+      doctorId: session.chosen_doctor_id || null, specialty, amount: price,
+      orderId, createdBy: req.user.id, expiresAt,
+    });
+  } catch (err) {
+    // uq_agent_payment_pending is the authoritative referee against a
+    // concurrent request for the same member.
+    if (err && err.code === '23505') {
+      return res.status(409).json({ error: 'Yon demann peman an atann deja pou pasyan an' });
+    }
+    throw err;
+  }
+  await ops.recordEvent({
+    sessionId: session.id, eventType: 'payment_request_created', actorId: req.user.id,
+    metadata: { requestId, amount: price, specialty, doctorId: session.chosen_doctor_id || null },
+  });
+  // Realtime + durable: the popup must appear on the member's device NOW,
+  // and survive a closed tab via the notification outbox.
+  if (hub(req)) {
+    hub(req).publishToUser(session.patient_id, {
+      type: 'payment:request', requestId, sessionId: session.id, amount: price, specialty,
+    });
+  }
+  const notifications = require('../notifications/emit');
+  notifications.emit({
+    userId: session.patient_id,
+    eventType: 'payment:request',
+    idempotencyKey: `payment-request:${requestId}`,
+    ...notifications.COPY.paymentRequest,
+  });
+  const row = await paymentRequestsRepo.byId(requestId);
+  return res.status(201).json(row ? paymentRequestView(row) : { id: requestId, status: 'pending', amount: price, specialty, expiresAt, orderId });
+}));
+
+router.get('/agent/sessions/:id/payment-request', authenticate, requireRole(...AGENT_ROLES), guard(async (req, res) => {
+  const session = await loadSessionForAgent(req, res);
+  if (!session) return;
+  const row = await paymentRequestsRepo.latestForSession(session.id);
+  return res.json(row ? paymentRequestView(row) : { status: 'none' });
+}));
+
+router.post('/agent/sessions/:id/payment-request/cancel', authenticate, requireRole(...AGENT_ROLES), guard(async (req, res) => {
+  const session = await loadSessionForAgent(req, res);
+  if (!session) return;
+  const row = await paymentRequestsRepo.pendingForSession(session.id);
+  if (!row) return res.status(409).json({ error: 'Pa gen demann peman an atann pou sesyon sa a' });
+  await paymentRequestsRepo.markStatus(row.id, 'cancelled');
+  await ops.recordEvent({ sessionId: session.id, eventType: 'payment_request_cancelled', actorId: req.user.id, metadata: { requestId: row.id } });
+  if (hub(req)) {
+    hub(req).publishToUser(session.patient_id, { type: 'payment:request-cancelled', requestId: row.id, sessionId: session.id });
+  }
+  return res.json({ status: 'cancelled' });
 }));
 
 router.post('/agent/sessions/:id/call/start', authenticate, requireRole(...AGENT_ROLES), guard(async (req, res) => {
@@ -277,7 +441,12 @@ router.post('/agent/sessions/:id/complete', authenticate, requireRole(...AGENT_R
 
 router.get('/agent/doctors', authenticate, requireRole(...AGENT_ROLES), guard(async (req, res) => {
   const specialty = req.query.specialty ? String(req.query.specialty) : undefined;
-  const doctors = await usersRepo.listDoctors(specialty);
+  // Preferred-doctor search (owner brief): a member can name a doctor they
+  // trust — the agent searches by name substring, across ALL specialties
+  // when no specialty filter is given.
+  const q = req.query.q ? String(req.query.q).trim().toLowerCase() : '';
+  let doctors = await usersRepo.listDoctors(specialty);
+  if (q) doctors = doctors.filter((d) => (d.name || '').toLowerCase().includes(q));
   return res.json(doctors);
 }));
 
