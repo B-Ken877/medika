@@ -1447,3 +1447,176 @@
   .app-shell .scs-cancel { transition: none; }
   .app-shell .scs-row { transition: none; }
 }
+
+/* ── Consultation flow — iOS-styled form ("cf" wrapper) ───────────────────
+   The manual intake wizard (/app/consult: intake → doctors → payment) wears
+   the iOS form language while keeping Medika's mint/green palette: large
+   title, inset grouped cards, filled rounded text fields, a true segmented
+   control for urgency, grouped list rows with hairline separators, and the
+   same scale press feedback as the consultation sheet. Every rule is scoped
+   under .app-shell .cf so the shared globals (.card, .field, .tabs, .row)
+   keep their look on every other page (issue #99 governance). */
+
+.app-shell .cf {
+  padding-bottom: max(28px, env(safe-area-inset-bottom));
+}
+
+/* iOS large title + subtitle */
+.app-shell .cf .page-title {
+  font-size: clamp(1.6rem, 6vw, 2rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.app-shell .cf .muted.small { margin-top: 4px; }
+
+/* Back links read like iOS nav-bar buttons, not pill buttons */
+.app-shell .cf .btn-ghost {
+  background: transparent;
+  border: none;
+  padding-left: 0;
+  color: var(--green-600);
+  font-weight: 600;
+}
+.app-shell .cf .btn-ghost:hover:not(:disabled) {
+  background: transparent;
+  color: var(--green-700);
+}
+
+/* Inset grouped cards */
+.app-shell .cf .card {
+  border-radius: 18px;
+  border: 1px solid var(--pt-card-border-soft);
+  background: var(--pt-glass);
+  box-shadow: var(--pt-shadow-card);
+  padding: 20px 18px;
+}
+
+/* iOS rounded notices (variant colors from globals stay untouched) */
+.app-shell .cf .alert { border-radius: 14px; }
+
+/* Field labels as iOS section headers; filled rounded text fields */
+.app-shell .cf .field { margin-bottom: 18px; }
+.app-shell .cf .field label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.app-shell .cf .field-hint { color: var(--text-secondary); }
+
+.app-shell .cf .textarea {
+  background: rgba(13, 58, 50, 0.05);
+  border: 1.5px solid transparent;
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-size: 16px;
+  min-height: 132px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.app-shell .cf .textarea:focus {
+  background: var(--pt-glass);
+  border-color: var(--green-500);
+  outline: none;
+  box-shadow: none;
+}
+
+/* Urgency picker → true iOS segmented control */
+.app-shell .cf .tabs {
+  gap: 2px;
+  padding: 3px;
+  background: rgba(13, 58, 50, 0.08);
+  border-bottom: none;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.app-shell .cf .tabs button {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 38px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.app-shell .cf .tabs button:hover { color: var(--text-secondary); background: transparent; }
+.app-shell .cf .tabs button.active {
+  background: var(--pt-glass);
+  color: var(--green-700);
+  box-shadow: 0 2px 6px rgba(13, 58, 50, 0.16);
+  border-bottom: none;
+}
+
+/* Specialty picker → iOS filled field + menu */
+.app-shell .cf .sp-trigger {
+  background: rgba(13, 58, 50, 0.05);
+  border: 1.5px solid transparent;
+  border-radius: 14px;
+  padding: 12px 16px;
+  min-height: 50px;
+  font-size: 15px;
+}
+.app-shell .cf .sp-trigger:hover:not(:disabled) { border-color: rgba(13, 58, 50, 0.14); }
+.app-shell .cf .sp-trigger[aria-expanded="true"] {
+  background: var(--pt-glass);
+  border-color: var(--green-500);
+}
+.app-shell .cf .sp-panel {
+  border-radius: 16px;
+  border: 1px solid var(--pt-card-border-soft);
+  box-shadow: var(--pt-shadow-float);
+}
+
+/* Primary actions: the shared iOS press language */
+.app-shell .cf .btn-primary {
+  border-radius: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  box-shadow:
+    0 8px 22px -8px rgba(20, 91, 80, 0.45),
+    0 1px 2px rgba(13, 58, 50, 0.12);
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.18s ease, box-shadow 0.18s ease;
+}
+.app-shell .cf .btn-primary:active:not(:disabled) {
+  transform: scale(0.97);
+  filter: brightness(0.97);
+}
+
+/* Doctor list → iOS grouped rows with hairline separators */
+.app-shell .cf .list {
+  gap: 0;
+  background: var(--pt-glass);
+  border: 1px solid var(--pt-card-border-soft);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: var(--pt-shadow-card);
+}
+.app-shell .cf .list .row {
+  border: none;
+  border-bottom: 1px solid rgba(13, 58, 50, 0.08);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transition: background 0.15s ease;
+}
+.app-shell .cf .list .row:last-child { border-bottom: none; }
+.app-shell .cf .list .row:hover,
+.app-shell .cf .list .row:active {
+  border-color: transparent;
+  background: rgba(13, 58, 50, 0.05);
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell .cf .btn-primary { transition: none; }
+  .app-shell .cf .tabs button { transition: none; }
+  .app-shell .cf .textarea { transition: none; }
+  .app-shell .cf .list .row { transition: none; }
+}
