@@ -3,23 +3,29 @@
 /**
  * New consultation entry — a BUTTON, not a link (owner's spec).
  *
- * Clicking "Kòmanse yon konsiltasyon" does NOT navigate anywhere: it opens a
- * chooser with exactly TWO options:
- *   1. Rele yon ajant sant apèl — POST /api/consultations/call-center with an
- *      EMPTY body (the patient types nothing, ever), then the caller lands
- *      directly in the voice call screen, which shows "calling the call
- *      center agent…" until the agent picks up. No form, no callback screens,
- *      no extra steps.
- *   2. Manyèl — the classic symptom-intake flow at /app/consult, unchanged.
+ * Clicking "Kòmanse yon konsiltasyon" does NOT navigate anywhere: it opens an
+ * iOS-style action sheet with exactly TWO options:
+ *   1. Rele yon ajan — POST /api/consultations/call-center with an EMPTY body
+ *      (the patient types nothing, ever), then the caller lands directly in
+ *      the voice call screen, which shows "calling the call-center agent…"
+ *      until the agent picks up. No form, no callback screens, no extra steps.
+ *   2. Kontinye manyèlman — the classic symptom-intake flow at /app/consult,
+ *      unchanged.
  *
- * The one-active-consultation invariant is surfaced honestly INSIDE the
- * chooser (409 + existing_id): the patient is pointed back to their open
+ * The sheet follows the iOS action-sheet language: translucent blurred
+ * backdrop, bottom-anchored sheet with a grabber on phones (centered card on
+ * desktop), grouped rows with tinted squircle icons and hairline separators,
+ * a separate cancel capsule, and scale/fade press feedback (suppressed under
+ * prefers-reduced-motion).
+ *
+ * The one-active-consultation invariant is surfaced honestly INSIDE the sheet
+ * (409 + existing_id): the patient is pointed back to their open
  * consultation instead of a dead-end error.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ClipboardList, Phone, Plus } from "lucide-react";
+import { ChevronRight, ClipboardList, Phone, Plus } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
 import { createCallCenterConsultation } from "@/lib/api/endpoints";
 import { ApiError } from "@/lib/api/client";
@@ -41,14 +47,14 @@ export default function StartConsultation({ compact = false }: Props) {
   const firstOptionRef = useRef<HTMLButtonElement | null>(null);
 
   const close = useCallback(() => {
-    // The call request may already be in flight when the chooser closes —
+    // The call request may already be in flight when the sheet closes —
     // keep the request running; its outcome still navigates (or surfaces on
     // the next open). Reset only the local error surface.
     setOpen(false);
     setError(null);
   }, []);
 
-  // Escape closes the chooser; focus lands on the FIRST option so keyboard
+  // Escape closes the sheet; focus lands on the FIRST option so keyboard
   // and switch-access users reach the agent call in one Enter.
   useEffect(() => {
     if (!open) return;
@@ -63,7 +69,7 @@ export default function StartConsultation({ compact = false }: Props) {
   const startAgentCall = useCallback(async () => {
     if (starting) return;
     if (status !== "authenticated" || !token) {
-      setError("Sesyon ou ekspire — rekonekte pou w rele ajant la.");
+      setError("Sesyon ou ekspire — rekonekte pou w rele ajan an.");
       return;
     }
     setStarting(true);
@@ -89,17 +95,7 @@ export default function StartConsultation({ compact = false }: Props) {
 
   const alreadyActiveNotice =
     existingId && activeHref ? (
-      <div
-        role="status"
-        style={{
-          border: "1px solid var(--border, #e2e8f0)",
-          borderRadius: 12,
-          padding: "12px 14px",
-          marginBottom: 12,
-          fontSize: 13,
-          color: "var(--text-secondary, #475569)",
-        }}
-      >
+      <div className="scs-notice" role="status">
         Ou gen deja yon konsiltasyon aktif.
         <div style={{ marginTop: 8 }}>
           <Link href={activeHref} className="btn btn-secondary btn-sm">
@@ -111,84 +107,94 @@ export default function StartConsultation({ compact = false }: Props) {
 
   return (
     <>
-      {/* The entry is a real <button>: click opens the chooser, never a
-          navigation. Same premium-mint styling as the previous link. */}
-      <button type="button" className="btn btn-primary" onClick={() => { setError(null); setExistingId(null); setOpen(true); }}>
+      {/* The entry is a real <button>: tap opens the sheet, never a
+          navigation. iOS-feel press feedback comes from the scoped styles. */}
+      <button
+        type="button"
+        className="btn btn-primary scs-cta"
+        onClick={() => { setError(null); setExistingId(null); setOpen(true); }}
+      >
         <Plus size={compact ? 16 : 18} aria-hidden /> Kòmanse yon konsiltasyon
       </button>
 
       {open && (
         <div
-          className="modal-backdrop"
+          className="scs-backdrop"
           role="dialog"
           aria-modal="true"
           aria-labelledby="new-consult-title"
           onClick={close}
         >
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460, width: "100%" }}>
-            <h2 className="modal-title" id="new-consult-title">
+          <div className="scs-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="scs-grabber" aria-hidden />
+            <h2 className="scs-title" id="new-consult-title">
               Nouvo konsiltasyon
             </h2>
-            <p className="modal-body">Kouman ou vle kòmanse?</p>
+            <p className="scs-subtitle">Kouman ou vle kòmanse?</p>
 
             {error && (
-              <p role="alert" style={{ color: "var(--danger, #b3261e)", fontSize: 13, marginTop: -6, marginBottom: 12 }}>
+              <p className="scs-error" role="alert">
                 {error}
               </p>
             )}
 
             {alreadyActiveNotice}
 
-            <div className="stack" style={{ gap: 10, marginBottom: 6 }}>
-              {/* Option 1 — the agent call. One click: create + route + call
+            <div className="scs-group" role="group" aria-label="Opsyon konsiltasyon">
+              {/* Option 1 — the agent call. One tap: create + route + call
                   popup. NOTHING for the patient to fill in. */}
               <button
                 ref={firstOptionRef}
                 type="button"
-                className="btn btn-primary"
+                className="scs-row"
                 disabled={starting}
                 onClick={startAgentCall}
-                style={{ justifyContent: "flex-start", textAlign: "left", gap: 12, padding: "14px 16px" }}
               >
-                {starting ? <Spinner /> : <Phone size={20} aria-hidden />}
-                <span>
-                  Rele yon ajant sant apèl
-                  <span
-                    style={{ display: "block", fontWeight: 400, fontSize: 12.5, color: "inherit", opacity: 0.85 }}
-                  >
+                <span className="scs-icon scs-icon-agent" aria-hidden>
+                  {starting ? <Spinner /> : <Phone size={19} />}
+                </span>
+                <span className="scs-row-text">
+                  <span className="scs-row-title">Rele yon ajan</span>
+                  <span className="scs-row-sub">
                     {starting
                       ? "N ap prepare apèl la…"
-                      : "Pa gen anyen pou w ranpli — ajan an ap reponn imedyatman."}
+                      : "Pa gen anyen pou w ranpli — ajan an ap reponn."}
                   </span>
                 </span>
+                <ChevronRight className="scs-chevron" size={16} aria-hidden />
               </button>
+
+              <div className="scs-sep" aria-hidden />
 
               {/* Option 2 — the manual process: the classic intake form,
                   exactly as before. */}
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="scs-row"
                 disabled={starting}
                 onClick={() => router.push("/app/consult")}
-                style={{ justifyContent: "flex-start", textAlign: "left", gap: 12, padding: "14px 16px" }}
               >
-                <ClipboardList size={20} aria-hidden />
-                <span>
-                  Manyèl — ranpi fòm sentòm yo
-                  <span
-                    style={{ display: "block", fontWeight: 400, fontSize: 12.5, color: "inherit", opacity: 0.85 }}
-                  >
+                <span className="scs-icon scs-icon-manual" aria-hidden>
+                  <ClipboardList size={19} />
+                </span>
+                <span className="scs-row-text">
+                  <span className="scs-row-title">Kontinye manyèlman</span>
+                  <span className="scs-row-sub">
                     Dekri sa w ap santi pou jwenn yon doktè.
                   </span>
                 </span>
+                <ChevronRight className="scs-chevron" size={16} aria-hidden />
               </button>
             </div>
 
-            <div className="modal-actions">
-              <button type="button" className="btn btn-ghost btn-sm" onClick={close} disabled={starting}>
-                Anile
-              </button>
-            </div>
+            <button
+              type="button"
+              className="scs-cancel"
+              onClick={close}
+              disabled={starting}
+            >
+              Anile
+            </button>
           </div>
         </div>
       )}
