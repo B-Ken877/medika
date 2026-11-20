@@ -6,7 +6,7 @@
  * serverless cold start sees — and assert that the API self-migrates:
  *
  *   1. healing      — an empty database comes up with the full schema
- *                     (migrations 001–016), including every prescription /
+ *                     (migrations 001–017), including every prescription /
  *                     medication-order / delivery table, so the endpoints
  *                     that 500'd in production ("Impossible de charger
  *                     l'ordonnance", "Erreur interne du serveur") work.
@@ -152,7 +152,7 @@ afterAll(async () => {
 });
 
 describe('auto-migrate: the API self-heals a fresh production database', () => {
-  it('a cold start on an EMPTY database applies every migration (001–016), including the prescription tables', async () => {
+  it('a cold start on an EMPTY database applies every migration (001–017), including the prescription tables', async () => {
     const dbUrl = await createFreshDatabase(`medika_auto_heal_${randomInt(100000)}`);
     const port = freePort();
     const server = bootServer({ databaseUrl: dbUrl, port });
@@ -171,7 +171,7 @@ describe('auto-migrate: the API self-heals a fresh production database', () => {
 
       // The logs name what was applied (Vercel log visibility for support).
       expect(server.stdout()).toMatch(/\[auto-migrate\] applied 009_prescription_documents\.sql/);
-      expect(server.stdout()).toMatch(/\[auto-migrate\] 16 migration\(s\) applied at cold start/);
+      expect(server.stdout()).toMatch(/\[auto-migrate\] 17 migration\(s\) applied at cold start/);
 
       // The failure path is gone: the exact endpoint that answered 500
       // "Erreur interne du serveur" in production now answers a proper,

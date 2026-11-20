@@ -133,6 +133,10 @@ describe("createMedicationOrder contract (issue #82 §1.4)", () => {
 describe("login routing for the delivery role", () => {
   it("redirects delivery employees to /livreur when no explicit next page", () => {
     const login = read("../app/login/page.tsx");
-    expect(login).toContain('user?.role === "delivery" ? "/livreur" : next');
+    // The delivery redirect survives the agent-console landing addition
+    // (owner brief): delivery still wins its own portal, ?next= still wins.
+    expect(login).toContain('user?.role === "delivery"');
+    expect(login).toContain('? "/livreur"');
+    expect(login).toContain('!params.get("next")');
   });
 });

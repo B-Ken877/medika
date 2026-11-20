@@ -106,6 +106,14 @@ const config = {
     .map((s) => s.trim())
     .filter(Boolean),
   requirePayment: bool('REQUIRE_PAYMENT', isProduction()),
+  // Agent-initiated payment request TTL (migration 017): how long the popup
+  // stays actionable on the member's device before it expires and the agent
+  // must send it again. Bounded below so a misconfig can never create
+  // effectively non-expiring payment requests.
+  agentPaymentRequestTtlSeconds: Math.max(
+    60,
+    parseInt(env('AGENT_PAYMENT_REQUEST_TTL_SECONDS', '600'), 10) || 600,
+  ),
 
   // ─── Uploads ───────────────────────────────────────────────────────────────
   blobReadWriteToken: env('BLOB_READ_WRITE_TOKEN', ''),

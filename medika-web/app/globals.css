@@ -3207,3 +3207,141 @@ ol.events { padding-left: 1.25rem; }
 ol.events li { padding: 0.15rem 0; font-size: 0.9rem; color: var(--muted, #6b7280); }
 .hidden-audio { display: none; }
 .wrapup { border-top: 1px dashed var(--border, #e2e8e0); padding-top: 0.75rem; }
+
+/* ─── Agent console shared surfaces (owner brief: agent console) ────────────
+   These classes were already referenced by the agent/supervisor pages but
+   had no definitions (rendered unstyled). Defined once here; the member
+   payment popup below is patient-facing. */
+
+.banner {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 20px;
+  border: 1px solid transparent;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.banner-error {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.table-wrap th,
+.table-wrap td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--gray-100);
+  white-space: nowrap;
+}
+.table-wrap th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+.table-wrap tr:last-child td { border-bottom: none; }
+
+.doctor-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  background: var(--surface);
+}
+
+.intake-card {
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  background: var(--surface);
+}
+.intake-card h3 { font-size: 15px; margin: 0 0 4px; }
+
+.payreq-card {
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  border: 1px solid transparent;
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+.payreq-card.pending {
+  background: var(--warning-bg);
+  color: var(--text-primary);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+.payreq-card.paid {
+  background: var(--success-bg);
+  color: var(--success);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+/* ─── Member-side payment popup (agent-raised, simulated MonCash) ───────────
+   MonCash-style: amount up top, phone + 4-digit PIN, one Pay action. The
+   overlay never interrupts the audio call underneath it (owner brief). */
+
+.payreq-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(9, 38, 32, 0.58);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  z-index: 80;
+}
+.payreq-modal {
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px -20px rgba(9, 38, 32, 0.5);
+  padding: 20px;
+  display: grid;
+  gap: 12px;
+}
+.payreq-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.payreq-title { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
+.payreq-amount {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--green-700);
+  font-variant-numeric: tabular-nums;
+  display: block;
+  line-height: 1.1;
+}
+.payreq-check { color: var(--success); display: block; }
+.payreq-pin input {
+  letter-spacing: 0.4em;
+  text-align: center;
+  font-size: 18px;
+}
+
+@media (max-width: 480px) {
+  .payreq-modal { padding: 16px; border-radius: 16px; }
+  .payreq-amount { font-size: 30px; }
+}

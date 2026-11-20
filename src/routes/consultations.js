@@ -9,12 +9,6 @@
  */
 'use strict';
 
-/** Deterministic simulated transaction id — full encoding (no truncation: a
- *  truncated base64 prefix collides across similar order ids). */
-function simulatedTransactionId(orderId) {
-  return 'SIM-' + Buffer.from(String(orderId)).toString('base64url');
-}
-
 const express = require('express');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
@@ -30,6 +24,7 @@ const lifecycle = require('../consultation-lifecycle');
 const notifications = require('../notifications/emit');
 const { query } = require('../db');
 const moncash = require('../moncash');
+const { simulatedTransactionId, simulatedRetrieveByOrderId } = require('../simulated-payment');
 const { config, simulationAllowed } = require('../config');
 const { authenticate, requireRole } = require('../auth');
 const { badRequest, notFound, paymentRequired, conflict, serviceUnavailable } = require('../errors');
@@ -497,15 +492,6 @@ async function tryReplayActivePayment({ active, patientId, orderId, transactionI
 
 // Simulation-mode retrieval helpers (STRICTLY isolated: non-production +
 // sandbox + explicit PAYMENT_SIMULATION — enforced by config.assertProductionSafety).
-function simulatedRetrieveByOrderId(orderId) {
-  return {
-    reference: orderId,
-    transactionId: simulatedTransactionId(orderId),
-    amount: null,
-    status: 'completed',
-    raw: { simulated: true },
-  };
-}
 function simulatedRetrieveByTransaction(transactionId) {
   return { reference: null, transactionId: String(transactionId), amount: null, status: 'completed', raw: { simulated: true } };
 }

@@ -12,6 +12,7 @@
 'use strict';
 
 const express = require('express');
+const { v4: uuidv4 } = require('uuid');
 const usersRepo = require('../repos/users');
 const consultationsRepo = require('../repos/consultations');
 const specialtiesRepo = require('../repos/specialties');
@@ -19,8 +20,9 @@ const ticketsRepo = require('../repos/tickets');
 const walletRepo = require('../repos/wallet');
 const payoutCycles = require('../payout-cycles');
 const notifications = require('../notifications/emit');
+const agentOps = require('../repos/agent-ops');
 const { query } = require('../db');
-const { authenticateAdmin, hashPassword } = require('../auth');
+const { authenticateAdmin, hashPassword, newUserId } = require('../auth');
 const { config } = require('../config');
 
 const router = express.Router();
@@ -578,6 +580,108 @@ router.put('/tickets/:id/reopen', async (req, res, next) => {
     const t = await ticketsRepo.setStatus(req.params.id, 'open');
     if (!t) return res.status(404).json({ error: 'Not found' });
     res.json(ticketsRepo.ticketToApi(t));
+  } catch (err) { next(err); }
+});
+
+// ─── Agent workforce management (owner brief) ────────────────────────────────
+// The admin creates NEW agent accounts (not just promote an existing user —
+// see POST /api/agent/ops/agents for that path) and sees the live workforce
+// board: who is available, who is ON A CALL right now (and with which
+// member, since when), who is on break / offline.
+
+router.post('/agents', async (req, res, next) => {
+  try {
+    const { username, name, password, phone, role, employeeRef } = req.body || {};
+    if (!username || !name || !password) {
+      return res.status(400).json({ error: 'Username, name and password are required' });
+    }
+    // Staff accounts get a stricter floor than public registration (≥4).
+    if (String(password).length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+    if (!/^[a-zA-Z0-9._-]{3,40}$/.test(String(username))) {
+      return res.status(400).json({ error: 'Username invalide (lèt, chif, . _ - sèlman, 3-40 karaktè)' });
+    }
+    const agentRole = role === 'agent_supervisor' ? 'agent_supervisor' : 'agent';
+    const created = await usersRepo.create({
+      id: newUserId(agentRole),
+      username: String(username),
+      password_hash: hashPassword(String(password)),
+      role: agentRole,
+      name: String(name).slice(0, 120),
+      phone: phone ? String(phone).slice(0, 40) : null,
+      age: null,
+      gender: null,
+    });
+    if (!created) return res.status(409).json({ error: 'Username already taken' });
+    await agentOps.upsertProfile({
+      id: uuidv4().substring(0, 18),
+      userId: created.id,
+      employeeRef: employeeRef ? String(employeeRef).slice(0, 40) : null,
+      createdBy: req.user.id,
+      interfaceLanguage: 'ht',
+    }).catch(() => null);
+    res.status(201).json({
+      agentId: created.id,
+      username: created.username,
+      name: created.name,
+      role: created.role,
+    });
+  } catch (err) { next(err); }
+});
+
+router.get('/agents', async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      `SELECT u.id, u.name, u.username, u.phone, u.role,
+              p.availability, p.last_heartbeat, p.connection_state,
+              s.status AS shift_status, s.actual_start AS shift_started_at,
+              live.id AS live_session_id, live.started_at AS live_session_started_at,
+              live.created_at AS live_session_created_at,
+              pat.name AS live_patient_name,
+              prof.employee_ref
+         FROM users u
+         LEFT JOIN agent_presence p ON p.agent_id = u.id
+         LEFT JOIN agent_shifts s ON s.agent_id = u.id AND s.status IN ('active','on_break','ending')
+         LEFT JOIN agent_sessions live ON live.agent_id = u.id AND live.status = 'active'
+         LEFT JOIN users pat ON pat.id = live.patient_id
+         LEFT JOIN agent_profiles prof ON prof.user_id = u.id
+        WHERE u.role IN ('agent','agent_supervisor')
+        ORDER BY u.name`,
+    );
+    const since = new Date();
+    since.setHours(0, 0, 0, 0);
+    const { rows: statRows } = await query(
+      `SELECT agent_id,
+              COUNT(*) FILTER (WHERE status = 'completed')::int AS completed_today,
+              COUNT(*) FILTER (WHERE status = 'active')::int AS active_now
+         FROM agent_sessions
+        WHERE COALESCE(ended_at, started_at, created_at) >= $1
+        GROUP BY agent_id`,
+      [since],
+    );
+    const stats = Object.fromEntries(statRows.map((s) => [s.agent_id, s]));
+    res.json(rows.map((r) => ({
+      agentId: r.id,
+      name: r.name,
+      username: r.username,
+      phone: r.phone,
+      role: r.role,
+      employeeRef: r.employee_ref,
+      availability: r.availability || 'offline',
+      connectionState: r.connection_state || 'disconnected',
+      lastHeartbeat: r.last_heartbeat,
+      shift: r.shift_status ? { status: r.shift_status, startedAt: r.shift_started_at } : null,
+      onCall: Boolean(r.live_session_id),
+      liveSession: r.live_session_id
+        ? {
+            sessionId: r.live_session_id,
+            startedAt: r.live_session_started_at || r.live_session_created_at,
+            patientName: r.live_patient_name,
+          }
+        : null,
+      todayCompleted: stats[r.id]?.completed_today || 0,
+    })));
   } catch (err) { next(err); }
 });
 

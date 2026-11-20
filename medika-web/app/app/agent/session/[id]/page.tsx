@@ -6,20 +6,32 @@
  * Zone B: minimum-necessary patient info. Zone C: the guided scheduling
  * workflow with an always-visible stage indicator. Call end ≠ session end:
  * wrap-up is an explicit step (brief #15).
+ *
+ * Owner brief — the agent works ON BEHALF of the member during the call:
+ *  - the intake form (reason for the visit, what the member says they feel,
+ *    urgency) is OPEN from the moment the call starts and is saved to the
+ *    member's session (migration 017); medical-history updates are captured
+ *    as session notes (clinical history is a later workstream);
+ *  - the member's PREFERRED doctor is searchable by name, across all
+ *    specialties;
+ *  - "Submit Payment" pushes a simulated MonCash-style request (phone +
+ *    4-digit PIN) to the member's device — the call NEVER drops, and the
+ *    consultation is created for the member on confirmation (nobody is
+ *    redirected; it appears on the member's dashboard).
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/context";
 import { ApiError } from "@/lib/api/client";
 import { useSocket } from "@/lib/ws/socket-context";
 import {
   agentSession, agentSessionSpecialty, agentSessionDoctor, agentSessionNote,
-  agentCallStart, agentCallEnd, agentSessionComplete, agentSpecialties,
-  getDoctorsBySpecialty, getAssistCallToken,
+  agentSessionIntake, agentCreatePaymentRequest, agentCancelPaymentRequest,
+  agentCallStart, agentCallEnd, agentSessionComplete, agentSpecialties, agentDoctors,
   type AgentSessionDetail,
 } from "@/lib/api/endpoints";
-import { SpecialtyPrice } from "@/lib/api/types";
-import type { User } from "@/lib/api/types";
+import type { SpecialtyPrice, User } from "@/lib/api/types";
+import { urgencyLabel } from "@/lib/labels";
 import { AssistAudioSession } from "@/lib/call/assist-audio";
 
 const STAGES = [
@@ -30,6 +42,10 @@ const STAGES = [
   ["payment", "Peman"],
   ["wrapup", "Fen sesyon"],
 ] as const;
+
+/** Raw internal values — the backend contract; display labels come from
+ *  urgencyLabel() exactly like the manual self-service flow. */
+const URGENCY_LEVELS = ["Faible", "Moyenne", "Haute", "Critique"] as const;
 
 const OUTCOME_LABEL: Record<string, string> = {
   consultation_initiated: "Demann konsiltasyon kreye",
@@ -65,6 +81,16 @@ export default function AgentSessionPage() {
   const [detail, setDetail] = useState<AgentSessionDetail | null>(null);
   const [prices, setPrices] = useState<SpecialtyPrice[]>([]);
   const [doctors, setDoctors] = useState<User[] | null>(null);
+  // Intake ON BEHALF of the member — hydrated once per session, then it is
+  // the agent's working draft (a refresh never clobbers what they typed).
+  const [intakeReason, setIntakeReason] = useState("");
+  const [intakeDescription, setIntakeDescription] = useState("");
+  const [intakeUrgency, setIntakeUrgency] = useState<string>("Moyenne");
+  const [historyNote, setHistoryNote] = useState("");
+  const [intakeSaved, setIntakeSaved] = useState(false);
+  const [docQuery, setDocQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<User[] | null>(null);
+  const [searching, setSearching] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [outcome, setOutcome] = useState("");
   const [outcomeNote, setOutcomeNote] = useState("");
@@ -75,6 +101,9 @@ export default function AgentSessionPage() {
   const [seconds, setSeconds] = useState(0);
   const audioRef = useRef<AssistAudioSession | null>(null);
   const remoteRef = useRef<HTMLAudioElement | null>(null);
+  const intakeHydratedFor = useRef<string | null>(null);
+
+  const payReq = detail?.paymentRequest ?? null;
 
   const refresh = useCallback(async () => {
     if (!token || !sessionId) return;
@@ -91,13 +120,32 @@ export default function AgentSessionPage() {
     void agentSpecialties(token).then(setPrices).catch(() => {});
   }, [token]);
 
+  // Hydrate the intake draft ONLY on first load of a given session — later
+  // refreshes (poll/WS) must never overwrite what the agent is typing.
+  useEffect(() => {
+    if (!detail || intakeHydratedFor.current === detail.session.sessionId) return;
+    intakeHydratedFor.current = detail.session.sessionId;
+    setIntakeReason(detail.session.intake.reason);
+    setIntakeDescription(detail.session.intake.description);
+    setIntakeUrgency(detail.session.intake.urgencyLevel);
+    setIntakeSaved(Boolean(detail.session.intake.description));
+  }, [detail]);
+
   useEffect(() => {
     if (!socket) return;
-    return socket.onEvent((event: { type?: string; sessionId?: string }) => {
-      const type = (event as { type?: string; sessionId?: string }).type;
+    return socket.onEvent((event: { type?: string }) => {
+      const type = (event as { type?: string }).type;
       if (type?.startsWith("agent:")) void refresh();
     });
   }, [socket, refresh]);
+
+  // While the payment request is pending on the member's device, poll the
+  // session every 5s — the WS event usually wins, this is the safety net.
+  useEffect(() => {
+    if (payReq?.status !== "pending" || !token) return;
+    const t = setInterval(() => { void refresh(); }, 5000);
+    return () => clearInterval(t);
+  }, [payReq?.status, token, refresh]);
 
   useEffect(() => {
     if (!audio) return;
@@ -116,8 +164,43 @@ export default function AgentSessionPage() {
   const loadDoctors = async (specialty: string) => {
     if (!token) return;
     setDoctors(null);
-    try { setDoctors(await getDoctorsBySpecialty(token, specialty)); }
+    try { setDoctors(await agentDoctors(token, { specialty })); }
     catch { setError("N pa t kapab chaje doktè yo."); }
+  };
+
+  /** Preferred-doctor search (owner brief): the member names a doctor, the
+   *  agent searches by name across ALL specialties. */
+  const searchDoctors = async (e?: FormEvent) => {
+    e?.preventDefault();
+    if (!token || !docQuery.trim()) return;
+    setSearching(true); setSearchResults(null); setError(null);
+    try { setSearchResults(await agentDoctors(token, { q: docQuery.trim() })); }
+    catch { setError("Rechèch doktè a pa reyisi."); }
+    finally { setSearching(false); }
+  };
+
+  /** Save the on-behalf intake: reason + what the member feels + urgency.
+   *  An optional medical-history update is captured as a session note
+   *  (clinical history workstream comes later). */
+  const saveIntake = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!token || !sessionId) return;
+    setBusy(true); setError(null);
+    try {
+      await agentSessionIntake(token, sessionId, {
+        reason: intakeReason.trim(),
+        description: intakeDescription.trim(),
+        urgencyLevel: intakeUrgency,
+      });
+      if (historyNote.trim()) {
+        await agentSessionNote(token, sessionId, `Dosye medikal: ${historyNote.trim()}`);
+        setHistoryNote("");
+      }
+      setIntakeSaved(true);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Entèvyou a pa sove.");
+    } finally { setBusy(false); }
   };
 
   const startCall = async () => {
@@ -157,10 +240,24 @@ export default function AgentSessionPage() {
     : s.consultState !== "payment_pending" ? 5
     : s.chosenDoctorId ? 4
     : s.specialty ? 3
-    : s.reason ? 2 : 1;
+    : (s.intake.description || s.reason) ? 2 : 1;
 
   const dur = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
   const specialtyPrice = prices.find((p) => p.name === s.specialty)?.price;
+  // The doctor_presented event carries the doctor's name in its metadata —
+  // the actor is the agent who recorded it, not the doctor.
+  const doctorEvent = detail.events.find((e) => e.type === "doctor_presented");
+  const doctorName = (doctorEvent?.metadata?.doctorName as string | undefined) ?? doctorEvent?.actor ?? "—";
+  const canRequestPayment =
+    s.status === "active" && s.consultState === "payment_pending" &&
+    (!payReq || ["expired", "cancelled", "failed"].includes(payReq.status));
+
+  const pickButton = (d: User) => (
+    <button className="btn btn-primary" disabled={busy}
+      onClick={() => act(() => agentSessionDoctor(token!, sessionId, d.id))}>
+      Pasyan an chwazi doktè sa a
+    </button>
+  );
 
   return (
     <main className="page agent-workspace">
@@ -203,6 +300,7 @@ export default function AgentSessionPage() {
                 Make koneksyon an echwe
               </button>
             )}
+            <p className="muted small">Apèl la DWE pa finis pandan peman an ap dewoule — pasyan an peye sou telefòn li pandan y ap pale ak ou.</p>
           </div>
         </section>
 
@@ -221,6 +319,49 @@ export default function AgentSessionPage() {
         <section className="panel zone-c" aria-labelledby="flow">
           <div className="panel-head"><h2 id="flow">Gid planifikasyon an</h2></div>
           <div className="stack">
+            {/* 2. Intake ON BEHALF of the member — OPEN whenever the session
+                is live: the agent asks the questions and writes the member's
+                own words down (owner brief). */}
+            {s.status !== "completed" && (
+              <form className="stack intake-card" onSubmit={saveIntake}>
+                <h3>Entèvyou pasyan an (ou ranpli l pou li)</h3>
+                <div className="field">
+                  <label className="label" htmlFor="intake-reason">Rezon vizit la</label>
+                  <input id="intake-reason" className="input" value={intakeReason}
+                    onChange={(e) => { setIntakeReason(e.target.value); setIntakeSaved(false); }}
+                    placeholder="Egzanp: pasyan an vle konsilte pou tèt li fè mal" />
+                </div>
+                <div className="field">
+                  <label className="label" htmlFor="intake-desc">Sa pasyan an ap santi (mo pasyan an)</label>
+                  <textarea id="intake-desc" className="input" rows={4} maxLength={2000} value={intakeDescription}
+                    onChange={(e) => { setIntakeDescription(e.target.value); setIntakeSaved(false); }}
+                    placeholder="Kesyon: Ki sa ou ap santi? Depi kilè? Ki jan sa ye kounye a?" />
+                </div>
+                <div className="field">
+                  <span className="label" id="intake-urgency-label">Ki jan sitiyasyon an ijan?</span>
+                  <div className="tabs" role="group" aria-labelledby="intake-urgency-label">
+                    {URGENCY_LEVELS.map((u) => (
+                      <button key={u} type="button" className={intakeUrgency === u ? "active" : ""}
+                        aria-pressed={intakeUrgency === u}
+                        onClick={() => { setIntakeUrgency(u); setIntakeSaved(false); }}>
+                        {urgencyLabel(u)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="field">
+                  <label className="label" htmlFor="intake-history">Mizajou dosye medikal? (opsyonèl — pwochen etap)</label>
+                  <input id="intake-history" className="input" value={historyNote}
+                    onChange={(e) => setHistoryNote(e.target.value)}
+                    placeholder="Egzanp: li pran nouvo medikaman depi mwa a" />
+                </div>
+                <div className="btn-row">
+                  <button className="btn btn-primary" type="submit" disabled={busy}>Anrejistre entèvyou a</button>
+                  {intakeSaved && <span className="status-line ok" role="status">Entèvyou a sove ✓</span>}
+                </div>
+              </form>
+            )}
+
             {/* 3. Specialty */}
             {!s.specialty && s.status !== "completed" && (
               <>
@@ -235,9 +376,36 @@ export default function AgentSessionPage() {
               <p><strong>{s.specialty}</strong> · Pri estanda: {specialtyPrice} HTG</p>
             )}
 
-            {/* 4. Doctor discovery + selection (patient decides) */}
+            {/* 4. Doctor discovery + selection (patient decides). The member's
+                PREFERRED doctor is searchable by name first (owner brief). */}
             {s.specialty && !s.chosenDoctorId && s.status !== "completed" && (
               <>
+                <form className="stack" onSubmit={searchDoctors}>
+                  <label className="label" htmlFor="doc-search">Doktè pi renmen pasyan an? Chèche non l</label>
+                  <div className="btn-row">
+                    <input id="doc-search" className="input" style={{ flex: 1 }} value={docQuery}
+                      onChange={(e) => setDocQuery(e.target.value)}
+                      placeholder="Egzanp: Doktè Deux" />
+                    <button className="btn" type="submit" disabled={busy || searching || !docQuery.trim()}>
+                      {searching ? "N ap chèche…" : "Chèche"}
+                    </button>
+                  </div>
+                  {searchResults && (searchResults.length === 0
+                    ? <p className="muted">Pa jwenn doktè ak non sa a — gade lis spesyalite a anba oswa eseye yon lòt non.</p>
+                    : (
+                      <ul className="stack">
+                        {searchResults.map((d) => (
+                          <li key={d.id} className="doctor-row">
+                            <div>
+                              <p><strong>{d.name}</strong> {d.verification_status === "verified" ? "· verifye" : ""}</p>
+                              <p className="muted">{d.specialty}{d.hospital ? ` · ${d.hospital}` : ""}</p>
+                            </div>
+                            {pickButton(d)}
+                          </li>
+                        ))}
+                      </ul>
+                    ))}
+                </form>
                 <div className="btn-row">
                   <button className="btn" onClick={() => loadDoctors(s.specialty!)} disabled={busy}>
                     {doctors ? "Rechaje doktè yo" : `Gade doktè ${s.specialty}`}
@@ -253,10 +421,7 @@ export default function AgentSessionPage() {
                             <p><strong>{d.name}</strong> {d.verification_status === "verified" ? "· verifye" : ""}</p>
                             <p className="muted">{d.specialty}{d.hospital ? ` · ${d.hospital}` : ""}{d.biography ? ` · ${d.biography.slice(0, 90)}` : ""}</p>
                           </div>
-                          <button className="btn btn-primary" disabled={busy}
-                            onClick={() => act(() => agentSessionDoctor(token!, sessionId, d.id))}>
-                            Pasyan an chwazi doktè sa a
-                          </button>
+                          {pickButton(d)}
                         </li>
                       ))}
                     </ul>
@@ -265,11 +430,54 @@ export default function AgentSessionPage() {
               </>
             )}
 
-            {/* 5-7. Patient approval + payment happens on the PATIENT's device */}
+            {/* 5-7. Submit Payment — the agent raises the request; the member
+                pays on THEIR device while the call keeps running. */}
             {s.chosenDoctorId && s.status !== "completed" && (
               <div className="stack">
-                <p><strong>Doktè chwazi:</strong> {detail.events.find((e) => e.type === "doctor_presented")?.actor ?? "—"}</p>
-                <p className="muted">Kredansyèl yo parèt nan paj doktè a — pasyan an ap konfime epi peye MonCash SOU TELEFÒN LI (nou pa manyen PIN li).</p>
+                <p><strong>Doktè chwazi:</strong> {doctorName}</p>
+
+                {payReq?.status === "pending" && (
+                  <div className="payreq-card pending" role="status">
+                    <strong>N ap tann pasyan an peye sou telefòn li…</strong>
+                    <p className="muted">
+                      Pop-up peman an louvri sou sèvis pasyan an — APÈL LA RETE LOUVRI.
+                      Pa finis apèl la pandan pwosesis sa a.
+                    </p>
+                    <p className="muted small">
+                      Montan: {payReq.amount} {payReq.currency} · Ekspire:{" "}
+                      {payReq.expiresAt ? new Date(payReq.expiresAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—"}
+                    </p>
+                    <div className="btn-row">
+                      <button className="btn btn-sm" disabled={busy}
+                        onClick={() => act(() => agentCancelPaymentRequest(token!, sessionId!))}>
+                        Anile demann an
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {payReq?.status === "paid" && (
+                  <div className="payreq-card paid" role="status">
+                    <strong>Peman konfime — konsiltasyon kreye.</strong>
+                    <p className="muted">
+                      Pasyon an ka rete nan apèl la; konsiltasyon an parèt nan tablodbò li avèk konvèsasyon an.
+                    </p>
+                  </div>
+                )}
+
+                {(payReq?.status === "expired" || payReq?.status === "cancelled" || payReq?.status === "failed") && (
+                  <p className="muted small">
+                    Dènye demann peman an: {payReq.status} — ou ka voye yon lòt pandan sesyon an toujou aktif.
+                  </p>
+                )}
+
+                {canRequestPayment && (
+                  <button className="btn btn-primary" disabled={busy}
+                    onClick={() => act(() => agentCreatePaymentRequest(token!, sessionId!))}>
+                    Voye demann peman an{specialtyPrice != null ? ` — ${specialtyPrice} HTG` : ""}
+                  </button>
+                )}
+
                 <p className={`status-line ${s.consultState === "payment_pending" ? "warn" : "ok"}`} role="status">
                   {CONSULT_STATE_LABEL[s.consultState] ?? s.consultState}
                 </p>

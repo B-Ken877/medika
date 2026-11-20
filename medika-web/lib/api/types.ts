@@ -8,7 +8,10 @@
  * established that convention (e.g. CreateConsultationRequest).
  */
 
-export type Role = "patient" | "doctor" | "admin" | "delivery";
+// 'agent' + 'agent_supervisor' are the contact-center roles (backend
+// migration 015); the backend remains authoritative — pages also compare
+// raw strings where a union is not available.
+export type Role = "patient" | "doctor" | "admin" | "delivery" | "agent" | "agent_supervisor";
 
 export type ConsultationStatus =
   | "RECHERCHE_MEDECIN"
