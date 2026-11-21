@@ -3,48 +3,57 @@
 /**
  * Active agent session (brief #9) — the three-zone contact-center workspace.
  * Zone A: call controls (real in-app audio via ZEGO; no decorative buttons).
- * Zone B: minimum-necessary patient info. Zone C: the guided scheduling
- * workflow with an always-visible stage indicator. Call end ≠ session end:
- * wrap-up is an explicit step (brief #15).
+ * Zone B: minimum-necessary patient info. Zone C: the booking wizard.
+ * Call end ≠ session end: wrap-up is an explicit step (brief #15).
  *
- * Owner brief — the agent works ON BEHALF of the member during the call:
- *  - the intake form (reason for the visit, what the member says they feel,
- *    urgency) is OPEN from the moment the call starts and is saved to the
- *    member's session (migration 017); medical-history updates are captured
- *    as session notes (clinical history is a later workstream);
- *  - the member's PREFERRED doctor is searchable by name, across all
- *    specialties;
- *  - "Submit Payment" pushes a simulated MonCash-style request (phone +
- *    4-digit PIN) to the member's device — the call NEVER drops, and the
- *    consultation is created for the member on confirmation (nobody is
- *    redirected; it appears on the member's dashboard).
+ * Owner brief (this rewrite): the agent impersonates the member — they fill
+ * THE MEMBER'S OWN REQUEST FORM (the exact /app/consult intake: symptoms,
+ * urgency, specialty), then the doctor, then the payment, in the SAME order
+ * the member would. The wizard shows ONE step at a time and switches
+ * AUTOMATICALLY: submitting the form advances to the doctor step, picking a
+ * doctor advances to the payment step, and the member's validated payment
+ * advances to the booked confirmation — no manual navigation between steps.
+ * The step shown is DERIVED from server state on every refresh (poll + WS),
+ * so the frontend never lies about where the booking stands.
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ExternalLink,
+  ShieldCheck,
+  Stethoscope,
+} from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
 import { ApiError } from "@/lib/api/client";
 import { useSocket } from "@/lib/ws/socket-context";
 import {
-  agentSession, agentSessionSpecialty, agentSessionDoctor, agentSessionNote,
+  agentSession, agentSessionDoctor, agentSessionNote,
   agentSessionIntake, agentCreatePaymentRequest, agentCancelPaymentRequest,
   agentCallStart, agentCallEnd, agentSessionComplete, agentSpecialties, agentDoctors,
   type AgentSessionDetail,
 } from "@/lib/api/endpoints";
 import type { SpecialtyPrice, User } from "@/lib/api/types";
-import { urgencyLabel } from "@/lib/labels";
+import { formatCurrency } from "@/lib/format";
+import { specialtyLabel, urgencyLabel } from "@/lib/labels";
+import { Avatar } from "@/components/ui/primitives";
+import { VerifiedBadge } from "@/components/ui/VerifiedBadge";
+import { SpecialtySelect, type SpecialtyOption } from "@/components/ui/SpecialtySelect";
 import { AssistAudioSession } from "@/lib/call/assist-audio";
 
 const STAGES = [
-  ["identify", "Idantifikasyon"],
-  ["request", "Demann"],
-  ["specialty", "Espesyalite"],
-  ["doctor", "Doktè"],
+  ["form", "Fòm pasyan an"],
+  ["doctor", "Doktè a"],
   ["payment", "Peman"],
+  ["booked", "Konfime"],
   ["wrapup", "Fen sesyon"],
 ] as const;
 
+type StageKey = (typeof STAGES)[number][0];
+
 /** Raw internal values — the backend contract; display labels come from
- *  urgencyLabel() exactly like the manual self-service flow. */
+ *  urgencyLabel() exactly like the member's own intake form. */
 const URGENCY_LEVELS = ["Faible", "Moyenne", "Haute", "Critique"] as const;
 
 const OUTCOME_LABEL: Record<string, string> = {
@@ -81,13 +90,12 @@ export default function AgentSessionPage() {
   const [detail, setDetail] = useState<AgentSessionDetail | null>(null);
   const [prices, setPrices] = useState<SpecialtyPrice[]>([]);
   const [doctors, setDoctors] = useState<User[] | null>(null);
-  // Intake ON BEHALF of the member — hydrated once per session, then it is
-  // the agent's working draft (a refresh never clobbers what they typed).
-  const [intakeReason, setIntakeReason] = useState("");
-  const [intakeDescription, setIntakeDescription] = useState("");
-  const [intakeUrgency, setIntakeUrgency] = useState<string>("Moyenne");
-  const [historyNote, setHistoryNote] = useState("");
-  const [intakeSaved, setIntakeSaved] = useState(false);
+  // THE MEMBER'S FORM, filled by the agent on their behalf — hydrated once
+  // per session, then it is the agent's working draft (a refresh never
+  // clobbers what they typed).
+  const [symptoms, setSymptoms] = useState("");
+  const [urgency, setUrgency] = useState<string>("Moyenne");
+  const [specialty, setSpecialty] = useState<string>("");
   const [docQuery, setDocQuery] = useState("");
   const [searchResults, setSearchResults] = useState<User[] | null>(null);
   const [searching, setSearching] = useState(false);
@@ -99,6 +107,9 @@ export default function AgentSessionPage() {
   const [audio, setAudio] = useState(false);
   const [micOn, setMicOn] = useState(true);
   const [seconds, setSeconds] = useState(0);
+  /** Local "go back" override (modify the form / change doctor). Cleared by
+   *  any successful action — the server-derived stage then takes over again. */
+  const [stageOverride, setStageOverride] = useState<StageKey | null>(null);
   const audioRef = useRef<AssistAudioSession | null>(null);
   const remoteRef = useRef<HTMLAudioElement | null>(null);
   const intakeHydratedFor = useRef<string | null>(null);
@@ -120,15 +131,14 @@ export default function AgentSessionPage() {
     void agentSpecialties(token).then(setPrices).catch(() => {});
   }, [token]);
 
-  // Hydrate the intake draft ONLY on first load of a given session — later
+  // Hydrate the form draft ONLY on first load of a given session — later
   // refreshes (poll/WS) must never overwrite what the agent is typing.
   useEffect(() => {
     if (!detail || intakeHydratedFor.current === detail.session.sessionId) return;
     intakeHydratedFor.current = detail.session.sessionId;
-    setIntakeReason(detail.session.intake.reason);
-    setIntakeDescription(detail.session.intake.description);
-    setIntakeUrgency(detail.session.intake.urgencyLevel);
-    setIntakeSaved(Boolean(detail.session.intake.description));
+    setSymptoms(detail.session.intake.description);
+    setUrgency(detail.session.intake.urgencyLevel);
+    setSpecialty(detail.session.specialty || "");
   }, [detail]);
 
   useEffect(() => {
@@ -140,7 +150,8 @@ export default function AgentSessionPage() {
   }, [socket, refresh]);
 
   // While the payment request is pending on the member's device, poll the
-  // session every 5s — the WS event usually wins, this is the safety net.
+  // session every 5s — the WS event usually wins, this is the safety net
+  // that keeps the wizard switching steps even if the socket hiccups.
   useEffect(() => {
     if (payReq?.status !== "pending" || !token) return;
     const t = setInterval(() => { void refresh(); }, 5000);
@@ -156,16 +167,9 @@ export default function AgentSessionPage() {
   const act = async (fn: () => Promise<unknown>) => {
     if (busy) return;
     setBusy(true); setError(null);
-    try { await fn(); await refresh(); }
+    try { await fn(); await refresh(); setStageOverride(null); }
     catch (err) { setError(err instanceof ApiError ? err.message : "Aksyon pa reyisi."); }
     finally { setBusy(false); }
-  };
-
-  const loadDoctors = async (specialty: string) => {
-    if (!token) return;
-    setDoctors(null);
-    try { setDoctors(await agentDoctors(token, { specialty })); }
-    catch { setError("N pa t kapab chaje doktè yo."); }
   };
 
   /** Preferred-doctor search (owner brief): the member names a doctor, the
@@ -179,27 +183,49 @@ export default function AgentSessionPage() {
     finally { setSearching(false); }
   };
 
-  /** Save the on-behalf intake: reason + what the member feels + urgency.
-   *  An optional medical-history update is captured as a session note
-   *  (clinical history workstream comes later). */
-  const saveIntake = async (e: FormEvent) => {
+  /** Load the filtered doctor list for the chosen specialty. */
+  const loadDoctors = useCallback(async (spec: string) => {
+    if (!token || !spec) return;
+    setDoctors(null);
+    try { setDoctors(await agentDoctors(token, { specialty: spec })); }
+    catch { setError("N pa t kapab chaje doktè yo."); }
+  }, [token]);
+
+  // The doctor list loads when the wizard reaches the doctor step.
+  useEffect(() => {
+    const st = detail?.session;
+    if (st && st.specialty && !st.chosenDoctorId && stageOverride !== "form" && !doctors && !searchResults) {
+      void loadDoctors(st.specialty);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail?.session.sessionId, detail?.session.specialty, detail?.session.chosenDoctorId, stageOverride]);
+
+  /** Submit THE MEMBER'S FORM (symptoms + urgency + specialty — the member's
+   *  own three inputs, their words). Success auto-advances to the doctor
+   *  step: the server now holds the specialty, and the wizard derives from
+   *  server state. */
+  const submitMemberForm = async (e: FormEvent) => {
     e.preventDefault();
     if (!token || !sessionId) return;
+    if (!symptoms.trim()) {
+      setError("Tanpri, ekri sa pasyan an ap senti anvan w kontinye.");
+      return;
+    }
+    if (!specialty) {
+      setError("Tanpri, chwazi yon espesyalite medikal.");
+      return;
+    }
     setBusy(true); setError(null);
     try {
       await agentSessionIntake(token, sessionId, {
-        reason: intakeReason.trim(),
-        description: intakeDescription.trim(),
-        urgencyLevel: intakeUrgency,
+        description: symptoms.trim(),
+        urgencyLevel: urgency,
+        specialty,
       });
-      if (historyNote.trim()) {
-        await agentSessionNote(token, sessionId, `Dosye medikal: ${historyNote.trim()}`);
-        setHistoryNote("");
-      }
-      setIntakeSaved(true);
+      setStageOverride(null);
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Entèvyou a pa sove.");
+      setError(err instanceof ApiError ? err.message : "Fòm lan pa sove.");
     } finally { setBusy(false); }
   };
 
@@ -236,20 +262,35 @@ export default function AgentSessionPage() {
   }
 
   const s = detail.session;
-  const stageIndex = s.status === "completed" ? 5
-    : s.consultState !== "payment_pending" ? 5
-    : s.chosenDoctorId ? 4
-    : s.specialty ? 3
-    : (s.intake.description || s.reason) ? 2 : 1;
+  const formDone = Boolean(s.intake.description || s.reason);
+  const doctorDone = Boolean(s.chosenDoctorId);
+  const paid = payReq?.status === "paid" || s.consultState !== "payment_pending";
+  const sessionOver = s.status === "completed";
+
+  // Server-authoritative stage — the wizard ALWAYS shows exactly this step.
+  let stage: StageKey =
+    paid || (sessionOver && doctorDone) ? "booked"
+    : doctorDone ? "payment"
+    : s.specialty ? "doctor"
+    : formDone ? "doctor"
+    : "form";
+  if (stageOverride) stage = stageOverride;
+  // Wrap-up/completed sessions: the wrap-up panel drives the page.
+  const inWrapUp = s.status === "wrap_up" || sessionOver;
+  const stageIndex = sessionOver ? 5 : s.status === "wrap_up" ? 4 : STAGES.findIndex(([key]) => key === stage);
 
   const dur = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-  const specialtyPrice = prices.find((p) => p.name === s.specialty)?.price;
-  // The doctor_presented event carries the doctor's name in its metadata —
-  // the actor is the agent who recorded it, not the doctor.
+  const specialtyPrice = prices.find((p) => p.name === s.specialty)?.price ?? null;
+  const specialtyOptions: SpecialtyOption[] = prices.map((p) => ({
+    value: p.name,
+    label: specialtyLabel(p.name),
+    priceLabel: formatCurrency(p.price),
+  }));
   const doctorEvent = detail.events.find((e) => e.type === "doctor_presented");
   const doctorName = (doctorEvent?.metadata?.doctorName as string | undefined) ?? doctorEvent?.actor ?? "—";
+  const chosenDoctor = (searchResults ?? doctors ?? []).find((d) => d.id === s.chosenDoctorId) ?? null;
   const canRequestPayment =
-    s.status === "active" && s.consultState === "payment_pending" &&
+    s.status === "active" && !paid &&
     (!payReq || ["expired", "cancelled", "failed"].includes(payReq.status));
 
   const pickButton = (d: User) => (
@@ -257,6 +298,24 @@ export default function AgentSessionPage() {
       onClick={() => act(() => agentSessionDoctor(token!, sessionId, d.id))}>
       Pasyan an chwazi doktè sa a
     </button>
+  );
+
+  const doctorList = (list: User[]) => (
+    <ul className="stack">
+      {list.map((d) => (
+        <li key={d.id} className="doctor-row">
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <strong>{d.name}</strong>
+              {d.verification_status === "verified" && <VerifiedBadge compact />}
+              {d.is_available === 1 ? <span className="badge badge-green">Disponib</span> : <span className="badge badge-gray">Pa disponib</span>}
+            </p>
+            <p className="muted">{specialtyLabel(d.specialty)}{d.hospital ? ` · ${d.hospital}` : ""}</p>
+          </div>
+          {pickButton(d)}
+        </li>
+      ))}
+    </ul>
   );
 
   return (
@@ -268,7 +327,7 @@ export default function AgentSessionPage() {
 
       {error && <div className="banner banner-error" role="alert">{error}</div>}
 
-      {/* Stage indicator */}
+      {/* Stage indicator — advances automatically with the server state */}
       <ol className="stage-bar" aria-label="Etap yo">
         {STAGES.map(([key, label], i) => (
           <li key={key} className={i === stageIndex ? "current" : i < stageIndex ? "done" : ""}>{label}</li>
@@ -315,71 +374,71 @@ export default function AgentSessionPage() {
           </div>
         </section>
 
-        {/* Zone C: guided workflow */}
+        {/* Zone C: the booking wizard — ONE step at a time, auto-switching */}
         <section className="panel zone-c" aria-labelledby="flow">
           <div className="panel-head"><h2 id="flow">Gid planifikasyon an</h2></div>
           <div className="stack">
-            {/* 2. Intake ON BEHALF of the member — OPEN whenever the session
-                is live: the agent asks the questions and writes the member's
-                own words down (owner brief). */}
-            {s.status !== "completed" && (
-              <form className="stack intake-card" onSubmit={saveIntake}>
-                <h3>Entèvyou pasyan an (ou ranpli l pou li)</h3>
-                <div className="field">
-                  <label className="label" htmlFor="intake-reason">Rezon vizit la</label>
-                  <input id="intake-reason" className="input" value={intakeReason}
-                    onChange={(e) => { setIntakeReason(e.target.value); setIntakeSaved(false); }}
-                    placeholder="Egzanp: pasyan an vle konsilte pou tèt li fè mal" />
+
+            {/* ── STEP 1: THE MEMBER'S OWN FORM (the agent fills it for them) ── */}
+            {stage === "form" && !inWrapUp && (
+              <form className="stack" onSubmit={submitMemberForm}>
+                <div>
+                  <h3>Fòm konsiltasyon pasyan an</h3>
+                  <p className="muted small">Ou ranpli fòm nan POU pasyan an — menm fòm, menm kesyon yo ak sou sèvis la. Mo pasyan an, pa mo ou.</p>
                 </div>
                 <div className="field">
-                  <label className="label" htmlFor="intake-desc">Sa pasyan an ap santi (mo pasyan an)</label>
-                  <textarea id="intake-desc" className="input" rows={4} maxLength={2000} value={intakeDescription}
-                    onChange={(e) => { setIntakeDescription(e.target.value); setIntakeSaved(false); }}
-                    placeholder="Kesyon: Ki sa ou ap santi? Depi kilè? Ki jan sa ye kounye a?" />
+                  <label htmlFor="intake-desc">Sa pasyan an ap santi</label>
+                  <textarea id="intake-desc" className="input" rows={4} maxLength={2000} value={symptoms}
+                    onChange={(e) => setSymptoms(e.target.value)}
+                    placeholder="Eksplike sa pasyan an ap santi, depi kilè sa kòmanse, ak nenpòt lòt detay ki enpòtan..." />
+                  <p className="field-hint">Kesyon: Ki sa ou ap senti? Depi kilè? Ki jan sa ye kounye a?</p>
                 </div>
                 <div className="field">
                   <span className="label" id="intake-urgency-label">Ki jan sitiyasyon an ijan?</span>
                   <div className="tabs" role="group" aria-labelledby="intake-urgency-label">
                     {URGENCY_LEVELS.map((u) => (
-                      <button key={u} type="button" className={intakeUrgency === u ? "active" : ""}
-                        aria-pressed={intakeUrgency === u}
-                        onClick={() => { setIntakeUrgency(u); setIntakeSaved(false); }}>
+                      <button key={u} type="button" className={urgency === u ? "active" : ""}
+                        aria-pressed={urgency === u}
+                        onClick={() => setUrgency(u)}>
                         {urgencyLabel(u)}
                       </button>
                     ))}
                   </div>
                 </div>
                 <div className="field">
-                  <label className="label" htmlFor="intake-history">Mizajou dosye medikal? (opsyonèl — pwochen etap)</label>
-                  <input id="intake-history" className="input" value={historyNote}
-                    onChange={(e) => setHistoryNote(e.target.value)}
-                    placeholder="Egzanp: li pran nouvo medikaman depi mwa a" />
+                  <label id="intake-specialty-label" htmlFor="intake-specialty">Espesyalite medikal</label>
+                  <SpecialtySelect
+                    id="intake-specialty"
+                    options={specialtyOptions}
+                    value={specialty}
+                    onChange={setSpecialty}
+                    loading={prices.length === 0}
+                    ariaLabel="Espesyalite medikal"
+                  />
                 </div>
-                <div className="btn-row">
-                  <button className="btn btn-primary" type="submit" disabled={busy}>Anrejistre entèvyou a</button>
-                  {intakeSaved && <span className="status-line ok" role="status">Entèvyou a sove ✓</span>}
-                </div>
+                <button className="btn btn-primary" type="submit" disabled={busy}>
+                  Kontinye
+                </button>
               </form>
             )}
 
-            {/* 3. Specialty */}
-            {!s.specialty && s.status !== "completed" && (
-              <>
-                <label className="label">Espesyalite ki koresponn ak demann lan (pasyan an deside sa li bezwen — nou pa diagnostike)</label>
-                <select className="input" onChange={(e) => e.target.value && act(() => agentSessionSpecialty(token!, sessionId, e.target.value))} defaultValue="">
-                  <option value="" disabled>Chwazi yon spesyalite…</option>
-                  {prices.map((p) => <option key={p.id} value={p.name}>{p.name} — {p.price} HTG</option>)}
-                </select>
-              </>
-            )}
-            {s.specialty && specialtyPrice != null && (
-              <p><strong>{s.specialty}</strong> · Pri estanda: {specialtyPrice} HTG</p>
-            )}
-
-            {/* 4. Doctor discovery + selection (patient decides). The member's
-                PREFERRED doctor is searchable by name first (owner brief). */}
-            {s.specialty && !s.chosenDoctorId && s.status !== "completed" && (
-              <>
+            {/* ── STEP 2: THE DOCTOR (search by name first, or the specialty list) ── */}
+            {stage === "doctor" && !inWrapUp && (
+              <div className="stack">
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+                  <div>
+                    <h3>{specialtyLabel(s.specialty || "")}</h3>
+                    <p className="muted small">Chèche doktè ki disponib… montre kredansyèl yo ba pasyan an — se PASSYAN an ki chwazi.</p>
+                  </div>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setStageOverride("form")}>
+                    <ArrowLeft size={14} aria-hidden /> Modifye fòm lan
+                  </button>
+                </div>
+                {formDone && (
+                  <p className="muted small" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <CheckCircle2 size={14} aria-hidden /> Fòm pasyan an sove — ijans: {urgencyLabel(s.intake.urgencyLevel || "Moyenne")}
+                  </p>
+                )}
                 <form className="stack" onSubmit={searchDoctors}>
                   <label className="label" htmlFor="doc-search">Doktè pi renmen pasyan an? Chèche non l</label>
                   <div className="btn-row">
@@ -392,49 +451,66 @@ export default function AgentSessionPage() {
                   </div>
                   {searchResults && (searchResults.length === 0
                     ? <p className="muted">Pa jwenn doktè ak non sa a — gade lis spesyalite a anba oswa eseye yon lòt non.</p>
-                    : (
-                      <ul className="stack">
-                        {searchResults.map((d) => (
-                          <li key={d.id} className="doctor-row">
-                            <div>
-                              <p><strong>{d.name}</strong> {d.verification_status === "verified" ? "· verifye" : ""}</p>
-                              <p className="muted">{d.specialty}{d.hospital ? ` · ${d.hospital}` : ""}</p>
-                            </div>
-                            {pickButton(d)}
-                          </li>
-                        ))}
-                      </ul>
-                    ))}
+                    : doctorList(searchResults))}
                 </form>
-                <div className="btn-row">
-                  <button className="btn" onClick={() => loadDoctors(s.specialty!)} disabled={busy}>
-                    {doctors ? "Rechaje doktè yo" : `Gade doktè ${s.specialty}`}
-                  </button>
-                </div>
-                {doctors && (doctors.length === 0
-                  ? <p className="muted">Pa gen doktè pou spesyalite sa a kounye a — eksplike sitiyasyon an, epi anrejistre yon callback oswa fini sesyon an ak « Pa gen doktè dispo ».</p>
-                  : (
-                    <ul className="stack">
-                      {doctors.map((d) => (
-                        <li key={d.id} className="doctor-row">
-                          <div>
-                            <p><strong>{d.name}</strong> {d.verification_status === "verified" ? "· verifye" : ""}</p>
-                            <p className="muted">{d.specialty}{d.hospital ? ` · ${d.hospital}` : ""}{d.biography ? ` · ${d.biography.slice(0, 90)}` : ""}</p>
-                          </div>
-                          {pickButton(d)}
-                        </li>
-                      ))}
-                    </ul>
-                  ))}
-                <p className="muted">Anvan peman: montre kredansyèl doktè a ba pasyan an, epi se PASYAN an ki chwazi (brief #12).</p>
-              </>
+                {doctors === null && !searchResults && <p className="muted" aria-busy="true">N ap chèche doktè ki disponib…</p>}
+                {doctors !== null && doctors.length === 0 && (
+                  <div className="card text-center">
+                    <p className="muted">Nou pa jwenn doktè pou espesyalite sa a.</p>
+                    <p className="small muted">Eseye yon lòt espesyalite oswa fini sesyon an ak « Pa gen doktè dispo ».</p>
+                    <button className="btn btn-secondary btn-sm mt-2" onClick={() => setStageOverride("form")}>
+                      Chwazi yon lòt espesyalite
+                    </button>
+                  </div>
+                )}
+                {doctors !== null && doctors.length > 0 && doctorList(doctors)}
+              </div>
             )}
 
-            {/* 5-7. Submit Payment — the agent raises the request; the member
-                pays on THEIR device while the call keeps running. */}
-            {s.chosenDoctorId && s.status !== "completed" && (
+            {/* ── STEP 3: PAYMENT (review card like the member sees, then the
+                request lands on THEIR device while the call stays open) ── */}
+            {stage === "payment" && !inWrapUp && (
               <div className="stack">
-                <p><strong>Doktè chwazi:</strong> {doctorName}</p>
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+                  <div>
+                    <h3>Revize demann an</h3>
+                    <p className="muted small">Verifye moun pasyan an ap konsilte ak sa yap peye anvan w voye demann peman an.</p>
+                  </div>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setStageOverride("doctor")}>
+                    <ArrowLeft size={14} aria-hidden /> Chwazi yon lòt doktè
+                  </button>
+                </div>
+
+                {/* Doctor identity — same card language as the member's flow */}
+                <div className="card doctor-row" style={{ alignItems: "center" }}>
+                  <Avatar name={chosenDoctor?.name ?? doctorName} src={chosenDoctor?.avatar_url} size="lg" alt={`Foto pwofil ${chosenDoctor?.name ?? doctorName}`} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <strong>{chosenDoctor?.name ?? doctorName}</strong>
+                      {chosenDoctor?.verification_status === "verified" && <VerifiedBadge compact />}
+                    </div>
+                    <p className="muted">{specialtyLabel(chosenDoctor?.specialty ?? s.specialty ?? "")}{chosenDoctor?.hospital ? ` · ${chosenDoctor.hospital}` : ""}</p>
+                    {chosenDoctor?.license_number && <p className="muted small">Lisans: {chosenDoctor.license_number}</p>}
+                  </div>
+                </div>
+
+                {/* Consultation summary — price, urgency, the member's words */}
+                <div className="card">
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span className="muted">Konsiltasyon ({specialtyLabel(s.specialty || "")})</span>
+                    <strong>{specialtyPrice != null ? formatCurrency(specialtyPrice) : "—"}</strong>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span className="muted small">Nivo ijans</span>
+                    <span className="small">{urgencyLabel(s.intake.urgencyLevel || "Moyenne")}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                    <span className="muted small" style={{ paddingTop: 2 }}>Sa pasyan an di l ap santi</span>
+                    <span className="small" style={{ textAlign: "right", maxWidth: "70%", whiteSpace: "pre-line" }}>
+                      {s.intake.description.trim().length > 220 ? `${s.intake.description.trim().slice(0, 220)}…` : s.intake.description.trim()}
+                    </span>
+                  </div>
+                </div>
 
                 {payReq?.status === "pending" && (
                   <div className="payreq-card pending" role="status">
@@ -456,15 +532,6 @@ export default function AgentSessionPage() {
                   </div>
                 )}
 
-                {payReq?.status === "paid" && (
-                  <div className="payreq-card paid" role="status">
-                    <strong>Peman konfime — konsiltasyon kreye.</strong>
-                    <p className="muted">
-                      Pasyon an ka rete nan apèl la; konsiltasyon an parèt nan tablodbò li avèk konvèsasyon an.
-                    </p>
-                  </div>
-                )}
-
                 {(payReq?.status === "expired" || payReq?.status === "cancelled" || payReq?.status === "failed") && (
                   <p className="muted small">
                     Dènye demann peman an: {payReq.status} — ou ka voye yon lòt pandan sesyon an toujou aktif.
@@ -472,34 +539,57 @@ export default function AgentSessionPage() {
                 )}
 
                 {canRequestPayment && (
-                  <button className="btn btn-primary" disabled={busy}
+                  <button className="btn btn-primary" disabled={busy || specialtyPrice == null}
                     onClick={() => act(() => agentCreatePaymentRequest(token!, sessionId!))}>
-                    Voye demann peman an{specialtyPrice != null ? ` — ${specialtyPrice} HTG` : ""}
+                    <ShieldCheck size={16} aria-hidden /> Voye demann peman an{specialtyPrice != null ? ` — ${formatCurrency(specialtyPrice)}` : ""}
                   </button>
                 )}
-
-                <p className={`status-line ${s.consultState === "payment_pending" ? "warn" : "ok"}`} role="status">
-                  {CONSULT_STATE_LABEL[s.consultState] ?? s.consultState}
+                <p className="muted small" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <ExternalLink size={14} aria-hidden /> Peman an dewoule SOU TELEFÒN PASYAN AN — pa sou telefòn ou.
                 </p>
               </div>
             )}
 
-            {/* Notes */}
-            <form className="stack" onSubmit={(e) => { e.preventDefault(); if (noteText.trim()) { void act(() => agentSessionNote(token!, sessionId, noteText.trim())).then(() => setNoteText("")); } }}>
-              <label className="label">Nòt entèn (pa gen done medikal)</label>
-              <textarea className="input" rows={2} value={noteText} onChange={(e) => setNoteText(e.target.value)} />
-              <button className="btn" type="submit" disabled={busy || !noteText.trim()}>Anrejistre nòt</button>
-            </form>
-            {detail.notes.length > 0 && (
+            {/* ── STEP 4: BOOKED — the member validated; the consultation exists ── */}
+            {stage === "booked" && !inWrapUp && (
+              <div className="stack">
+                <div className="payreq-card paid" role="status">
+                  <strong style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <CheckCircle2 size={18} aria-hidden /> Peman konfime — konsiltasyon kreye.
+                  </strong>
+                  <p className="muted">
+                    Pasyon an ka rete nan apèl la; konsiltasyon an parèt nan tablodbò li avèk konvèsasyon an.
+                    {s.consultationId && <> Ref: <code>{s.consultationId}</code></>}
+                  </p>
+                </div>
+                <p className={`status-line ${s.consultState === "payment_pending" ? "warn" : "ok"}`} role="status">
+                  {CONSULT_STATE_LABEL[s.consultState] ?? s.consultState}
+                </p>
+                {doctorDone && <p className="muted small"><Stethoscope size={14} aria-hidden /> Doktè: {chosenDoctor?.name ?? doctorName}</p>}
+              </div>
+            )}
+
+            {/* Notes (internal ops — not part of the member's flow) */}
+            {!inWrapUp && (
+              <form className="stack" onSubmit={(e) => { e.preventDefault(); if (noteText.trim()) { void act(() => agentSessionNote(token!, sessionId, noteText.trim())).then(() => setNoteText("")); } }}>
+                <label className="label">Nòt entèn (pa gen done medikal)</label>
+                <textarea className="input" rows={2} value={noteText} onChange={(e) => setNoteText(e.target.value)} />
+                <button className="btn" type="submit" disabled={busy || !noteText.trim()}>Anrejistre nòt</button>
+              </form>
+            )}
+            {!inWrapUp && detail.notes.length > 0 && (
               <ul className="muted stack">
                 {detail.notes.map((n) => <li key={n.id}>{n.content} — {n.agent}</li>)}
               </ul>
             )}
 
-            {/* 8. Wrap-up — explicit, separate from call end */}
+            {/* ── Wrap-up — explicit, separate from call end ── */}
             {s.status === "wrap_up" && (
               <div className="stack wrapup">
                 <h3>Clotire sesyon an</h3>
+                {stage === "booked" && (
+                  <p className="status-line ok" role="status">Konsiltasyon an kreye — peman an valide.</p>
+                )}
                 <select className="input" value={outcome} onChange={(e) => setOutcome(e.target.value)}>
                   <option value="">Rezilta…</option>
                   {Object.entries(OUTCOME_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -511,7 +601,7 @@ export default function AgentSessionPage() {
                 </button>
               </div>
             )}
-            {s.status === "completed" && (
+            {sessionOver && (
               <p className="status-line ok">Sesyon an fini — rezilta: {OUTCOME_LABEL[s.outcome ?? ""] ?? s.outcome}</p>
             )}
           </div>

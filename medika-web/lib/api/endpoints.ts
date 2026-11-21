@@ -138,24 +138,6 @@ export function getConsultations(token: string, signal?: AbortSignal) {
   return apiFetch<Consultation[]>("/api/consultations", { token, signal });
 }
 
-/**
- * Express call-center request: the patient supplies NOTHING (no body). The
- * backend creates the consultation on the Medecine Generale defaults with
- * channel='CALL_CENTER' and routes it to the on-duty agent; the caller then
- * opens /app/consultations/<id>/call?mode=voice and waits for the agent to
- * pick up. A 409 means the patient already has an active consultation
- * (existing_id points at it).
- */
-export function createCallCenterConsultation(token: string, signal?: AbortSignal) {
-  return apiFetch<Consultation>("/api/consultations/call-center", {
-    method: "POST",
-    body: {},
-    token,
-    signal,
-    timeoutMs: 25_000,
-  });
-}
-
 export function getConsultation(token: string, id: string, signal?: AbortSignal) {
   return apiFetch<Consultation | null>(`/api/consultations/${encodeURIComponent(id)}`, {
     token,
@@ -958,10 +940,13 @@ export function agentOpsReports(token: string, signal?: AbortSignal) {
 
 // ─── Agent-initiated payment requests (migration 017, owner brief) ───────────
 
-/** Save the intake the agent fills ON BEHALF of the member during the call
- *  (reason, what the member feels, urgency — raw internal values). */
-export function agentSessionIntake(token: string, sessionId: string, input: { reason?: string; description?: string; urgencyLevel?: string }) {
-  return apiFetch<{ intake: { description: string; urgencyLevel: string; reason: string } }>(
+/** Save THE MEMBER'S OWN REQUEST FORM, filled by the agent on their behalf
+ *  during the call (symptoms + urgency + specialty — the exact fields of the
+ *  self-service /app/consult intake, raw internal values). One submit saves
+ *  the whole form; the response carries the specialty price so the session
+ *  advances straight to the doctor step. */
+export function agentSessionIntake(token: string, sessionId: string, input: { reason?: string; description?: string; urgencyLevel?: string; specialty?: string }) {
+  return apiFetch<{ intake: { description: string; urgencyLevel: string; reason: string }; specialty: string | null; price: number | null }>(
     `/api/agent/sessions/${encodeURIComponent(sessionId)}/intake`, { method: "POST", body: input, token },
   );
 }

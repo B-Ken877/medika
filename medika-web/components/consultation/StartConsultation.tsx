@@ -5,10 +5,11 @@
  *
  * Clicking "Kòmanse yon konsiltasyon" does NOT navigate anywhere: it opens an
  * iOS-style action sheet with exactly TWO options:
- *   1. Rele yon ajan — POST /api/consultations/call-center with an EMPTY body
- *      (the patient types nothing, ever), then the caller lands directly in
- *      the voice call screen, which shows "calling the call-center agent…"
- *      until the agent picks up. No form, no callback screens, no extra steps.
+ *   1. Rele yon ajan — POST /api/assist/requests (an ASSISTANCE SESSION, never
+ *      a consultation — consultations are created ONLY when the member
+ *      validates their payment in the agent-guided flow), then the caller
+ *      lands on /app/assist: "calling the call-center agent…" until the
+ *      agent picks up. No form, no callback screens, no extra steps.
  *   2. Kontinye manyèlman — the classic symptom-intake flow at /app/consult,
  *      unchanged.
  *
@@ -23,12 +24,10 @@
  * consultation instead of a dead-end error.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronRight, ClipboardList, Phone, Plus } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
-import { createCallCenterConsultation } from "@/lib/api/endpoints";
-import { ApiError } from "@/lib/api/client";
+import { requestAssistance } from "@/lib/api/endpoints";
 import { Spinner } from "@/components/ui/primitives";
 
 interface Props {
@@ -41,9 +40,6 @@ export default function StartConsultation({ compact = false }: Props) {
   const [open, setOpen] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Issue #60 convention: a 409 carries the winning consultation's id on
-  // ApiError.existingId — link the patient back to their open consultation.
-  const [existingId, setExistingId] = useState<string | null>(null);
   const firstOptionRef = useRef<HTMLButtonElement | null>(null);
 
   const close = useCallback(() => {
@@ -74,36 +70,19 @@ export default function StartConsultation({ compact = false }: Props) {
     }
     setStarting(true);
     setError(null);
-    setExistingId(null);
     try {
-      const consultation = await createCallCenterConsultation(token);
-      // Straight into the call popup — no intermediate screen, no input.
-      router.push(`/app/consultations/${encodeURIComponent(consultation.id)}/call?mode=voice`);
+      // An assistance session — NEVER a consultation. The consultation is
+      // created for the member only when they validate the agent-guided
+      // payment on their device (owner fix: hanging up must leave NO
+      // consultation behind).
+      await requestAssistance(token);
+      // Straight into the assist screen — waiting → connected, no input.
+      router.push("/app/assist");
     } catch (err) {
       setStarting(false);
-      if (err instanceof ApiError && err.status === 409 && err.existingId) {
-        // The patient already has an open consultation — honest redirect,
-        // never a duplicate request.
-        setExistingId(err.existingId);
-        return;
-      }
       setError(err instanceof Error ? err.message : "Yon erè rive — eseye ankò.");
     }
   }, [router, starting, status, token]);
-
-  const activeHref = existingId ? `/app/consultations/${encodeURIComponent(existingId)}` : null;
-
-  const alreadyActiveNotice =
-    existingId && activeHref ? (
-      <div className="scs-notice" role="status">
-        Ou gen deja yon konsiltasyon aktif.
-        <div style={{ marginTop: 8 }}>
-          <Link href={activeHref} className="btn btn-secondary btn-sm">
-            Ale nan konsiltasyon ou
-          </Link>
-        </div>
-      </div>
-    ) : null;
 
   return (
     <>
@@ -112,7 +91,7 @@ export default function StartConsultation({ compact = false }: Props) {
       <button
         type="button"
         className="btn btn-primary scs-cta"
-        onClick={() => { setError(null); setExistingId(null); setOpen(true); }}
+        onClick={() => { setError(null); setOpen(true); }}
       >
         <Plus size={compact ? 16 : 18} aria-hidden /> Kòmanse yon konsiltasyon
       </button>
@@ -137,8 +116,6 @@ export default function StartConsultation({ compact = false }: Props) {
                 {error}
               </p>
             )}
-
-            {alreadyActiveNotice}
 
             <div className="scs-group" role="group" aria-label="Opsyon konsiltasyon">
               {/* Option 1 — the agent call. One tap: create + route + call
