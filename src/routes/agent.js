@@ -242,11 +242,14 @@ router.post('/agent/sessions/:id/notes', authenticate, requireRole(...AGENT_ROLE
 }));
 
 /**
- * POST /agent/sessions/:id/intake — the agent fills the intake ON BEHALF of
- * the member during the call (owner brief): the reason for the visit, what
- * the member says they feel (the member's OWN words — the agent never
- * diagnoses), and the urgency level (raw internal values only — display
- * labels stay client-side, matching the manual flow's contract). Medical-
+ * POST /agent/sessions/:id/intake — the agent fills THE MEMBER'S OWN REQUEST
+ * FORM on behalf of the member during the call (owner brief: same form, same
+ * fields, in the member's own words — the agent never diagnoses): what the
+ * member says they feel (symptoms), the urgency level, AND the specialty —
+ * the exact three inputs of the member's self-service intake (/app/consult).
+ * Raw internal values only — display labels stay client-side, matching the
+ * manual flow's contract. One submit saves the whole form and the session is
+ * ready for the doctor step (no separate specialty call needed). Medical-
  * history updates are captured as session notes; the clinical history
  * workstream comes later.
  */
@@ -259,15 +262,27 @@ router.post('/agent/sessions/:id/intake', authenticate, requireRole(...AGENT_ROL
   if (!['Faible', 'Moyenne', 'Haute', 'Critique'].includes(urgencyLevel)) {
     return res.status(400).json({ error: 'Nivo ijans pa valab' });
   }
+  // The specialty rides on the SAME form submit (member-form parity). It must
+  // be a real specialty from the price list — never free text.
+  const specialty = req.body?.specialty !== undefined
+    ? String(req.body.specialty).trim().slice(0, 80)
+    : (session.specialty || '');
+  let price = null;
+  if (specialty) {
+    const known = (await specialtiesRepo.list()).some((s) => s.name === specialty);
+    if (!known) return res.status(400).json({ error: 'Espesyalite pa valab' });
+    price = await specialtiesRepo.priceFor(specialty);
+  }
   const updated = await ops.updateSession(session.id, {
     reason,
     intake_description: description,
     urgency_level: urgencyLevel,
+    ...(specialty ? { specialty } : {}),
   });
   await ops.recordEvent({
     sessionId: session.id, eventType: 'intake_recorded', actorId: req.user.id,
     // No symptom content in the audit trail — it lives on the session row.
-    metadata: { hasDescription: description.length > 0, urgencyLevel, reasonLength: reason.length },
+    metadata: { hasDescription: description.length > 0, urgencyLevel, reasonLength: reason.length, specialty: specialty || null },
   });
   return res.json({
     intake: {
@@ -275,6 +290,8 @@ router.post('/agent/sessions/:id/intake', authenticate, requireRole(...AGENT_ROL
       urgencyLevel: updated.urgency_level || 'Moyenne',
       reason: updated.reason || '',
     },
+    specialty: updated.specialty || null,
+    price,
   });
 }));
 
