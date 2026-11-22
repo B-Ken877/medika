@@ -6,9 +6,11 @@
  *  2. The sheet offers EXACTLY two options with the owner-approved labels:
  *     "Rele yon ajan" (call-center agent call) and "Kontinye manyèlman"
  *     (manual intake form).
- *  3. The agent option performs a ZERO-INPUT call-center request (empty
- *     body, no form fields anywhere in the sheet) and lands the patient
- *     directly in the voice call screen — the call popup.
+ *  3. The agent option performs a ZERO-INPUT assistance request
+ *     (POST /api/assist/requests — an ASSISTANCE SESSION, never a
+ *     consultation: the consultation is created only when the member
+ *     validates the agent-guided payment) and lands the patient on
+ *     /app/assist: waiting → connected, no form, no extra steps.
  *  4. The manual option goes to the classic /app/consult flow, unchanged.
  *  5. The sheet is styled as an iOS action sheet (blurred backdrop, grabber,
  *     grouped rows, tinted squircle icons, hairline separator, cancel
@@ -62,16 +64,23 @@ describe("new consultation entry — button + two-option sheet", () => {
     expect(chooserSource).not.toMatch(/<select\b/);
   });
 
-  it("the agent option posts the empty-body call-center request and opens the voice call screen", () => {
-    expect(endpointsSource).toContain('"/api/consultations/call-center"');
-    // Empty body — the patient supplies nothing.
-    expect(endpointsSource).toMatch(/createCallCenterConsultation[\s\S]*?body: \{\}/);
-    expect(chooserSource).toContain("createCallCenterConsultation(token)");
-    expect(chooserSource).toContain("/call?mode=voice");
+  it("the agent option opens an ASSISTANCE SESSION — never a consultation", () => {
+    // The call-center consultation endpoint is GONE (owner fix: hanging up
+    // must leave NO phantom consultation behind). An assistance session is
+    // requested instead; the consultation is created for the member only
+    // when they validate the agent-guided payment on their device.
+    expect(endpointsSource).not.toContain('"/api/consultations/call-center"');
+    expect(endpointsSource).not.toContain("createCallCenterConsultation");
+    // Zero-input assistance request (server-side session, no form fields).
+    expect(endpointsSource).toContain('"/api/assist/requests"');
+    expect(chooserSource).toContain("requestAssistance(token)");
+    // The caller lands on the assist screen: waiting → connected.
+    expect(chooserSource).toContain('"/app/assist"');
+    expect(chooserSource).not.toContain("/call?mode=voice");
   });
 
-  it("a 409 points the patient back to their existing consultation (issue #60 convention)", () => {
-    expect(chooserSource).toContain("err.existingId");
+  it("a refused assistance request surfaces the server's message — never a dead end", () => {
+    expect(chooserSource).toMatch(/setError\(err instanceof Error \? err\.message/);
   });
 
   it("the sheet is built as an iOS action sheet (backdrop, grabber, rows, cancel)", () => {

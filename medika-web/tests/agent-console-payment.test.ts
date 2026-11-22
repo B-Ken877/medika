@@ -1,11 +1,13 @@
 /**
  * Contract tests — agent console + member payment popup (migration 017,
- * owner brief). The agent answers the call, fills the intake ON BEHALF of
- * the member (form OPEN during the call), searches the member's preferred
- * doctor by name, clicks "Submit Payment" → the member's device shows the
- * MonCash-style simulated popup (amount + phone + 4-digit PIN) WITHOUT the
- * call ever dropping → on Pay the consultation is created FOR THE MEMBER,
- * nobody is redirected, and it appears on the member's dashboard.
+ * owner briefs). The agent IMPERSONATES the member: the session wizard is
+ * the member's own scheduling experience — the exact /app/consult flow,
+ * component for component (same iOS consult column, same card language,
+ * same labels, the member's words) — with ONE agent-side difference at the
+ * end: instead of paying, the wizard's LAST STEP is a "Voye demann peman an"
+ * button that pushes the MonCash-style popup to the MEMBER'S device WITHOUT
+ * the call ever dropping → on Pay the consultation is created FOR THE
+ * MEMBER, nobody is redirected, and it appears on the member's dashboard.
  *
  * Web suite has no jsdom/RTL: source-contract style (assert the exact
  * strings, paths and structural guarantees in the sources), mirroring
@@ -26,50 +28,93 @@ const login = read("../app/login/page.tsx");
 const globalsCss = read("../app/globals.css");
 const types = read("../lib/api/types.ts");
 
-describe("agent console — on-behalf intake (owner brief)", () => {
-  it("the intake form is OPEN during the call: reason, symptoms, urgency", () => {
-    // The form renders whenever the session is live (not completed).
-    expect(sessionPage).toContain("s.status !== \"completed\" && (\n              <form className=\"stack intake-card\"");
-    expect(sessionPage).toContain("Entèvyou pasyan an (ou ranpli l pou li)");
-    expect(sessionPage).toContain("Rezon vizit la");
-    expect(sessionPage).toContain("Sa pasyan an ap santi (mo pasyan an)");
-    // Raw backend values only in state; display labels via urgencyLabel —
-    // the same contract as the manual flow.
+describe("agent console — the wizard mirrors the member's own intake", () => {
+  it("step 1 renders the member's consult column (.cf) with the member's classes", () => {
+    // The same wrapper classes the member's /app/consult intake uses.
+    expect(sessionPage).toContain('className="stack consult-intake cf"');
+    expect(sessionPage).toContain('className="page-title"');
+    expect(sessionPage).toContain("<h3 className=\"page-title\">Jwenn yon doktè</h3>");
+    // The member's form: a .card with the .textarea field and the SAME
+    // placeholder the member types into.
+    expect(sessionPage).toContain("<form onSubmit={submitMemberForm} className=\"card\">");
+    expect(sessionPage).toContain('className="textarea"');
+    expect(sessionPage).toContain(
+      "Eksplike sa w ap senti, depi kilè sa kòmanse, ak nenpòt lòt detay ki enpòtan...",
+    );
+    expect(sessionPage).toContain("Bay detay: enfòmasyon sa yo ap ede doktè a ede pasyan an pi byen.");
+    // Same segmented urgency control, same SpecialtySelect, same large
+    // primary "Kontinye" button with the search icon.
     expect(sessionPage).toContain('const URGENCY_LEVELS = ["Faible", "Moyenne", "Haute", "Critique"] as const;');
     expect(sessionPage).toContain("urgencyLabel(u)");
+    expect(sessionPage).toContain("<SpecialtySelect");
+    expect(sessionPage).toContain("btn btn-primary btn-block btn-lg");
+    expect(sessionPage).toContain("<Search size={16} aria-hidden /> Kontinye");
+  });
+
+  it("the agent fills THE MEMBER'S words — on-behalf framing, raw values sent", () => {
+    // The impersonation framing: the form belongs to the patient.
+    expect(sessionPage).toContain("Sa pasyan an ap senti");
+    expect(sessionPage).toContain("Di nou sa pasyan an ap santi epi chwazi kalite swen li bezwen an.");
+    // Display labels via urgencyLabel; the RAW value is what goes on the
+    // wire — the same contract as the manual member flow.
     expect(sessionPage).not.toMatch(/urgencyLevel:\s*urgencyLabel/);
-    // Optional medical-history update is captured as a session note.
-    expect(sessionPage).toContain("Mizajou dosye medikal");
-    expect(sessionPage).toContain("`Dosye medikal: ${historyNote.trim()}`");
-    // Saved through the dedicated endpoint with the raw values.
-    expect(sessionPage).toMatch(/agentSessionIntake\(token, sessionId, \{\s*reason: intakeReason\.trim\(\),\s*description: intakeDescription\.trim\(\),\s*urgencyLevel: intakeUrgency,?\s*\}\)/);
+    expect(sessionPage).toMatch(
+      /agentSessionIntake\(token, sessionId, \{\s*description: symptoms\.trim\(\),\s*urgencyLevel: urgency,\s*specialty,\s*\}\)/,
+    );
   });
 
   it("a poll/WS refresh never clobbers the agent's in-progress typing", () => {
     expect(sessionPage).toContain("intakeHydratedFor");
     expect(sessionPage).toContain("must never overwrite what the agent is typing");
   });
-
-  it("the stage advances on the captured intake", () => {
-    expect(sessionPage).toContain("(s.intake.description || s.reason) ? 2 : 1");
-  });
 });
 
-describe("agent console — preferred doctor search (owner brief)", () => {
+describe("agent console — the doctor step is the member's doctor list", () => {
+  it("member-style rows (.list/.row) with credentials, price and pick action", () => {
+    expect(sessionPage).toContain("N ap chèche doktè ki disponib");
+    expect(sessionPage).toContain('<div className="list">');
+    expect(sessionPage).toContain('className="row"');
+    expect(sessionPage).toContain("<VerifiedBadge compact />");
+    expect(sessionPage).toContain("Chwazi pou pasyan an");
+    // Availability badge exactly like the member's list.
+    expect(sessionPage).toContain('className="badge badge-green">Disponib</span>');
+  });
+
   it("the member's preferred doctor is searchable by name across specialties", () => {
     expect(sessionPage).toContain("Doktè pi renmen pasyan an? Chèche non l");
     expect(sessionPage).toMatch(/agentDoctors\(token, \{ q: docQuery\.trim\(\) \}\)/);
     // The specialty-scoped list uses the same agent-gated endpoint.
-    expect(sessionPage).toMatch(/agentDoctors\(token, \{ specialty \}\)/);
+    expect(sessionPage).toMatch(/agentDoctors\(token, \{ specialty: spec \}\)/);
     // The patient-facing /api/doctors endpoint is no longer used here.
     expect(sessionPage).not.toContain("getDoctorsBySpecialty");
   });
+
+  it("picking a doctor auto-advances — the review state resets with the selection", () => {
+    expect(sessionPage).toMatch(/agentSessionDoctor\(token!, sessionId, d\.id\)/);
+    // Issue #31 parity: changing the selection resets the review phase.
+    expect(sessionPage).toContain("setReviewed(false); }, [chosenDoctorId])");
+  });
 });
 
-describe("agent console — Submit Payment flow (owner brief)", () => {
-  it("the agent pushes the payment request to the member's device", () => {
+describe("agent console — review card, then Submit Payment Request as the LAST step", () => {
+  it("the review card is the member's review card (doctor identity + summary)", () => {
+    expect(sessionPage).toContain("Revize demann ou an");
+    expect(sessionPage).toContain('className="card doctor-card"');
+    expect(sessionPage).toContain('className="flex-between mb-1"');
+    expect(sessionPage).toContain("Nivo ijans");
+    expect(sessionPage).toContain("Sa pasyan an di l ap santi");
+    expect(sessionPage).toContain('<hr className="divider" />');
+    // The deliberate review phase before the request leaves (issue #31).
+    expect(sessionPage).toContain("Kontinye ak peman an");
+    expect(sessionPage).toContain("setReviewed(true)");
+  });
+
+  it("the LAST intake step pushes the payment request to the member's device", () => {
     expect(sessionPage).toContain("Voye demann peman an");
     expect(sessionPage).toMatch(/agentCreatePaymentRequest\(token!, sessionId!\)/);
+    // The payment happens on the member's phone, not the agent's.
+    expect(sessionPage).toContain("SOU TELEFÒN PAS YAN AN");
+    expect(sessionPage).toContain("Peman an ap louvri sou telefòn pasyan an.");
   });
 
   it("while pending: the call MUST stay open (explicit instruction)", () => {
@@ -84,6 +129,8 @@ describe("agent console — Submit Payment flow (owner brief)", () => {
   it("on paid: the consultation exists and the member is not redirected", () => {
     expect(sessionPage).toContain("Peman konfime — konsiltasyon kreye.");
     expect(sessionPage).toContain("konsiltasyon an parèt nan tablodbò li");
+    // The wizard derives the booked stage from SERVER state (poll + WS).
+    expect(sessionPage).toContain("paid || (sessionOver && doctorDone) ? \"booked\"");
   });
 });
 
